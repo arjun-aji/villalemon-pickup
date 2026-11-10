@@ -53,12 +53,10 @@ In your Supabase project dashboard:
 3. Paste the contents into the SQL Editor and click **Run**.
 This creates all tables (`profiles`, `driver_employees`, `trips`, `trip_enrollments`, `trip_expenses`, `trip_settlements`, `trip_status_history`, `monthly_reports`), security triggers, and Row Level Security policies.
 
-### 2. Setup Master Admin Account
+### 2. Administrator Access
 1. Open **[http://localhost:5173/admin/login](http://localhost:5173/admin/login)**.
-2. Click the **Setup Master Admin** tab.
-3. Enter your chosen Admin Email/Username, Full Name, and a strong password (minimum 8 characters).
-4. Click **Create Master Admin**.
-5. You are immediately logged in to the live Admin Overview.
+2. Sign in with your registered Master Admin credentials (`villalemon27@gmail.com`).
+3. You are immediately directed to the live Admin Overview.
 
 ### 3. Adding Driver Accounts
 No hardcoded drivers exist. The Admin has full control:
@@ -66,6 +64,13 @@ No hardcoded drivers exist. The Admin has full control:
 2. Click **+ Add Driver**.
 3. Enter the driver's Name, Phone, Vehicle Number, Username, and secure Initial Password.
 4. The driver can now log in at **[http://localhost:5173/driver/login](http://localhost:5173/driver/login)** with their assigned credentials.
+
+### 4. Standalone Web App / PWA Shortcut
+VillaLemon Pickup is a progressive web app:
+- **iPhone / iPad**: Open in Safari > Tap **Share** > **Add to Home Screen**.
+- **Android**: Open in Chrome > Tap **Install App** or **Add to Home screen**.
+- **Mac / Windows**: Open in Chrome / Edge / Brave > Click the **Install** icon in the address bar.
+The app opens fullscreen in edge-to-edge standalone mode with custom brand icons and splash screen.
 
 ---
 
