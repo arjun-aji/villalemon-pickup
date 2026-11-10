@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+frontend/.env
+frontend/.env.local
+backend/.env
+backend/.env.local
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# Supabase
+.supabase/
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/

@@ -1,0 +1,23 @@
+{
+  "name": "villalemon-pickup",
+  "version": "1.0.0",
+  "description": "VillaLemon Pickup - Pickup & Driver Management System",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "build": "npm run build:frontend && npm run build:backend"
+  },
+  "keywords": [
+    "pickup-management",
+    "travel",
+    "driver-portal",
+    "villalemon",
+    "varkala"
+  ],
+  "author": "VillaLemon Team",
+  "license": "ISC"
+}
+
