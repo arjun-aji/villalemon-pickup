@@ -1,0 +1,93 @@
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { DriverReport } from '../types';
+
+export interface SubmitDriverReportInput {
+  trip_id: string;
+  driver_id: string;
+  amount_collected: number;
+  collection_difference_note?: string;
+  diesel_expense: number;
+  parking_toll_permits_tickets_food: number;
+  other_expenses_details?: string;
+  workshop_expense: number;
+  workshop_details?: string;
+  receipt_photo_url?: string;
+}
+
+export const driverReportService = {
+  async getByTrip(tripId: string): Promise<DriverReport | null> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('driver_reports')
+        .select('*')
+        .eq('trip_id', tripId)
+        .maybeSingle();
+
+      if (error) console.warn('Fetch report error:', error);
+      return (data as DriverReport) || null;
+    }
+    return null;
+  },
+
+  async submitReport(input: SubmitDriverReportInput): Promise<DriverReport> {
+    if (isSupabaseConfigured) {
+      // 1. Insert or update driver report
+      const { data, error } = await supabase
+        .from('driver_reports')
+        .upsert(
+          {
+            trip_id: input.trip_id,
+            driver_id: input.driver_id,
+            amount_collected: Number(input.amount_collected) || 0,
+            collection_difference_note: input.collection_difference_note || null,
+            diesel_expense: Number(input.diesel_expense) || 0,
+            parking_toll_permits_tickets_food: Number(input.parking_toll_permits_tickets_food) || 0,
+            other_expenses_details: input.other_expenses_details || null,
+            workshop_expense: Number(input.workshop_expense) || 0,
+            workshop_details: input.workshop_details || null,
+            receipt_photo_url: input.receipt_photo_url || null,
+            check_status: 'Pending check',
+          },
+          { onConflict: 'trip_id' }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 2. Mark trip status as Completed
+      await supabase
+        .from('trips')
+        .update({
+          trip_status: 'Completed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.trip_id);
+
+      return data as DriverReport;
+    }
+    throw new Error('Supabase not configured');
+  },
+
+  async uploadReceipt(file: File, tripId: string): Promise<string> {
+    if (!isSupabaseConfigured) return '';
+
+    const ext = file.name.split('.').pop() || 'jpg';
+    const filePath = `receipts/${tripId}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('receipts')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      console.warn('Storage upload error:', uploadError);
+      return '';
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('receipts')
+      .getPublicUrl(filePath);
+
+    return urlData?.publicUrl || '';
+  },
+};
