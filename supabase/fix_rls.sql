@@ -74,3 +74,4 @@ CREATE POLICY "Full access to system_settings" ON public.system_settings FOR ALL
 DROP POLICY IF EXISTS "Admins manage backup records" ON public.backup_records;
 DROP POLICY IF EXISTS "Full access to backup_records" ON public.backup_records;
 CREATE POLICY "Full access to backup_records" ON public.backup_records FOR ALL USING (true) WITH CHECK (true);
+

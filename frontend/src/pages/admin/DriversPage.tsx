@@ -10,6 +10,9 @@ import {
   MoreVertical,
   Shield,
   Search,
+  MessageCircle,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { driverService } from '../../services/driverService';
 import { DriverEmployee } from '../../types';
@@ -32,8 +35,24 @@ const DriversPage: React.FC = () => {
   const [formPassword, setFormPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Success credential alert
-  const [createdInfo, setCreatedInfo] = useState<{ username: string; pass: string } | null>(null);
+  // Success credential alert with full driver details for WhatsApp
+  const [createdInfo, setCreatedInfo] = useState<{
+    name: string;
+    phone: string;
+    username: string;
+    pass: string;
+  } | null>(null);
+
+  const formatWhatsAppUrl = (phone: string, text: string) => {
+    let clean = (phone || '').replace(/[^0-9]/g, '');
+    if (clean.length === 10) clean = `91${clean}`;
+    return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`;
+  };
+
+  const generateDriverLoginMessage = (name: string, username: string, pass: string, phone: string) => {
+    const origin = window.location.origin;
+    return `🚖 *VillaLemon Pickup — Driver Portal Login*\n\nHello *${name}*,\n\nHere are your login credentials for the VillaLemon Pickup Driver Portal:\n\n🌐 *Portal URL:* ${origin}/driver/login\n👤 *Username / Phone:* ${username || phone}\n🔑 *Password:* ${pass}\n\nPlease click the link to log in and access your assigned duty rides, submit trip expenses, and check your earnings ledger.\n\nThank you,\n*VillaLemon Pickup Operations*`;
+  };
 
   useEffect(() => {
     loadDrivers();
@@ -83,7 +102,12 @@ const DriversPage: React.FC = () => {
       );
 
       setIsAddModalOpen(false);
-      setCreatedInfo({ username: cleanUsername, pass: formPassword });
+      setCreatedInfo({
+        name: formName.trim(),
+        phone: formPhone.trim(),
+        username: cleanUsername,
+        pass: formPassword,
+      });
       loadDrivers();
     } catch (err: any) {
       alert(err.message || 'Failed to create driver account');
@@ -141,27 +165,58 @@ const DriversPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Created credential notification */}
+      {/* Created credential notification with 1-click WhatsApp send */}
       {createdInfo && (
-        <div className="p-4 bg-green-light border border-green-primary/30 rounded-2xl flex items-start justify-between">
+        <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div>
-            <p className="text-xs font-bold text-green-primary uppercase tracking-wider mb-1">
-              Account Created Successfully
+            <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-0.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Driver Account Created Successfully</span>
+            </div>
+            <p className="text-xs text-slate-600 mb-1.5">
+              Driver: <span className="font-bold text-slate-800">{createdInfo.name}</span> ({createdInfo.phone})
             </p>
-            <p className="text-sm text-text-primary">
-              Share login credentials with the driver:
-            </p>
-            <div className="mt-1 font-mono text-xs bg-white px-3 py-1.5 rounded-lg border border-border inline-block">
-              Username: <span className="font-bold text-navy-primary">{createdInfo.username}</span> | Password:{' '}
-              <span className="font-bold text-navy-primary">{createdInfo.pass}</span>
+            <div className="font-mono text-xs bg-white px-3 py-1.5 rounded-xl border border-emerald-200 inline-flex items-center gap-2">
+              <span>Username: <strong className="text-slate-900">{createdInfo.username}</strong></span>
+              <span className="text-slate-300">|</span>
+              <span>Password: <strong className="text-slate-900">{createdInfo.pass}</strong></span>
             </div>
           </div>
-          <button
-            onClick={() => setCreatedInfo(null)}
-            className="text-xs font-semibold text-green-primary hover:underline"
-          >
-            Dismiss
-          </button>
+
+          <div className="flex items-center gap-2">
+            <a
+              href={formatWhatsAppUrl(
+                createdInfo.phone,
+                generateDriverLoginMessage(createdInfo.name, createdInfo.username, createdInfo.pass, createdInfo.phone)
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-95"
+            >
+              <MessageCircle className="w-4 h-4 fill-white" />
+              <span>Send on WhatsApp</span>
+            </a>
+
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  generateDriverLoginMessage(createdInfo.name, createdInfo.username, createdInfo.pass, createdInfo.phone)
+                );
+                alert('Credentials copied to clipboard!');
+              }}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold shadow-sm transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy</span>
+            </button>
+
+            <button
+              onClick={() => setCreatedInfo(null)}
+              className="text-xs font-semibold text-slate-400 hover:text-slate-600 px-2 py-1"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -229,6 +284,20 @@ const DriversPage: React.FC = () => {
                     </td>
                     <td className="table-cell text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <a
+                          href={formatWhatsAppUrl(
+                            d.phone,
+                            `🚖 *VillaLemon Pickup — Driver Portal*\n\nHello *${d.full_name}*,\n\nYou can access your Driver Portal here:\n🌐 ${window.location.origin}/driver/login\n👤 Username / Phone: ${d.username || d.phone}\n\n*VillaLemon Pickup Operations*`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Share Driver Portal on WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline">WhatsApp</span>
+                        </a>
+
                         <button
                           onClick={() => handleResetPassword(d)}
                           className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-text-primary font-medium rounded-lg transition-colors"
