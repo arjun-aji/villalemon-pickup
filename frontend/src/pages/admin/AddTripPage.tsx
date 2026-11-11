@@ -156,9 +156,11 @@ const AddTripPage: React.FC = () => {
 
     setLoading(true);
 
+    const effectiveOrgId = organizationId || (organizations.length > 0 ? organizations[0].id : '');
+    
     try {
       await tripService.create({
-        organization_id: organizationId,
+        organization_id: effectiveOrgId,
         ordered_by: orderedBy,
         trip_category: tripCategory,
         trip_date: tripDate,

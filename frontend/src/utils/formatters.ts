@@ -85,26 +85,41 @@ export const calculateFinancials = (
 };
 
 export const getTripStatusColor = (status: string): string => {
-  switch (status) {
-    case 'upcoming': return 'badge-blue';
-    case 'available_for_enrollment': return 'badge-yellow';
-    case 'assigned': return 'badge-blue';
-    case 'in_progress': return 'badge-yellow';
-    case 'completed': return 'badge-green';
-    case 'cancelled': return 'badge-red';
-    default: return 'badge-gray';
+  const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  switch (s) {
+    case 'upcoming':
+    case 'confirmed':
+      return 'badge-blue';
+    case 'available_for_enrollment':
+    case 'open_for_enrollment':
+      return 'badge-yellow';
+    case 'assigned':
+      return 'badge-blue';
+    case 'in_progress':
+      return 'badge-yellow';
+    case 'completed':
+      return 'badge-green';
+    case 'cancelled':
+      return 'badge-red';
+    case 'pending_approval':
+      return 'badge-yellow';
+    default:
+      return 'badge-gray';
   }
 };
 
 export const getTripStatusLabel = (status: string): string => {
-  switch (status) {
+  const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  switch (s) {
     case 'upcoming': return 'Upcoming';
+    case 'confirmed': return 'Confirmed';
     case 'available_for_enrollment': return 'Open for Enrollment';
     case 'assigned': return 'Assigned';
     case 'in_progress': return 'In Progress';
     case 'completed': return 'Completed';
     case 'cancelled': return 'Cancelled';
-    default: return status;
+    case 'pending_approval': return 'Pending Approval';
+    default: return status || 'Confirmed';
   }
 };
 

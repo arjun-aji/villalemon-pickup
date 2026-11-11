@@ -172,15 +172,19 @@ _Please confirm receipt and report duty start._`;
     }
   };
 
+  // Status normalizer helper (e.g. 'Assigned' -> 'assigned', 'Pending Approval' -> 'pending_approval')
+  const getNormStatus = (status?: string) => (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+
   // Filtered trips
   const filteredTrips = trips.filter(trip => {
-    if (activeTab === 'upcoming' && !['upcoming', 'assigned', 'available_for_enrollment'].includes(trip.trip_status)) {
+    const s = getNormStatus(trip.trip_status);
+    if (activeTab === 'upcoming' && !['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) {
       return false;
     }
-    if (activeTab === 'in_progress' && trip.trip_status !== 'in_progress') {
+    if (activeTab === 'in_progress' && s !== 'in_progress') {
       return false;
     }
-    if (activeTab === 'completed' && trip.trip_status !== 'completed') {
+    if (activeTab === 'completed' && s !== 'completed') {
       return false;
     }
 
@@ -188,7 +192,7 @@ _Please confirm receipt and report duty start._`;
       return false;
     }
 
-    if (selectedStatus && trip.trip_status !== selectedStatus) {
+    if (selectedStatus && s !== getNormStatus(selectedStatus)) {
       return false;
     }
 
@@ -206,9 +210,9 @@ _Please confirm receipt and report duty start._`;
   });
 
   const allCount = trips.length;
-  const upcomingCount = trips.filter(t => ['upcoming', 'assigned', 'available_for_enrollment'].includes(t.trip_status)).length;
-  const inProgressCount = trips.filter(t => t.trip_status === 'in_progress').length;
-  const completedCount = trips.filter(t => t.trip_status === 'completed').length;
+  const upcomingCount = trips.filter(t => ['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(getNormStatus(t.trip_status))).length;
+  const inProgressCount = trips.filter(t => getNormStatus(t.trip_status) === 'in_progress').length;
+  const completedCount = trips.filter(t => getNormStatus(t.trip_status) === 'completed').length;
 
   return (
     <div className="space-y-5">
@@ -298,14 +302,15 @@ _Please confirm receipt and report duty start._`;
         <select
           value={selectedStatus}
           onChange={e => setSelectedStatus(e.target.value)}
-          className="input-field max-w-[160px] text-xs py-2"
+          className="input-field max-w-[170px] text-xs py-2"
         >
           <option value="">All Status</option>
-          <option value="upcoming">Upcoming</option>
-          <option value="available_for_enrollment">Available for Enrollment</option>
+          <option value="confirmed">Confirmed / Upcoming</option>
           <option value="assigned">Assigned</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
+          <option value="pending_approval">Pending Approval</option>
+          <option value="cancelled">Cancelled</option>
         </select>
       </div>
 

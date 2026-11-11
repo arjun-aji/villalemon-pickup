@@ -14,7 +14,8 @@ export const tripService = {
             vehicle:vehicles(id, registration_number, vehicle_type, status),
             organization:organizations(id, name, type, contact_person, phone)
           `)
-          .order('trip_date', { ascending: false });
+          .order('trip_date', { ascending: false })
+          .order('created_at', { ascending: false });
 
         if (filters?.status) query = query.eq('trip_status', filters.status);
         if (filters?.driverId) query = query.eq('assigned_driver_id', filters.driverId);
@@ -153,12 +154,145 @@ export const tripService = {
   },
 
   async create(input: CreateTripInput, createdBy: string = 'admin'): Promise<Trip> {
-    const trips: Trip[] = getStored('trips', initialTrips);
-    const tripCount = trips.length + 1;
-    const tripNumber = `VH-${String(tripCount).padStart(3, '0')}`;
+    const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
     const customerName = input.customer_name || input.guest_names || 'Guest';
     const placardText = input.placard_text || `VARKALA HOLIDAYS - ${customerName.toUpperCase()}`;
 
+    if (isSupabaseConfigured) {
+      // 1. Calculate next safe unique trip_number (e.g. VH-0006)
+      let nextTripNumber = 'VH-0001';
+      try {
+        const { data: latestTrips } = await supabase
+          .from('trips')
+          .select('trip_number')
+          .order('trip_number', { ascending: false })
+          .limit(100);
+
+        let maxNum = 0;
+        if (latestTrips && latestTrips.length > 0) {
+          for (const t of latestTrips) {
+            const m = (t.trip_number || '').match(/(\d+)/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > maxNum) maxNum = n;
+            }
+          }
+        }
+        nextTripNumber = `VH-${String(maxNum + 1).padStart(4, '0')}`;
+      } catch (err) {
+        console.warn('Trip number detection note:', err);
+      }
+
+      // 2. Ensure valid organization_id
+      let orgId = isUuid(input.organization_id) ? input.organization_id : null;
+      if (!orgId) {
+        const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
+        if (orgs && orgs.length > 0) {
+          orgId = orgs[0].id;
+        }
+      }
+
+      // 3. Map status to PostgreSQL enum ('Pending Approval' | 'Confirmed' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled')
+      let dbTripStatus = 'Confirmed';
+      const rawStatus = (input.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      if (rawStatus === 'assigned' || (input.assigned_driver_id && rawStatus !== 'completed' && rawStatus !== 'cancelled')) {
+        dbTripStatus = 'Assigned';
+      } else if (rawStatus === 'in_progress') {
+        dbTripStatus = 'In Progress';
+      } else if (rawStatus === 'completed') {
+        dbTripStatus = 'Completed';
+      } else if (rawStatus === 'cancelled') {
+        dbTripStatus = 'Cancelled';
+      } else if (rawStatus === 'pending_approval' || rawStatus === 'pending') {
+        dbTripStatus = 'Pending Approval';
+      } else if (rawStatus === 'confirmed' || rawStatus === 'upcoming' || rawStatus === 'available_for_enrollment') {
+        dbTripStatus = 'Confirmed';
+      }
+
+      // 4. Map airport terminal
+      const isAirport = (input.trip_category || '').includes('Airport');
+      let dbTerminal: string | null = null;
+      if (isAirport) {
+        if (input.airport_terminal === 'Terminal 1' || input.airport_terminal === 'Terminal 2') {
+          dbTerminal = input.airport_terminal;
+        } else {
+          dbTerminal = 'Terminal 2';
+        }
+      }
+
+      // 5. Map collection rule
+      let dbCollectionRule = input.collection_rule || 'Collect';
+      if (dbCollectionRule !== 'Collect' && dbCollectionRule !== 'Do not collect' && dbCollectionRule !== 'Ask office') {
+        dbCollectionRule = Number(input.amount_driver_must_collect || 0) > 0 ? 'Collect' : 'Do not collect';
+      }
+
+      // 6. Check created_by in profiles
+      let validCreatedBy: string | null = null;
+      if (isUuid(createdBy)) {
+        try {
+          const { data: prof } = await supabase.from('profiles').select('id').eq('id', createdBy).maybeSingle();
+          if (prof) validCreatedBy = prof.id;
+        } catch {
+          validCreatedBy = null;
+        }
+      }
+
+      const tripPayload: any = {
+        trip_number: nextTripNumber,
+        organization_id: orgId,
+        ordered_by: input.ordered_by || input.customer_name || 'Front Desk',
+        trip_date: input.trip_date || input.pickup_date || new Date().toISOString().split('T')[0],
+        pickup_time: input.pickup_time || '10:00',
+        trip_category: input.trip_category || 'Airport Pick-up',
+        guest_names: input.guest_names || input.customer_name || 'Guest',
+        guest_contact_number: input.guest_contact_number || input.customer_phone || null,
+        total_people: Number(input.total_people || input.num_passengers || 1),
+        pickup_location: input.pickup_location,
+        dropoff_location: input.dropoff_location || input.destination,
+        final_dropoff: input.final_dropoff || null,
+        flight_number_and_time: input.flight_number_and_time || input.flight_number || null,
+        airport_terminal: dbTerminal,
+        required_cab_type: input.required_cab_type || 'Sedan',
+        special_instructions: input.special_instructions || input.trip_notes || null,
+        assigned_driver_id: isUuid(input.assigned_driver_id) ? input.assigned_driver_id : null,
+        assigned_vehicle_id: isUuid(input.assigned_vehicle_id) ? input.assigned_vehicle_id : null,
+        trip_selling_price: Number(input.trip_selling_price || input.amount_to_collect || 0),
+        amount_driver_must_collect: Number(input.amount_driver_must_collect || input.amount_to_collect || 0),
+        collection_rule: dbCollectionRule,
+        driver_trip_pay_override: input.driver_trip_pay_override ? Number(input.driver_trip_pay_override) : (input.driver_charge ? Number(input.driver_charge) : null),
+        trip_status: dbTripStatus,
+        is_published_for_enrollment: Boolean(input.is_published_for_enrollment),
+        submitted_by_org: Boolean(input.submitted_by_org),
+        created_by: validCreatedBy,
+      };
+
+      const { data, error } = await supabase
+        .from('trips')
+        .insert(tripPayload)
+        .select(`
+          *,
+          driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status),
+          vehicle:vehicles(id, registration_number, vehicle_type, status),
+          organization:organizations(id, name, type, contact_person, phone)
+        `)
+        .single();
+
+      if (error) {
+        console.error('Supabase trip insert error:', error);
+        throw new Error(`Failed to save trip to database: ${error.message} (${error.details || error.code || ''})`);
+      }
+
+      if (data) {
+        const trips: Trip[] = getStored('trips', initialTrips);
+        setStored('trips', [data as Trip, ...trips.filter(t => t.id !== data.id)]);
+        return data as Trip;
+      }
+    }
+
+    // Local storage fallback for offline / mock mode
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const tripCount = trips.length + 1;
+    const tripNumber = `VH-${String(tripCount).padStart(4, '0')}`;
     const tripStatus: TripStatus = input.assigned_driver_id
       ? 'assigned'
       : input.is_published_for_enrollment
@@ -189,46 +323,6 @@ export const tripService = {
       updated_at: new Date().toISOString(),
     };
 
-    if (isSupabaseConfigured) {
-      const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
-      const tripPayload: any = {
-        organization_id: isUuid(input.organization_id) ? input.organization_id : null,
-        ordered_by: input.ordered_by || input.customer_name || 'Front Desk',
-        trip_date: input.trip_date || input.pickup_date || new Date().toISOString().split('T')[0],
-        pickup_time: input.pickup_time || '10:00',
-        trip_category: input.trip_category || 'Airport Pick-up',
-        guest_names: input.guest_names || input.customer_name || 'Guest',
-        guest_contact_number: input.guest_contact_number || input.customer_phone || null,
-        total_people: Number(input.total_people || input.num_passengers || 1),
-        pickup_location: input.pickup_location,
-        dropoff_location: input.dropoff_location || input.destination,
-        final_dropoff: input.final_dropoff || null,
-        flight_number_and_time: input.flight_number_and_time || input.flight_number || null,
-        airport_terminal: input.airport_terminal || null,
-        required_cab_type: input.required_cab_type || 'Sedan',
-        special_instructions: input.special_instructions || input.trip_notes || null,
-        assigned_driver_id: isUuid(input.assigned_driver_id) ? input.assigned_driver_id : null,
-        assigned_vehicle_id: isUuid(input.assigned_vehicle_id) ? input.assigned_vehicle_id : null,
-        trip_selling_price: Number(input.trip_selling_price || input.amount_to_collect || 0),
-        amount_driver_must_collect: Number(input.amount_driver_must_collect || input.amount_to_collect || 0),
-        collection_rule: input.collection_rule || 'Collect',
-        driver_trip_pay_override: input.driver_trip_pay_override ? Number(input.driver_trip_pay_override) : (input.driver_charge ? Number(input.driver_charge) : null),
-        trip_status: input.trip_status || (input.assigned_driver_id ? 'Assigned' : 'Confirmed'),
-        is_published_for_enrollment: Boolean(input.is_published_for_enrollment),
-        submitted_by_org: Boolean(input.submitted_by_org),
-        created_by: isUuid(createdBy) ? createdBy : null,
-      };
-
-      const { data, error } = await supabase.from('trips').insert(tripPayload).select().single();
-      if (error) {
-        console.error('Supabase trip insert error:', error);
-        // Fallback with base columns if extra columns differ
-      } else if (data) {
-        return data as Trip;
-      }
-    }
-
-    // Save in local storage
     const updatedTrips = [newTrip, ...trips];
     setStored('trips', updatedTrips);
 
