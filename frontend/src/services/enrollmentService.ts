@@ -10,8 +10,8 @@ export const enrollmentService = {
         .from('trip_enrollments')
         .select(`
           *,
-          trip:trips(id, trip_number, customer_name, pickup_date, pickup_location, destination, amount_to_collect, driver_charge),
-          driver:driver_employees(id, full_name, username, vehicle_number, employee_id)
+          trip:trips(id, trip_number, guest_names, customer_name, trip_date, pickup_date, pickup_location, dropoff_location, destination, amount_driver_must_collect, trip_selling_price, driver_trip_pay_override),
+          driver:drivers(id, full_name, phone)
         `)
         .order('requested_at', { ascending: false });
 

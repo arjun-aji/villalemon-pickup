@@ -58,7 +58,7 @@ const OrganizationDashboard: React.FC = () => {
           const { data: sumData } = await supabase
             .from('v_client_summary')
             .select('*')
-            .eq('id', orgId)
+            .eq('organization_id', orgId)
             .maybeSingle();
 
           const total = tripData.length;
@@ -71,9 +71,9 @@ const OrganizationDashboard: React.FC = () => {
             upcomingTrips: upcoming,
             completedTrips: completed,
             pendingApproval: pending,
-            outstandingBalance: sumData?.outstanding_balance || 0,
-            creditLimit: organization?.credit_limit || 0,
-            creditStatus: sumData?.credit_check || 'OK',
+            outstandingBalance: Number(sumData?.outstanding_amount) || 0,
+            creditLimit: Number(sumData?.credit_limit) || Number(organization?.credit_limit) || 100000,
+            creditStatus: sumData?.credit_status || 'OK',
           });
         }
       } else {

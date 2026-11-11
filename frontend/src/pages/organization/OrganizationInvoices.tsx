@@ -61,16 +61,16 @@ const OrganizationInvoices: React.FC = () => {
         const { data: sumData } = await supabase
           .from('v_client_summary')
           .select('*')
-          .eq('id', orgId)
+          .eq('organization_id', orgId)
           .maybeSingle();
 
         if (sumData) {
           setSummary({
-            completedTripValue: sumData.completed_trip_value || 0,
-            invoicedAmount: sumData.invoiced_issued_amount || 0,
-            totalPaid: sumData.total_paid || 0,
-            outstanding: sumData.outstanding_balance || 0,
-            creditStatus: sumData.credit_check || 'OK',
+            completedTripValue: Number(sumData.completed_trip_value) || 0,
+            invoicedAmount: Number(sumData.invoiced_issued_amount) || 0,
+            totalPaid: Number(sumData.total_paid) || 0,
+            outstanding: Number(sumData.outstanding_amount) || 0,
+            creditStatus: sumData.credit_status || 'OK',
           });
         }
       }

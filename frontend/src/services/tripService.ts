@@ -64,16 +64,19 @@ export const tripService = {
         .from('trips')
         .select(`
           *,
-          driver:driver_employees(*),
-          settlement:trip_settlements(*),
-          expenses:trip_expenses(*),
-          enrollments:trip_enrollments(*, driver:driver_employees(*))
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*),
+          enrollments:trip_enrollments(*, driver:drivers(*))
         `)
         .eq('id', id)
         .single();
 
-      if (error) throw error;
-      return data as Trip;
+      if (error) {
+        console.warn('Trip getById note:', error);
+      } else if (data) {
+        return data as Trip;
+      }
     }
 
     const trips: Trip[] = getStored('trips', initialTrips);
@@ -96,30 +99,44 @@ export const tripService = {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
         .from('trips')
-        .select('*, driver:driver_employees(full_name)')
-        .eq('is_published_for_enrollment', true)
-        .in('trip_status', ['available_for_enrollment', 'upcoming'])
-        .is('assigned_driver_id', null)
-        .order('pickup_date', { ascending: true });
+        .select(`
+          *,
+          organization:organizations(name),
+          vehicle:vehicles(registration_number, vehicle_type)
+        `)
+        .or('is_published_for_enrollment.eq.true,assigned_driver_id.is.null')
+        .in('trip_status', ['Pending Approval', 'Confirmed', 'available_for_enrollment', 'upcoming'])
+        .order('trip_date', { ascending: true });
 
-      if (error) throw error;
-      return data as Trip[];
+      if (error) {
+        console.warn('getAvailableForEnrollment note:', error);
+      } else if (data) {
+        return data as Trip[];
+      }
     }
 
     const trips: Trip[] = getStored('trips', initialTrips);
-    return trips.filter(t => t.is_published_for_enrollment && !t.assigned_driver_id);
+    return trips.filter(t => (t.is_published_for_enrollment || !t.assigned_driver_id) && t.trip_status !== 'Completed');
   },
 
   async getDriverTrips(driverId: string): Promise<Trip[]> {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
         .from('trips')
-        .select('*, settlement:trip_settlements(*), expenses:trip_expenses(*)')
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(name)
+        `)
         .eq('assigned_driver_id', driverId)
-        .order('pickup_date', { ascending: false });
+        .order('trip_date', { ascending: false });
 
-      if (error) throw error;
-      return data as Trip[];
+      if (error) {
+        console.warn('getDriverTrips note:', error);
+      } else if (data) {
+        return data as Trip[];
+      }
     }
 
     const trips: Trip[] = getStored('trips', initialTrips);
@@ -262,7 +279,12 @@ export const tripService = {
     setStored('trips', updated);
 
     if (isSupabaseConfigured) {
-      await supabase.from('trips').update({ trip_status: status }).eq('id', id);
+      let mappedStatus: string = status;
+      if (status === 'completed' || status === 'Completed') mappedStatus = 'Completed';
+      else if (status === 'assigned' || status === 'Assigned' || status === 'in_progress') mappedStatus = 'Assigned';
+      else if (status === 'upcoming' || status === 'Confirmed') mappedStatus = 'Confirmed';
+      else if (status === 'cancelled' || status === 'Cancelled') mappedStatus = 'Cancelled';
+      await supabase.from('trips').update({ trip_status: mappedStatus }).eq('id', id);
     }
 
     return updated.find(t => t.id === id)!;
@@ -299,8 +321,14 @@ export const tripService = {
     setStored('settlements', updatedSettlements);
 
     if (isSupabaseConfigured) {
-      await supabase.from('trips').update({ assigned_driver_id: driverId, trip_status: 'assigned', is_published_for_enrollment: false }).eq('id', tripId);
-      await supabase.from('trip_settlements').update({ driver_id: driverId }).eq('trip_id', tripId);
+      await supabase
+        .from('trips')
+        .update({
+          assigned_driver_id: driverId,
+          trip_status: 'Assigned',
+          is_published_for_enrollment: false,
+        })
+        .eq('id', tripId);
     }
 
     return updated.find(t => t.id === tripId)!;
@@ -322,7 +350,10 @@ export const tripService = {
     setStored('trips', updated);
 
     if (isSupabaseConfigured) {
-      await supabase.from('trips').update({ is_published_for_enrollment: true, trip_status: 'available_for_enrollment' }).eq('id', tripId);
+      await supabase
+        .from('trips')
+        .update({ is_published_for_enrollment: true })
+        .eq('id', tripId);
     }
 
     return updated.find(t => t.id === tripId)!;
