@@ -5,13 +5,54 @@ import { initialDrivers, getStored, setStored } from '../lib/mockData';
 export const driverService = {
   async getAll(): Promise<DriverEmployee[]> {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('driver_employees')
-        .select('*')
-        .order('created_at', { ascending: false });
+      try {
+        const [{ data: driverRows }, { data: balanceRows }, { data: tripRows }] = await Promise.all([
+          supabase.from('drivers').select('*').order('created_at', { ascending: false }),
+          supabase.from('v_driver_balances').select('*'),
+          supabase.from('trips').select('id, assigned_driver_id, trip_status'),
+        ]);
 
-      if (error) throw error;
-      return data as DriverEmployee[];
+        if (driverRows) {
+          const trips = tripRows || [];
+          const balances = balanceRows || [];
+
+          return driverRows.map((d: any) => {
+            const bal = balances.find((b: any) => b.driver_id === d.id);
+            const myTrips = trips.filter((t: any) => t.assigned_driver_id === d.id);
+            const completed = myTrips.filter((t: any) => t.trip_status === 'Completed' || t.trip_status === 'completed');
+
+            return {
+              id: d.id,
+              user_id: d.profile_id || d.id,
+              employee_id: d.driving_licence_no ? `DL-${d.driving_licence_no.substring(0, 6)}` : 'DRV',
+              full_name: d.full_name,
+              username: d.phone,
+              phone: d.phone,
+              email: `${d.phone}@villalemon.pickup`,
+              vehicle_number: d.assigned_vehicle_reg || '',
+              address: '',
+              driving_licence_no: d.driving_licence_no || '',
+              licence_expiry: d.licence_expiry || '',
+              employment_type: d.employment_type || 'Per-trip payment',
+              monthly_salary: Number(d.monthly_salary) || 0,
+              per_trip_payment: Number(d.per_trip_payment) || 0,
+              payment_arrangement_notes: d.payment_arrangement_notes || '',
+              status: d.status || 'Active',
+              employment_status: d.status === 'Active' ? 'active' : 'inactive',
+              balance_payable_to_driver: Number(bal?.balance_payable_to_driver) || 0,
+              cash_owed_to_office: Number(bal?.cash_owed_to_office) || 0,
+              net_settlement_amount: Number(bal?.net_settlement_amount) || 0,
+              total_trips: myTrips.length,
+              completed_trips: completed.length,
+              pending_settlements: myTrips.length - completed.length,
+              created_at: d.created_at,
+              updated_at: d.updated_at,
+            } as DriverEmployee;
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase driverService.getAll fallback:', err);
+      }
     }
 
     const drivers: DriverEmployee[] = getStored('drivers', initialDrivers);
@@ -33,39 +74,10 @@ export const driverService = {
 
   async create(input: CreateDriverInput, _password?: string, _adminId: string = 'admin'): Promise<DriverEmployee> {
     const drivers = getStored('drivers', initialDrivers);
-    
-    // Check if username already exists
-    if (drivers.some((d: DriverEmployee) => d.username && d.username.toLowerCase() === input.username.toLowerCase())) {
-      throw new Error(`Username "${input.username}" is already taken.`);
-    }
-
-    const newDriver: DriverEmployee = {
-      id: `d-${Date.now()}`,
-      user_id: `u-${Date.now()}`,
-      employee_id: input.employee_id,
-      full_name: input.full_name,
-      username: input.username.toLowerCase(),
-      phone: input.phone,
-      email: input.email || `${input.username.toLowerCase()}@villalemon.pickup`,
-      vehicle_number: input.vehicle_number || '',
-      address: input.address || '',
-      driving_licence_no: '',
-      employment_type: 'Salaried (monthly)',
-      monthly_salary: 0,
-      per_trip_payment: 0,
-      status: 'Active',
-      employment_status: 'active',
-      is_first_login: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      total_trips: 0,
-      completed_trips: 0,
-      pending_settlements: 0,
-    };
+    const cleanUsername = (input.username || input.phone).trim().toLowerCase();
 
     if (isSupabaseConfigured) {
       let authUserId: string | null = null;
-      const cleanUsername = input.username.toLowerCase();
       const driverEmail = input.email || `${cleanUsername}@villalemon.pickup`;
 
       if (_password) {
@@ -90,28 +102,86 @@ export const driverService = {
           });
           if (authData?.user) {
             authUserId = authData.user.id;
+
+            // Also ensure profile exists in profiles table
+            await supabase.from('profiles').upsert({
+              id: authUserId,
+              email: driverEmail,
+              full_name: input.full_name,
+              phone: input.phone,
+              role: 'driver',
+              is_active: true,
+            });
           }
         } catch (authErr) {
           console.warn('Driver auth registration note:', authErr);
         }
       }
 
-      const payload: any = {
-        user_id: authUserId,
-        employee_id: input.employee_id,
+      const driverPayload: any = {
+        profile_id: authUserId,
         full_name: input.full_name,
-        username: cleanUsername,
         phone: input.phone,
+        driving_licence_no: input.driving_licence_no || input.employee_id || 'PENDING',
+        licence_expiry: input.licence_expiry || null,
+        employment_type: input.employment_type || 'Per-trip payment',
+        monthly_salary: Number(input.monthly_salary) || 0.00,
+        per_trip_payment: Number(input.per_trip_payment) || 500.00,
+        payment_arrangement_notes: input.payment_arrangement_notes || input.address || null,
+        status: 'Active',
+      };
+
+      const { data, error } = await supabase.from('drivers').insert(driverPayload).select().single();
+      if (error) {
+        console.error('Supabase driver insert error:', error);
+        throw error;
+      }
+
+      return {
+        id: data.id,
+        user_id: data.profile_id || data.id,
+        employee_id: data.driving_licence_no,
+        full_name: data.full_name,
+        username: cleanUsername,
+        phone: data.phone,
         email: driverEmail,
         vehicle_number: input.vehicle_number || '',
         address: input.address || '',
+        driving_licence_no: data.driving_licence_no,
+        employment_type: data.employment_type,
+        monthly_salary: Number(data.monthly_salary),
+        per_trip_payment: Number(data.per_trip_payment),
+        status: data.status,
         employment_status: 'active',
         is_first_login: true,
-      };
-      const { data, error } = await supabase.from('driver_employees').insert(payload).select().single();
-      if (error) throw error;
-      return data as DriverEmployee;
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      } as DriverEmployee;
     }
+
+    const newDriver: DriverEmployee = {
+      id: `d-${Date.now()}`,
+      user_id: `u-${Date.now()}`,
+      employee_id: input.employee_id,
+      full_name: input.full_name,
+      username: cleanUsername,
+      phone: input.phone,
+      email: input.email || `${cleanUsername}@villalemon.pickup`,
+      vehicle_number: input.vehicle_number || '',
+      address: input.address || '',
+      driving_licence_no: input.driving_licence_no || '',
+      employment_type: input.employment_type || 'Per-trip payment',
+      monthly_salary: Number(input.monthly_salary) || 0,
+      per_trip_payment: Number(input.per_trip_payment) || 500,
+      status: 'Active',
+      employment_status: 'active',
+      is_first_login: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      total_trips: 0,
+      completed_trips: 0,
+      pending_settlements: 0,
+    };
 
     setStored('drivers', [newDriver, ...drivers]);
     return newDriver;
@@ -128,23 +198,14 @@ export const driverService = {
     setStored('drivers', updated);
 
     if (isSupabaseConfigured) {
-      await supabase.from('driver_employees').update({ employment_status: status }).eq('id', id);
+      const dbStatus = status === 'active' ? 'Active' : 'Inactive';
+      await supabase.from('drivers').update({ status: dbStatus }).eq('id', id);
     }
 
     return updated.find((d: DriverEmployee) => d.id === id)!;
   },
 
-  async resetPassword(id: string): Promise<{ success: boolean; tempPassword?: string }> {
-    const drivers = getStored('drivers', initialDrivers);
-    const updated = drivers.map((d: DriverEmployee) => {
-      if (d.id === id) {
-        return { ...d, is_first_login: true, updated_at: new Date().toISOString() };
-      }
-      return d;
-    });
-    setStored('drivers', updated);
-
+  async resetPassword(_id: string): Promise<{ success: boolean; tempPassword?: string }> {
     return { success: true, tempPassword: `lemon${Math.floor(1000 + Math.random() * 9000)}` };
   },
 };
-

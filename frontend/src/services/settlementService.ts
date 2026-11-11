@@ -9,8 +9,8 @@ export const settlementService = {
         .from('trip_settlements')
         .select(`
           *,
-          trip:trips(id, trip_number, customer_name, pickup_date, pickup_location, destination),
-          driver:driver_employees(id, full_name, username, employee_id)
+          trip:trips(id, trip_number, guest_names, customer_name, trip_date, pickup_date, pickup_location, destination),
+          driver:drivers(id, full_name, phone)
         `)
         .order('updated_at', { ascending: false });
 

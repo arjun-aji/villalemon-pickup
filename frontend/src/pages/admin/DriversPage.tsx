@@ -27,6 +27,9 @@ const DriversPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formName, setFormName] = useState('');
   const [formEmpId, setFormEmpId] = useState('');
+  const [formLicence, setFormLicence] = useState('');
+  const [formEmploymentType, setFormEmploymentType] = useState<'Per-trip payment' | 'Salaried (monthly)'>('Per-trip payment');
+  const [formRate, setFormRate] = useState<number>(500);
   const [formUsername, setFormUsername] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -57,6 +60,9 @@ const DriversPage: React.FC = () => {
   const handleOpenAddModal = () => {
     const nextNum = drivers.length + 1;
     setFormEmpId(`VL-D0${nextNum}`);
+    setFormLicence('');
+    setFormEmploymentType('Per-trip payment');
+    setFormRate(500);
     setFormName('');
     setFormUsername('');
     setFormPhone('');
@@ -74,13 +80,17 @@ const DriversPage: React.FC = () => {
       const cleanUsername = formUsername.trim().toLowerCase();
       await driverService.create(
         {
-          full_name: formName,
+          full_name: formName.trim(),
           employee_id: formEmpId,
           username: cleanUsername,
-          phone: formPhone,
+          phone: formPhone.trim(),
           email: formEmail || `${cleanUsername}@villalemon.pickup`,
-          vehicle_number: formVehicle,
-          address: formAddress,
+          vehicle_number: formVehicle.trim(),
+          address: formAddress.trim(),
+          driving_licence_no: formLicence.trim() || formEmpId,
+          employment_type: formEmploymentType,
+          per_trip_payment: formEmploymentType === 'Per-trip payment' ? Number(formRate) : 0,
+          monthly_salary: formEmploymentType === 'Salaried (monthly)' ? Number(formRate) : 0,
         },
         formPassword
       );
@@ -286,13 +296,13 @@ const DriversPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="label">Employee ID</label>
+              <label className="label">Phone Number (Required)</label>
               <input
                 type="text"
                 required
-                value={formEmpId}
-                onChange={e => setFormEmpId(e.target.value)}
-                placeholder="VL-D05"
+                value={formPhone}
+                onChange={e => setFormPhone(e.target.value)}
+                placeholder="919048279460"
                 className="input-field font-mono"
               />
             </div>
@@ -326,24 +336,52 @@ const DriversPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Phone Number</label>
+              <label className="label">Driving Licence No</label>
               <input
                 type="text"
                 required
-                value={formPhone}
-                onChange={e => setFormPhone(e.target.value)}
-                placeholder="98765 00000"
+                value={formLicence}
+                onChange={e => setFormLicence(e.target.value)}
+                placeholder="KL-16-2023-0001"
+                className="input-field font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="label">Employment Type</label>
+              <select
+                value={formEmploymentType}
+                onChange={e => setFormEmploymentType(e.target.value as any)}
+                className="input-field"
+              >
+                <option value="Per-trip payment">Per-trip payment</option>
+                <option value="Salaried (monthly)">Salaried (monthly)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">
+                {formEmploymentType === 'Per-trip payment' ? 'Per-Trip Rate (INR)' : 'Monthly Salary (INR)'}
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={formRate}
+                onChange={e => setFormRate(Number(e.target.value))}
+                placeholder="500"
                 className="input-field"
               />
             </div>
 
             <div>
-              <label className="label">Vehicle Number</label>
+              <label className="label">Assigned Vehicle</label>
               <input
                 type="text"
                 value={formVehicle}
                 onChange={e => setFormVehicle(e.target.value)}
-                placeholder="KL-16-E-7890"
+                placeholder="KL 81 D 1478"
                 className="input-field uppercase font-mono"
               />
             </div>

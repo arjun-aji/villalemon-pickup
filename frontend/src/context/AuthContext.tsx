@@ -68,7 +68,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setProfile(data as Profile);
 
               if (data.role === 'driver') {
-                // Try 'drivers' first, fallback to 'driver_employees'
                 const { data: dData } = await supabase
                   .from('drivers')
                   .select('*')
@@ -77,13 +76,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 if (dData && isMounted) {
                   setDriver(dData as Driver);
-                } else {
-                  const { data: oldDData } = await supabase
-                    .from('driver_employees')
-                    .select('*')
-                    .eq('user_id', session.user.id)
-                    .maybeSingle();
-                  if (oldDData && isMounted) setDriver(oldDData as Driver);
                 }
               } else if (data.role === 'organization') {
                 const { data: orgUserData } = await supabase
@@ -288,13 +280,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (dData) {
         driverData = dData;
-      } else {
-        const { data: oldData } = await supabase
-          .from('driver_employees')
-          .select('*')
-          .eq('username', cleanUsername)
-          .maybeSingle();
-        driverData = oldData;
       }
 
       const driverEmail = driverData?.email || `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`;
