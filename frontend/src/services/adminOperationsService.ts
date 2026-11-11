@@ -14,13 +14,26 @@ import {
 export const organizationService = {
   async getAll(): Promise<Organization[]> {
     if (isSupabaseConfigured) {
-      // Query joined with v_client_summary view for live calculations
-      const { data, error } = await supabase
-        .from('v_client_summary')
-        .select('*')
-        .order('name', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('v_client_summary')
+          .select('*')
+          .order('organization_name', { ascending: true });
 
-      if (!error && data) return data as Organization[];
+        if (!error && data) {
+          return data.map((o: any) => ({
+            ...o,
+            id: o.organization_id || o.id,
+            name: o.organization_name || o.name,
+            type: o.organization_type || o.type,
+            outstanding_amount: Number(o.outstanding_balance) || 0,
+            total_billed: Number(o.completed_trip_value) || 0,
+            credit_status: o.credit_check || 'OK',
+          })) as Organization[];
+        }
+      } catch (e) {
+        console.warn('v_client_summary query fallback:', e);
+      }
 
       const { data: direct, error: dErr } = await supabase
         .from('organizations')
@@ -34,9 +47,15 @@ export const organizationService = {
 
   async create(input: Partial<Organization>): Promise<Organization> {
     if (isSupabaseConfigured) {
+      const payload = {
+        ...input,
+        whatsapp: input.whatsapp || input.phone || '',
+        credit_limit: Number(input.credit_limit) || 50000,
+        is_active: input.is_active !== undefined ? input.is_active : true,
+      };
       const { data, error } = await supabase
         .from('organizations')
-        .insert(input)
+        .insert(payload)
         .select()
         .single();
       if (error) throw error;

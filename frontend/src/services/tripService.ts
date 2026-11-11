@@ -588,9 +588,9 @@ export const tripService = {
           sum + (Number(t.trip_selling_price) || 0), 0
         );
 
-        // Expenses: driver reports + office general expenses
+        // Expenses: driver reports + driver pay + office general expenses
         const tripExpenses = finList.reduce((sum, f) => 
-          sum + (Number(f.total_trip_expenses) || 0), 0
+          sum + (Number(f.total_trip_expenses) || 0) + (Number(f.effective_driver_pay) || 0), 0
         );
         const officeExpenses = expenseList.reduce((sum, e) => 
           sum + (Number(e.amount) || 0), 0

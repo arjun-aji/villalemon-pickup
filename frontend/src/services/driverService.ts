@@ -21,12 +21,15 @@ export const driverService = {
             const myTrips = trips.filter((t: any) => t.assigned_driver_id === d.id);
             const completed = myTrips.filter((t: any) => t.trip_status === 'Completed' || t.trip_status === 'completed');
 
+            const userMatch = (d.payment_arrangement_notes || '').match(/Username:\s*([a-zA-Z0-9_]+)/i);
+            const extractedUsername = userMatch ? userMatch[1] : d.phone;
+
             return {
               id: d.id,
               user_id: d.profile_id || d.id,
               employee_id: d.driving_licence_no ? `DL-${d.driving_licence_no.substring(0, 6)}` : 'DRV',
               full_name: d.full_name,
-              username: d.phone,
+              username: extractedUsername,
               phone: d.phone,
               email: `${d.phone}@villalemon.pickup`,
               vehicle_number: d.assigned_vehicle_reg || '',
@@ -118,6 +121,10 @@ export const driverService = {
         }
       }
 
+      const notes = input.payment_arrangement_notes || input.address || '';
+      const usernameNote = cleanUsername ? `Username: ${cleanUsername}` : '';
+      const combinedNotes = [notes, usernameNote].filter(Boolean).join(' | ') || null;
+
       const driverPayload: any = {
         profile_id: authUserId,
         full_name: input.full_name,
@@ -127,7 +134,7 @@ export const driverService = {
         employment_type: input.employment_type || 'Per-trip payment',
         monthly_salary: Number(input.monthly_salary) || 0.00,
         per_trip_payment: Number(input.per_trip_payment) || 500.00,
-        payment_arrangement_notes: input.payment_arrangement_notes || input.address || null,
+        payment_arrangement_notes: combinedNotes,
         status: 'Active',
       };
 
