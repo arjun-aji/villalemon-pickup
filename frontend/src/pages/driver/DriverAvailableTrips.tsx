@@ -13,30 +13,55 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { tripService } from '../../services/tripService';
 import { enrollmentService } from '../../services/enrollmentService';
+import { supabase } from '../../lib/supabase';
 import { Trip, TripEnrollment } from '../../types';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { formatINR, formatDate, formatTime } from '../../utils/formatters';
 
 const DriverAvailableTrips: React.FC = () => {
   const navigate = useNavigate();
-  const { driver } = useAuth();
+  const { driver, profile, setDriver } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [enrolledMap, setEnrolledMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
 
-  const driverId = driver?.id || '';
+  const rawDriverId = driver?.id || '';
+  const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
 
   useEffect(() => {
     loadTrips();
-  }, [driverId]);
+  }, [rawDriverId]);
 
   const loadTrips = async () => {
     try {
       setLoading(true);
+
+      let effectiveDriverId = rawDriverId;
+      const isRealUuid = (id?: string) => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+      if (!isRealUuid(effectiveDriverId)) {
+        const { data: allDbDrivers } = await supabase.from('drivers').select('*');
+        const cleanAlpha = initialDriverName.toLowerCase().replace(/[^a-z]/g, '');
+        const cleanPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+
+        const matched = allDbDrivers?.find(d => {
+          const dPhone = (d.phone || '').replace(/[^0-9]/g, '');
+          if (cleanPhone && cleanPhone.length >= 6 && dPhone.includes(cleanPhone)) return true;
+          const dAlpha = (d.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
+          if (cleanAlpha && (dAlpha === cleanAlpha || dAlpha.includes(cleanAlpha) || cleanAlpha.includes(dAlpha))) return true;
+          return false;
+        });
+
+        if (matched) {
+          effectiveDriverId = matched.id;
+          if (setDriver) setDriver(matched as any);
+        }
+      }
+      setLoading(true);
       const [allTrips, myEnrollments] = await Promise.all([
         tripService.getAvailableForEnrollment(),
-        driverId ? enrollmentService.getDriverEnrollments(driverId) : Promise.resolve([]),
+        effectiveDriverId ? enrollmentService.getDriverEnrollments(effectiveDriverId) : Promise.resolve([]),
       ]);
 
       setTrips(allTrips);
@@ -55,7 +80,7 @@ const DriverAvailableTrips: React.FC = () => {
   const handleEnroll = async (tripId: string) => {
     try {
       setEnrollingId(tripId);
-      await enrollmentService.enroll(tripId, driverId);
+      await enrollmentService.enroll(tripId, driver?.id || '');
       setEnrolledMap(prev => ({ ...prev, [tripId]: true }));
       alert('Enrollment submitted! Admin will review and confirm your assignment.');
     } catch (err: any) {

@@ -10,6 +10,7 @@ interface AuthContextType {
   organization: Organization | null;
   role: UserRole | null;
   loading: boolean;
+  setDriver: (driver: Driver | null) => void;
   signInAdmin: (emailOrUsername: string, password: string) => Promise<{ error: string | null }>;
   signUpAdmin: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signInDriver: (username: string, password: string) => Promise<{ error: string | null }>;
@@ -270,19 +271,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanUsername = username.trim().toLowerCase();
 
     try {
-      // First check 'drivers' table
+      // 1. Fetch drivers from Supabase to match phone, name, or username pattern
       let driverData: any = null;
-      const { data: dData } = await supabase
-        .from('drivers')
-        .select('*')
-        .or(`phone.eq.${cleanUsername},full_name.ilike.%${cleanUsername}%`)
-        .maybeSingle();
+      const { data: allDrivers } = await supabase.from('drivers').select('*');
 
-      if (dData) {
-        driverData = dData;
+      if (allDrivers && allDrivers.length > 0) {
+        const cleanDigits = cleanUsername.replace(/[^0-9]/g, '');
+        const cleanAlpha = cleanUsername.replace(/[^a-z]/g, '');
+
+        driverData = allDrivers.find(d => {
+          const dPhoneDigits = (d.phone || '').replace(/[^0-9]/g, '');
+          const dNameLower = (d.full_name || '').toLowerCase().trim();
+          const dNameAlpha = dNameLower.replace(/[^a-z]/g, '');
+
+          // Direct match with input
+          if (cleanDigits.length >= 6 && dPhoneDigits.includes(cleanDigits)) return true;
+          if (dNameLower === cleanUsername) return true;
+
+          // Alpha match e.g. "arjun657" -> alpha "arjun" matches driver "Arjun"
+          if (cleanAlpha && cleanAlpha.length >= 3) {
+            if (dNameAlpha === cleanAlpha) return true;
+            if (dNameAlpha.includes(cleanAlpha) || cleanAlpha.includes(dNameAlpha)) return true;
+          }
+
+          if (d.payment_arrangement_notes && d.payment_arrangement_notes.toLowerCase().includes(cleanUsername)) return true;
+          return false;
+        });
       }
 
-      const driverEmail = driverData?.email || `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`;
+      // Fallback single query
+      if (!driverData) {
+        const { data: dData } = await supabase
+          .from('drivers')
+          .select('*')
+          .or(`phone.eq.${cleanUsername},full_name.ilike.%${cleanUsername}%`)
+          .maybeSingle();
+
+        if (dData) {
+          driverData = dData;
+        }
+      }
+
+      const realDriverId = driverData?.id;
+      const driverEmail = driverData?.phone ? `${driverData.phone}@villalemon.pickup` : `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`;
 
       let authUser = null;
       try {
@@ -298,7 +329,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const driverProfile: Profile = {
-        id: authUser?.id || driverData?.profile_id || driverData?.id || 'driver-temp-id',
+        id: realDriverId || authUser?.id || driverData?.profile_id || 'driver-temp-id',
         role: 'driver',
         full_name: driverData?.full_name || username,
         email: driverEmail,
@@ -308,14 +339,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: driverData?.updated_at || new Date().toISOString(),
       };
 
-      const finalDriver: Driver = driverData || {
+      const finalDriver: Driver = driverData ? {
+        id: driverData.id,
+        full_name: driverData.full_name,
+        phone: driverData.phone || '',
+        driving_licence_no: driverData.driving_licence_no || '',
+        employment_type: driverData.employment_type || 'Per-trip payment',
+        monthly_salary: Number(driverData.monthly_salary) || 0,
+        per_trip_payment: Number(driverData.per_trip_payment) || 500,
+        status: driverData.status || 'Active',
+        created_at: driverData.created_at || new Date().toISOString(),
+        updated_at: driverData.updated_at || new Date().toISOString(),
+      } : {
         id: driverProfile.id,
         full_name: driverProfile.full_name,
         phone: driverProfile.phone || '',
         driving_licence_no: '',
-        employment_type: 'Salaried (monthly)',
+        employment_type: 'Per-trip payment',
         monthly_salary: 0,
-        per_trip_payment: 0,
+        per_trip_payment: 500,
         status: 'Active',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -464,6 +506,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         organization,
         role: profile?.role ?? null,
         loading,
+        setDriver,
         signInAdmin,
         signUpAdmin,
         signInDriver,

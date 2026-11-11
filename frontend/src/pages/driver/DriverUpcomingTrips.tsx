@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { tripService } from '../../services/tripService';
+import { supabase } from '../../lib/supabase';
 import { Trip } from '../../types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -21,28 +22,65 @@ import { formatINR, formatDate, formatTime } from '../../utils/formatters';
 
 const DriverUpcomingTrips: React.FC = () => {
   const navigate = useNavigate();
-  const { driver } = useAuth();
+  const { driver, profile, setDriver } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const driverId = driver?.id || '';
+  const rawDriverId = driver?.id || '';
+  const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
 
   useEffect(() => {
     loadMyTrips();
-  }, [driverId]);
+  }, [rawDriverId]);
 
   const loadMyTrips = async () => {
     try {
       setLoading(true);
-      if (!driverId) {
-        setTrips([]);
-        return;
+
+      let effectiveDriverId = rawDriverId;
+      let resolvedName = initialDriverName;
+
+      const isRealUuid = (id?: string) => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+      const { data: allDbDrivers } = await supabase.from('drivers').select('*');
+      if (allDbDrivers && allDbDrivers.length > 0) {
+        if (!isRealUuid(effectiveDriverId)) {
+          const cleanAlpha = initialDriverName.toLowerCase().replace(/[^a-z]/g, '');
+          const cleanPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+
+          const matched = allDbDrivers.find(d => {
+            const dPhone = (d.phone || '').replace(/[^0-9]/g, '');
+            if (cleanPhone && cleanPhone.length >= 6 && dPhone.includes(cleanPhone)) return true;
+            const dAlpha = (d.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
+            if (cleanAlpha && (dAlpha === cleanAlpha || dAlpha.includes(cleanAlpha) || cleanAlpha.includes(dAlpha))) return true;
+            return false;
+          });
+
+          if (matched) {
+            effectiveDriverId = matched.id;
+            resolvedName = matched.full_name;
+            if (setDriver) setDriver(matched as any);
+          }
+        }
       }
+
       const all = await tripService.getAll();
-      const myTrips = all.filter(
-        t => t.assigned_driver_id === driverId && ['upcoming', 'assigned', 'in_progress'].includes(t.trip_status)
-      );
+
+      const isUpcomingStatus = (st?: string) => {
+        const s = (st || '').toLowerCase().replace(/[\s-]+/g, '_');
+        return ['upcoming', 'assigned', 'confirmed', 'in_progress', 'pending_approval'].includes(s);
+      };
+
+      const myTrips = all.filter(t => {
+        if (!isUpcomingStatus(t.trip_status)) return false;
+        if (effectiveDriverId && t.assigned_driver_id === effectiveDriverId) return true;
+        const tDrvName = (t.driver?.full_name || '').toLowerCase();
+        const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
+        if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
+        return false;
+      });
+
       setTrips(myTrips);
     } catch (e) {
       console.error(e);
@@ -109,19 +147,21 @@ const DriverUpcomingTrips: React.FC = () => {
               {/* Customer Info */}
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-bold text-text-primary text-base">{trip.customer_name}</p>
-                  <a
-                    href={`tel:${trip.customer_phone}`}
-                    className="text-xs text-green-primary font-semibold flex items-center gap-1 mt-0.5"
-                  >
-                    <Phone className="h-3 w-3" />
-                    <span>{trip.customer_phone}</span>
-                  </a>
+                  <p className="font-bold text-text-primary text-base">{trip.guest_names || trip.customer_name || 'Guest'}</p>
+                  {(trip.guest_contact_number || trip.customer_phone) && (
+                    <a
+                      href={`tel:${trip.guest_contact_number || trip.customer_phone}`}
+                      className="text-xs text-green-primary font-semibold flex items-center gap-1 mt-0.5"
+                    >
+                      <Phone className="h-3 w-3" />
+                      <span>{trip.guest_contact_number || trip.customer_phone}</span>
+                    </a>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] text-text-secondary block">Collect</span>
                   <span className="text-sm font-black text-text-primary">
-                    {formatINR(trip.amount_to_collect)}
+                    {formatINR(trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)}
                   </span>
                 </div>
               </div>
@@ -134,11 +174,11 @@ const DriverUpcomingTrips: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 text-text-secondary">
                   <span className="w-2 h-2 rounded-full bg-navy-primary shrink-0" />
-                  <span className="font-medium text-text-primary">{trip.destination}</span>
+                  <span className="font-medium text-text-primary">{trip.dropoff_location || trip.destination}</span>
                 </div>
                 <div className="pt-1 text-[11px] text-text-secondary flex justify-between border-t border-border/60">
-                  <span>{formatDate(trip.pickup_date)}</span>
-                  <span className="font-semibold text-text-primary">{formatTime(trip.pickup_time)}</span>
+                  <span>{formatDate(trip.trip_date || trip.pickup_date || '')}</span>
+                  <span className="font-semibold text-text-primary">{formatTime(trip.pickup_time || '')}</span>
                 </div>
               </div>
 

@@ -24,7 +24,7 @@ import { formatINR } from '../../utils/formatters';
 
 const DriverDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { driver, profile } = useAuth();
+  const { driver, profile, setDriver } = useAuth();
   const [upcomingTrips, setUpcomingTrips] = useState<Trip[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
   const [enrolledCount, setEnrolledCount] = useState(0);
@@ -33,28 +33,82 @@ const DriverDashboard: React.FC = () => {
   const [inProgressCount, setInProgressCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const driverId = driver?.id || '';
-  const driverName = driver?.full_name || profile?.full_name || 'Driver';
+  const rawDriverId = driver?.id || '';
+  const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
+  const [displayName, setDisplayName] = useState(initialDriverName);
 
   useEffect(() => {
     loadDriverData();
-  }, [driverId]);
+  }, [rawDriverId]);
 
   const loadDriverData = async () => {
     try {
       setLoading(true);
+
+      // Auto-resolve real driver UUID from Supabase if stored as temp id
+      let effectiveDriverId = rawDriverId;
+      let resolvedName = initialDriverName;
+
+      const isRealUuid = (id?: string) => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+      const { data: allDbDrivers } = await supabase.from('drivers').select('*');
+      if (allDbDrivers && allDbDrivers.length > 0) {
+        if (!isRealUuid(effectiveDriverId)) {
+          const cleanAlpha = initialDriverName.toLowerCase().replace(/[^a-z]/g, '');
+          const cleanPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+
+          const matched = allDbDrivers.find(d => {
+            const dPhone = (d.phone || '').replace(/[^0-9]/g, '');
+            if (cleanPhone && cleanPhone.length >= 6 && dPhone.includes(cleanPhone)) return true;
+            const dAlpha = (d.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
+            if (cleanAlpha && (dAlpha === cleanAlpha || dAlpha.includes(cleanAlpha) || cleanAlpha.includes(dAlpha))) return true;
+            return false;
+          });
+
+          if (matched) {
+            effectiveDriverId = matched.id;
+            resolvedName = matched.full_name;
+            setDisplayName(matched.full_name);
+            if (setDriver) setDriver(matched as any);
+          }
+        } else {
+          const current = allDbDrivers.find(d => d.id === effectiveDriverId);
+          if (current) {
+            setDisplayName(current.full_name);
+          }
+        }
+      }
+
       const [allTrips, enrollments, driverBalances] = await Promise.all([
         tripService.getAll(),
-        driverId ? enrollmentService.getDriverEnrollments(driverId) : Promise.resolve([]),
+        effectiveDriverId ? enrollmentService.getDriverEnrollments(effectiveDriverId) : Promise.resolve([]),
         supabase.from('v_driver_balances').select('*'),
       ]);
 
-      const myAssigned = (allTrips as Trip[]).filter(
-        (t: Trip) => t.assigned_driver_id === driverId || (!driverId && t.driver?.full_name?.toLowerCase() === driverName.toLowerCase())
-      );
-      const upcoming = myAssigned.filter((t: Trip) => ['upcoming', 'assigned', 'Confirmed', 'Assigned'].includes(t.trip_status));
-      const inProg = myAssigned.filter((t: Trip) => ['in_progress', 'On Trip'].includes(t.trip_status));
-      const completed = myAssigned.filter((t: Trip) => ['completed', 'Completed'].includes(t.trip_status));
+      const isUpcomingStatus = (st?: string) => {
+        const s = (st || '').toLowerCase().replace(/[\s-]+/g, '_');
+        return ['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment'].includes(s);
+      };
+      const isInProgressStatus = (st?: string) => {
+        const s = (st || '').toLowerCase().replace(/[\s-]+/g, '_');
+        return s === 'in_progress' || s === 'on_trip';
+      };
+      const isCompletedStatus = (st?: string) => {
+        const s = (st || '').toLowerCase().replace(/[\s-]+/g, '_');
+        return s === 'completed';
+      };
+
+      const myAssigned = (allTrips as Trip[]).filter((t: Trip) => {
+        if (effectiveDriverId && t.assigned_driver_id === effectiveDriverId) return true;
+        const tDrvName = (t.driver?.full_name || '').toLowerCase();
+        const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
+        if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
+        return false;
+      });
+
+      const upcoming = myAssigned.filter((t: Trip) => isUpcomingStatus(t.trip_status));
+      const inProg = myAssigned.filter((t: Trip) => isInProgressStatus(t.trip_status));
+      const completed = myAssigned.filter((t: Trip) => isCompletedStatus(t.trip_status));
 
       setUpcomingTrips(upcoming);
       setInProgressCount(inProg.length);
@@ -67,7 +121,7 @@ const DriverDashboard: React.FC = () => {
       setEnrolledCount(pendingEnrollments.length);
 
       const myBalance = (driverBalances.data || []).find(
-        (b: any) => b.driver_id === driverId || b.full_name?.toLowerCase() === driverName.toLowerCase()
+        (b: any) => b.driver_id === effectiveDriverId || b.full_name?.toLowerCase() === resolvedName.toLowerCase()
       );
       setPendingSettlementAmount(Math.abs(Number(myBalance?.balance_payable_to_driver || 0)));
     } catch (e) {
@@ -87,7 +141,7 @@ const DriverDashboard: React.FC = () => {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-2xl font-black text-[#10243A] flex items-center gap-1.5">
-              <span>Hi, {driverName}</span>
+              <span>Hi, {displayName}</span>
               <span>👋</span>
             </h1>
             <p className="text-xs font-bold text-green-primary tracking-wide uppercase mt-0.5">

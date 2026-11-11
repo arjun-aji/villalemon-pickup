@@ -38,21 +38,29 @@ const DriverSettlements: React.FC = () => {
   const loadDriverSettlementData = async () => {
     try {
       setLoading(true);
-      if (!driverId) {
-        // Fallback: try finding driver by full_name or phone
-        const { data: foundDriver } = await supabase
-          .from('drivers')
-          .select('id, full_name, employment_type')
-          .or(`phone.eq.${profile?.phone || ''},full_name.ilike.%${profile?.full_name || ''}%`)
-          .limit(1)
-          .maybeSingle();
+      const isRealUuid = (id?: string) => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      let effectiveDriverId = driverId;
 
-        if (foundDriver) {
-          fetchDetails(foundDriver.id);
-          return;
+      if (!isRealUuid(effectiveDriverId)) {
+        const { data: allDbDrivers } = await supabase.from('drivers').select('*');
+        const cleanAlpha = (driver?.full_name || profile?.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
+        const cleanPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+
+        const matched = allDbDrivers?.find(d => {
+          const dPhone = (d.phone || '').replace(/[^0-9]/g, '');
+          if (cleanPhone && cleanPhone.length >= 6 && dPhone.includes(cleanPhone)) return true;
+          const dAlpha = (d.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
+          if (cleanAlpha && (dAlpha === cleanAlpha || dAlpha.includes(cleanAlpha) || cleanAlpha.includes(dAlpha))) return true;
+          return false;
+        });
+
+        if (matched) {
+          effectiveDriverId = matched.id;
         }
-      } else {
-        fetchDetails(driverId);
+      }
+
+      if (effectiveDriverId) {
+        await fetchDetails(effectiveDriverId);
       }
     } catch (e) {
       console.error(e);
@@ -66,7 +74,7 @@ const DriverSettlements: React.FC = () => {
       const [balances, entries, trips] = await Promise.all([
         supabase.from('v_driver_balances').select('*').eq('driver_id', id).maybeSingle(),
         driverLedgerService.getEntriesByDriver(id),
-        supabase.from('trips').select('*').eq('assigned_driver_id', id).eq('trip_status', 'Completed'),
+        supabase.from('trips').select('*').eq('assigned_driver_id', id).in('trip_status', ['Completed', 'completed']),
       ]);
 
       setDriverBalance(balances.data);
