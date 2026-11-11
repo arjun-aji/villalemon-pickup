@@ -10,9 +10,10 @@ export const tripService = {
           .from('trips')
           .select(`
             *,
-            driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status),
+            driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status, employment_type),
             vehicle:vehicles(id, registration_number, vehicle_type, status),
-            organization:organizations(id, name, type, contact_person, phone)
+            organization:organizations(id, name, type, contact_person, phone),
+            driver_reports(*)
           `)
           .order('trip_date', { ascending: false })
           .order('created_at', { ascending: false });
@@ -26,7 +27,36 @@ export const tripService = {
         }
 
         const { data, error } = await query;
-        if (!error && data) return data as Trip[];
+        if (!error && data) {
+          return data.map((t: any) => {
+            const rep = (t.driver_reports && Array.isArray(t.driver_reports)) ? t.driver_reports[0] : t.driver_reports;
+            const diesel = Number(rep?.diesel_expense || 0);
+            const tollFood = Number(rep?.parking_toll_permits_tickets_food || 0);
+            const workshop = Number(rep?.workshop_expense || 0);
+            const totalExp = diesel + tollFood + workshop;
+            const sellPrice = Number(t.trip_selling_price || t.amount_to_collect || 0);
+            const dPay = Number(t.driver_trip_pay_override || t.driver_charge || (t.driver?.employment_type === 'Per-trip payment' ? t.driver?.per_trip_payment : 0) || 0);
+            const netProfit = sellPrice - dPay - totalExp;
+
+            return {
+              ...t,
+              settlement: {
+                trip_id: t.id,
+                driver_id: t.assigned_driver_id,
+                customer_collection: Number(rep?.amount_collected || sellPrice),
+                petrol_expense: diesel,
+                other_expenses: tollFood + workshop,
+                total_expenses: totalExp,
+                driver_charge: dPay,
+                net_profit: netProfit,
+                expected_return: Number(rep?.amount_collected || sellPrice) - totalExp,
+                actual_return: Number(rep?.amount_collected || sellPrice) - totalExp,
+                settlement_difference: 0,
+                settlement_status: rep ? 'settled' : 'expense_pending',
+              },
+            } as Trip;
+          });
+        }
       } catch (e) {
         console.warn('Trip query fallback note:', e);
       }
@@ -68,7 +98,8 @@ export const tripService = {
           driver:drivers(*),
           vehicle:vehicles(*),
           organization:organizations(*),
-          enrollments:trip_enrollments(*, driver:drivers(*))
+          enrollments:trip_enrollments(*, driver:drivers(*)),
+          driver_reports(*)
         `)
         .eq('id', id)
         .single();
@@ -76,7 +107,32 @@ export const tripService = {
       if (error) {
         console.warn('Trip getById note:', error);
       } else if (data) {
-        return data as Trip;
+        const rep = (data.driver_reports && Array.isArray(data.driver_reports)) ? data.driver_reports[0] : data.driver_reports;
+        const diesel = Number(rep?.diesel_expense || 0);
+        const tollFood = Number(rep?.parking_toll_permits_tickets_food || 0);
+        const workshop = Number(rep?.workshop_expense || 0);
+        const totalExp = diesel + tollFood + workshop;
+        const sellPrice = Number(data.trip_selling_price || data.amount_to_collect || 0);
+        const dPay = Number(data.driver_trip_pay_override || data.driver_charge || (data.driver?.employment_type === 'Per-trip payment' ? data.driver?.per_trip_payment : 0) || 0);
+        const netProfit = sellPrice - dPay - totalExp;
+
+        return {
+          ...data,
+          settlement: {
+            trip_id: data.id,
+            driver_id: data.assigned_driver_id,
+            customer_collection: Number(rep?.amount_collected || sellPrice),
+            petrol_expense: diesel,
+            other_expenses: tollFood + workshop,
+            total_expenses: totalExp,
+            driver_charge: dPay,
+            net_profit: netProfit,
+            expected_return: Number(rep?.amount_collected || sellPrice) - totalExp,
+            actual_return: Number(rep?.amount_collected || sellPrice) - totalExp,
+            settlement_difference: 0,
+            settlement_status: rep ? 'settled' : 'expense_pending',
+          },
+        } as Trip;
       }
     }
 

@@ -343,10 +343,15 @@ _Please confirm receipt and report duty start._`;
               <tbody className="divide-y divide-[#EDF2F7]">
                 {filteredTrips.map(trip => {
                   const s = trip.settlement;
-                  const collectAmt = Number(trip.amount_to_collect || trip.amount_driver_must_collect || trip.trip_selling_price || 0);
-                  const driverChg = Number(trip.driver_charge || trip.driver_trip_pay_override || 0);
-                  const otherChg = Number(trip.other_fixed_charges || 0);
-                  const profit = s?.net_profit !== undefined ? s.net_profit : collectAmt - driverChg - otherChg;
+                  const rep = (trip as any).driver_reports ? (Array.isArray((trip as any).driver_reports) ? (trip as any).driver_reports[0] : (trip as any).driver_reports) : null;
+                  const petrolExp = Number(rep?.diesel_expense ?? s?.petrol_expense ?? 0);
+                  const foodTollExp = Number(rep?.parking_toll_permits_tickets_food ?? 0);
+                  const otherExp = Number(rep?.workshop_expense ?? s?.other_expenses ?? trip.other_fixed_charges ?? 0);
+                  const totalExp = petrolExp + foodTollExp + otherExp;
+
+                  const collectAmt = Number(trip.trip_selling_price || trip.amount_driver_must_collect || trip.amount_to_collect || 0);
+                  const driverChg = Number(trip.driver_trip_pay_override || trip.driver_charge || (trip.driver?.employment_type === 'Per-trip payment' ? trip.driver?.per_trip_payment : 0) || 0);
+                  const profit = s?.net_profit !== undefined ? s.net_profit : collectAmt - driverChg - totalExp;
 
                   return (
                     <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
@@ -386,8 +391,17 @@ _Please confirm receipt and report duty start._`;
                       <td className="table-cell font-bold text-text-primary">
                         {formatINR(collectAmt)}
                       </td>
-                      <td className="table-cell font-extrabold text-green-primary">
-                        {formatINR(profit)}
+                      <td className="table-cell">
+                        <div>
+                          <p className={`font-mono font-extrabold text-sm ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatINR(profit)}
+                          </p>
+                          {totalExp > 0 && (
+                            <p className="text-[10px] text-slate-500 font-medium">
+                              -₹{totalExp} exp ({petrolExp > 0 ? `₹${petrolExp} fuel` : ''}{petrolExp > 0 && foodTollExp > 0 ? ', ' : ''}{foodTollExp > 0 ? `₹${foodTollExp} food/toll` : ''})
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td className="table-cell">
                         <StatusBadge status={trip.trip_status} />
@@ -580,27 +594,51 @@ _Please confirm receipt and report duty start._`;
             </div>
 
             {/* Financial Breakdown */}
-            <div className="p-3.5 bg-green-light/40 rounded-xl border border-green-primary/20 space-y-1.5 text-xs">
-              <p className="font-bold text-navy-primary uppercase text-[10px] tracking-wide">Financial Summary</p>
-              <div className="flex justify-between">
-                <span className="text-text-secondary">Customer Collection:</span>
-                <span className="font-bold text-text-primary">{formatINR(viewTrip.amount_to_collect || viewTrip.amount_driver_must_collect || 0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-secondary">Driver Charge:</span>
-                <span className="font-medium text-text-primary">{formatINR(viewTrip.driver_charge || viewTrip.driver_trip_pay_override || 0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-secondary">Additional Charges:</span>
-                <span className="font-medium text-text-primary">{formatINR(viewTrip.other_fixed_charges || 0)}</span>
-              </div>
-              {viewTrip.settlement && (
-                <div className="pt-1.5 border-t border-green-primary/20 flex justify-between font-bold">
-                  <span>Net Trip Profit:</span>
-                  <span className="text-green-primary font-black text-sm">{formatINR(viewTrip.settlement.net_profit)}</span>
+            {(() => {
+              const rep = (viewTrip as any).driver_reports ? (Array.isArray((viewTrip as any).driver_reports) ? (viewTrip as any).driver_reports[0] : (viewTrip as any).driver_reports) : null;
+              const dPetrol = Number(rep?.diesel_expense || viewTrip.settlement?.petrol_expense || 0);
+              const dFoodToll = Number(rep?.parking_toll_permits_tickets_food || 0);
+              const dWorkshop = Number(rep?.workshop_expense || viewTrip.settlement?.other_expenses || viewTrip.other_fixed_charges || 0);
+              const dCollect = Number(viewTrip.trip_selling_price || viewTrip.amount_to_collect || viewTrip.amount_driver_must_collect || 0);
+              const dDriverCharge = Number(viewTrip.driver_trip_pay_override || viewTrip.driver_charge || (viewTrip.driver?.employment_type === 'Per-trip payment' ? viewTrip.driver?.per_trip_payment : 0) || 0);
+              const dProfit = viewTrip.settlement?.net_profit !== undefined ? viewTrip.settlement.net_profit : (dCollect - dDriverCharge - dPetrol - dFoodToll - dWorkshop);
+
+              return (
+                <div className="p-3.5 bg-green-light/40 rounded-xl border border-green-primary/20 space-y-1.5 text-xs">
+                  <p className="font-bold text-navy-primary uppercase text-[10px] tracking-wide">Financial Summary</p>
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Customer Collection:</span>
+                    <span className="font-bold text-text-primary">{formatINR(dCollect)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Driver Pay / Charge:</span>
+                    <span className="font-medium text-text-primary">{formatINR(dDriverCharge)}</span>
+                  </div>
+                  {dPetrol > 0 && (
+                    <div className="flex justify-between text-expense">
+                      <span>Petrol / Diesel Expense:</span>
+                      <span className="font-medium">-{formatINR(dPetrol)}</span>
+                    </div>
+                  )}
+                  {dFoodToll > 0 && (
+                    <div className="flex justify-between text-expense">
+                      <span>Food / Toll / Parking Expense:</span>
+                      <span className="font-medium">-{formatINR(dFoodToll)}</span>
+                    </div>
+                  )}
+                  {dWorkshop > 0 && (
+                    <div className="flex justify-between text-expense">
+                      <span>Workshop / Other Expense:</span>
+                      <span className="font-medium">-{formatINR(dWorkshop)}</span>
+                    </div>
+                  )}
+                  <div className="pt-1.5 border-t border-green-primary/20 flex justify-between font-bold">
+                    <span>Net Trip Profit:</span>
+                    <span className={`font-black text-sm ${dProfit >= 0 ? 'text-green-primary' : 'text-expense'}`}>{formatINR(dProfit)}</span>
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {viewTrip.trip_notes && (
               <div className="text-xs text-text-secondary bg-gray-50 p-3 rounded-xl">
@@ -692,24 +730,32 @@ _Please confirm receipt and report duty start._`;
               </div>
 
               {/* Odometer & Signature Blocks */}
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                <div className="border border-dashed p-3 rounded-lg space-y-3">
-                  <p className="font-bold text-slate-700 text-[10px] uppercase">Odometer Readings</p>
-                  <div className="flex justify-between">
-                    <span>Starting KM: __________</span>
-                    <span>Ending KM: __________</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Tolls/Parking: ₹_______</span>
-                    <span>Diesel: ₹_______</span>
-                  </div>
-                </div>
+              {(() => {
+                const rep = (tripSheetTrip as any).driver_reports ? (Array.isArray((tripSheetTrip as any).driver_reports) ? (tripSheetTrip as any).driver_reports[0] : (tripSheetTrip as any).driver_reports) : null;
+                const sheetDiesel = rep?.diesel_expense || tripSheetTrip.settlement?.petrol_expense;
+                const sheetToll = rep?.parking_toll_permits_tickets_food || tripSheetTrip.settlement?.other_expenses;
 
-                <div className="border border-dashed p-3 rounded-lg flex flex-col justify-between">
-                  <p className="font-bold text-slate-700 text-[10px] uppercase">Guest Signature</p>
-                  <p className="text-[10px] text-slate-400 mt-6 pt-2 border-t">Signature / Rating / Feedback</p>
-                </div>
-              </div>
+                return (
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+                    <div className="border border-dashed p-3 rounded-lg space-y-3">
+                      <p className="font-bold text-slate-700 text-[10px] uppercase">Duty Expenses & Odometer</p>
+                      <div className="flex justify-between">
+                        <span>Starting KM: __________</span>
+                        <span>Ending KM: __________</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tolls/Food/Parking: <strong>{sheetToll ? formatINR(sheetToll) : '₹_______'}</strong></span>
+                        <span>Diesel/Petrol: <strong>{sheetDiesel ? formatINR(sheetDiesel) : '₹_______'}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="border border-dashed p-3 rounded-lg flex flex-col justify-between">
+                      <p className="font-bold text-slate-700 text-[10px] uppercase">Guest Signature</p>
+                      <p className="text-[10px] text-slate-400 mt-6 pt-2 border-t">Signature / Rating / Feedback</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
