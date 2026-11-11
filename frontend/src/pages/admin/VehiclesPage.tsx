@@ -513,3 +513,4 @@ const VehiclesPage: React.FC = () => {
 };
 
 export default VehiclesPage;
+

@@ -18,6 +18,11 @@ import {
   Plane,
   Receipt,
   IndianRupee,
+  MessageSquare,
+  Share2,
+  Printer,
+  Building2,
+  FileText,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
@@ -40,13 +45,14 @@ const TripsPage: React.FC = () => {
   const [selectedDriver, setSelectedDriver] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
-  // Assign Driver Modal
+  // Modals
   const [assignModalTrip, setAssignModalTrip] = useState<Trip | null>(null);
   const [selectedAssignDriverId, setSelectedAssignDriverId] = useState('');
-
-  // View Trip Details Modal
   const [viewTrip, setViewTrip] = useState<Trip | null>(null);
+  const [dispatchTrip, setDispatchTrip] = useState<Trip | null>(null);
+  const [tripSheetTrip, setTripSheetTrip] = useState<Trip | null>(null);
   const [copiedPlacard, setCopiedPlacard] = useState(false);
+  const [copiedDispatch, setCopiedDispatch] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -92,6 +98,78 @@ const TripsPage: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedPlacard(true);
     setTimeout(() => setCopiedPlacard(false), 2000);
+  };
+
+  const generateWhatsAppText = (t: Trip) => {
+    const tripNum = t.trip_number;
+    const dateStr = formatDate(t.trip_date || t.pickup_date || '');
+    const timeStr = formatTime(t.pickup_time || '');
+    const guest = t.guest_names || t.customer_name || 'Guest';
+    const phone = t.guest_contact_number || t.customer_phone || '-';
+    const pax = t.total_people || t.num_passengers || 1;
+    const cat = t.trip_category || 'Airport Pick-up';
+    const flight = t.flight_number_and_time || t.flight_number || '-';
+    const terminal = t.airport_terminal ? ` (${t.airport_terminal})` : '';
+    const pickup = t.pickup_location;
+    const drop = t.dropoff_location || t.destination;
+    const vehicle = t.vehicle ? `${t.vehicle.vehicle_type} (${t.vehicle.registration_number})` : (t.required_cab_type || 'Cab');
+    const driver = t.driver ? `${t.driver.full_name} (${t.driver.phone})` : 'Unassigned';
+    const collect = t.collection_rule === 'Do not collect'
+      ? 'DO NOT COLLECT (Office Billed)'
+      : `Collect ${formatINR(t.amount_driver_must_collect || t.amount_to_collect || 0)} from guest`;
+    const pay = formatINR(t.driver_trip_pay_override || t.driver_charge || 0);
+    const placard = t.placard_text || `VARKALA HOLIDAYS - ${guest.toUpperCase()}`;
+    const notes = t.special_instructions || t.trip_notes || 'None';
+
+    return `🚖 *VARKALA HOLIDAYS — TRIP DISPATCH* 🚖
+━━━━━━━━━━━━━━━━━━━━━
+📋 *Trip ID:* ${tripNum}
+📅 *Date & Time:* ${dateStr} at ${timeStr}
+🏷️ *Category:* ${cat}
+
+👤 *Guest Name:* ${guest}
+📞 *Guest Phone:* ${phone}
+👥 *Passengers:* ${pax} pax
+
+📍 *Pickup:* ${pickup}
+🏁 *Drop-off:* ${drop}
+✈️ *Flight/Train:* ${flight}${terminal}
+
+🚗 *Vehicle:* ${vehicle}
+👨‍✈️ *Driver:* ${driver}
+
+💰 *Collection Rule:* *${collect}*
+💵 *Driver Pay:* ${pay}
+🪧 *Airport Placard:* ${placard}
+
+📝 *Special Instructions:*
+${notes}
+━━━━━━━━━━━━━━━━━━━━━
+_Please confirm receipt and report duty start._`;
+  };
+
+  const handleCopyDispatch = (t: Trip) => {
+    navigator.clipboard.writeText(generateWhatsAppText(t));
+    setCopiedDispatch(true);
+    setTimeout(() => setCopiedDispatch(false), 2000);
+  };
+
+  const handleShareWhatsApp = (t: Trip) => {
+    const text = generateWhatsAppText(t);
+    const phone = t.driver?.phone ? t.driver.phone.replace(/[^0-9]/g, '') : '';
+    const url = phone
+      ? `https://wa.me/${phone.startsWith('91') ? phone : '91' + phone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleApproveTrip = async (tripId: string) => {
+    try {
+      await tripService.updateStatus(tripId, 'Confirmed');
+      loadData();
+    } catch (e: any) {
+      alert(e.message || 'Error approving trip');
+    }
   };
 
   // Filtered trips
@@ -311,6 +389,30 @@ const TripsPage: React.FC = () => {
                       </td>
                       <td className="table-cell text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {trip.trip_status === 'Pending Approval' && (
+                            <button
+                              onClick={() => handleApproveTrip(trip.id)}
+                              className="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                              title="Approve partner trip request"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>Approve</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDispatchTrip(trip)}
+                            className="p-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors"
+                            title="Generate WhatsApp Driver Dispatch"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setTripSheetTrip(trip)}
+                            className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                            title="Print Duty Trip Sheet"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
                           <button
                             onClick={() => setViewTrip(trip)}
                             className="p-1.5 bg-gray-100 hover:bg-gray-200 text-text-primary rounded-lg transition-colors"
@@ -501,6 +603,125 @@ const TripsPage: React.FC = () => {
                 {viewTrip.trip_notes}
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* WhatsApp Dispatch Modal */}
+      {dispatchTrip && (
+        <Modal
+          isOpen={Boolean(dispatchTrip)}
+          onClose={() => setDispatchTrip(null)}
+          title={`WhatsApp Dispatch: ${dispatchTrip.trip_number}`}
+          size="md"
+        >
+          <div className="space-y-4 text-xs">
+            <p className="text-slate-500">
+              Generated in Varkala Holidays driver dispatch format. One-click share directly to the driver via WhatsApp.
+            </p>
+            <pre className="p-4 bg-slate-900 text-emerald-400 font-mono rounded-xl whitespace-pre-wrap leading-relaxed text-[11px] select-all max-h-80 overflow-y-auto">
+              {generateWhatsAppText(dispatchTrip)}
+            </pre>
+            <div className="flex justify-between items-center pt-2">
+              <button
+                onClick={() => handleCopyDispatch(dispatchTrip)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                {copiedDispatch ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedDispatch ? 'Copied to Clipboard!' : 'Copy Text'}</span>
+              </button>
+              <button
+                onClick={() => handleShareWhatsApp(dispatchTrip)}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Send via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Printable Trip Sheet Modal */}
+      {tripSheetTrip && (
+        <Modal
+          isOpen={Boolean(tripSheetTrip)}
+          onClose={() => setTripSheetTrip(null)}
+          title={`Duty Slip / Trip Sheet: ${tripSheetTrip.trip_number}`}
+          size="lg"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-6 bg-white border border-slate-200 rounded-xl space-y-4 print:p-0 print:border-none">
+              <div className="flex justify-between items-start border-b pb-3">
+                <div>
+                  <h2 className="text-base font-black text-slate-900 tracking-wide">VARKALA HOLIDAYS</h2>
+                  <p className="text-[11px] text-slate-500">Taxi & Transport Management System</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-blue-900 text-sm">{tripSheetTrip.trip_number}</span>
+                  <p className="text-[11px] text-slate-500">Date: {formatDate(tripSheetTrip.trip_date || tripSheetTrip.pickup_date || '')}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2.5 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Guest Information</p>
+                  <p className="font-bold text-slate-900">{tripSheetTrip.guest_names || tripSheetTrip.customer_name}</p>
+                  <p className="text-slate-600">Phone: {tripSheetTrip.guest_contact_number || tripSheetTrip.customer_phone || '-'}</p>
+                  <p className="text-slate-600">Pax: {tripSheetTrip.total_people || 1}</p>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Driver & Cab</p>
+                  <p className="font-bold text-slate-900">{tripSheetTrip.driver?.full_name || 'Driver'}</p>
+                  <p className="text-slate-600">Vehicle: {tripSheetTrip.vehicle?.registration_number || tripSheetTrip.required_cab_type}</p>
+                  <p className="text-slate-600">Driver Phone: {tripSheetTrip.driver?.phone || '-'}</p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-3 space-y-1">
+                <p className="font-bold text-slate-800">Route & Duty Details</p>
+                <p className="text-slate-700">Pickup: <strong>{tripSheetTrip.pickup_location}</strong> at {formatTime(tripSheetTrip.pickup_time || '')}</p>
+                <p className="text-slate-700">Drop-off: <strong>{tripSheetTrip.dropoff_location || tripSheetTrip.destination}</strong></p>
+                <p className="text-slate-700">Collection: <strong>{tripSheetTrip.collection_rule === 'Do not collect' ? 'Do not collect (Office)' : `Collect ${formatINR(tripSheetTrip.amount_driver_must_collect || tripSheetTrip.amount_to_collect || 0)}`}</strong></p>
+              </div>
+
+              {/* Odometer & Signature Blocks */}
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+                <div className="border border-dashed p-3 rounded-lg space-y-3">
+                  <p className="font-bold text-slate-700 text-[10px] uppercase">Odometer Readings</p>
+                  <div className="flex justify-between">
+                    <span>Starting KM: __________</span>
+                    <span>Ending KM: __________</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Tolls/Parking: ₹_______</span>
+                    <span>Diesel: ₹_______</span>
+                  </div>
+                </div>
+
+                <div className="border border-dashed p-3 rounded-lg flex flex-col justify-between">
+                  <p className="font-bold text-slate-700 text-[10px] uppercase">Guest Signature</p>
+                  <p className="text-[10px] text-slate-400 mt-6 pt-2 border-t">Signature / Rating / Feedback</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setTripSheetTrip(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5 shadow-md"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Trip Sheet</span>
+              </button>
+            </div>
           </div>
         </Modal>
       )}

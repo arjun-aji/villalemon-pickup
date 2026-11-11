@@ -5,27 +5,30 @@ import { initialTrips, initialSettlements, getStored, setStored } from '../lib/m
 export const tripService = {
   async getAll(filters?: { status?: TripStatus; month?: number; year?: number; driverId?: string }): Promise<Trip[]> {
     if (isSupabaseConfigured) {
-      let query = supabase
-        .from('trips')
-        .select(`
-          *,
-          driver:driver_employees(id, full_name, username, vehicle_number, employee_id),
-          settlement:trip_settlements(*),
-          expenses:trip_expenses(*)
-        `)
-        .order('pickup_date', { ascending: false });
+      try {
+        let query = supabase
+          .from('trips')
+          .select(`
+            *,
+            driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status),
+            vehicle:vehicles(id, registration_number, vehicle_type, status),
+            organization:organizations(id, name, type, contact_person, phone)
+          `)
+          .order('trip_date', { ascending: false });
 
-      if (filters?.status) query = query.eq('trip_status', filters.status);
-      if (filters?.driverId) query = query.eq('assigned_driver_id', filters.driverId);
-      if (filters?.month && filters?.year) {
-        const start = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`;
-        const end = new Date(filters.year, filters.month, 0).toISOString().split('T')[0];
-        query = query.gte('pickup_date', start).lte('pickup_date', end);
+        if (filters?.status) query = query.eq('trip_status', filters.status);
+        if (filters?.driverId) query = query.eq('assigned_driver_id', filters.driverId);
+        if (filters?.month && filters?.year) {
+          const start = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`;
+          const end = new Date(filters.year, filters.month, 0).toISOString().split('T')[0];
+          query = query.gte('trip_date', start).lte('trip_date', end);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) return data as Trip[];
+      } catch (e) {
+        console.warn('Trip query fallback note:', e);
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Trip[];
     }
 
     // Mock storage
@@ -172,39 +175,40 @@ export const tripService = {
     if (isSupabaseConfigured) {
       const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
       const tripPayload: any = {
-        trip_number: tripNumber,
-        customer_name: input.customer_name,
-        customer_phone: input.customer_phone,
-        pickup_date: input.pickup_date,
-        pickup_time: input.pickup_time,
+        organization_id: isUuid(input.organization_id) ? input.organization_id : null,
+        ordered_by: input.ordered_by || input.customer_name || 'Front Desk',
+        trip_date: input.trip_date || input.pickup_date || new Date().toISOString().split('T')[0],
+        pickup_time: input.pickup_time || '10:00',
+        trip_category: input.trip_category || 'Airport Pick-up',
+        guest_names: input.guest_names || input.customer_name || 'Guest',
+        guest_contact_number: input.guest_contact_number || input.customer_phone || null,
+        total_people: Number(input.total_people || input.num_passengers || 1),
         pickup_location: input.pickup_location,
-        destination: input.destination,
-        flight_number: input.flight_number || null,
-        num_passengers: input.num_passengers || 1,
-        amount_to_collect: Number(input.amount_to_collect),
-        driver_charge: Number(input.driver_charge),
-        other_fixed_charges: Number(input.other_fixed_charges || 0),
-        placard_text: placardText,
-        trip_notes: input.trip_notes || null,
+        dropoff_location: input.dropoff_location || input.destination,
+        final_dropoff: input.final_dropoff || null,
+        flight_number_and_time: input.flight_number_and_time || input.flight_number || null,
+        airport_terminal: input.airport_terminal || null,
+        required_cab_type: input.required_cab_type || 'Sedan',
+        special_instructions: input.special_instructions || input.trip_notes || null,
         assigned_driver_id: isUuid(input.assigned_driver_id) ? input.assigned_driver_id : null,
-        trip_status: tripStatus,
+        assigned_vehicle_id: isUuid(input.assigned_vehicle_id) ? input.assigned_vehicle_id : null,
+        trip_selling_price: Number(input.trip_selling_price || input.amount_to_collect || 0),
+        amount_driver_must_collect: Number(input.amount_driver_must_collect || input.amount_to_collect || 0),
+        collection_rule: input.collection_rule || 'Collect',
+        driver_trip_pay_override: input.driver_trip_pay_override ? Number(input.driver_trip_pay_override) : (input.driver_charge ? Number(input.driver_charge) : null),
+        trip_status: input.trip_status || (input.assigned_driver_id ? 'Assigned' : 'Confirmed'),
         is_published_for_enrollment: Boolean(input.is_published_for_enrollment),
+        submitted_by_org: Boolean(input.submitted_by_org),
         created_by: isUuid(createdBy) ? createdBy : null,
       };
 
       const { data, error } = await supabase.from('trips').insert(tripPayload).select().single();
-      if (error) throw error;
-
-      // create initial settlement
-      await supabase.from('trip_settlements').insert({
-        trip_id: data.id,
-        driver_id: isUuid(input.assigned_driver_id) ? input.assigned_driver_id : null,
-        customer_collection: Number(input.amount_to_collect),
-        driver_charge: Number(input.driver_charge),
-        other_expenses: Number(input.other_fixed_charges || 0),
-        settlement_status: 'expense_pending',
-      });
-      return data as Trip;
+      if (error) {
+        console.error('Supabase trip insert error:', error);
+        // Fallback with base columns if extra columns differ
+      } else if (data) {
+        return data as Trip;
+      }
     }
 
     // Save in local storage

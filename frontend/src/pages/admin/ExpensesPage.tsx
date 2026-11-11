@@ -521,3 +521,4 @@ const ExpensesPage: React.FC = () => {
 };
 
 export default ExpensesPage;
+
