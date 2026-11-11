@@ -298,3 +298,4 @@ const OrganizationTrips: React.FC = () => {
 };
 
 export default OrganizationTrips;
+

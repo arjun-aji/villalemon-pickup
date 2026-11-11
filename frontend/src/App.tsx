@@ -18,11 +18,18 @@ import OrganizationLogin from './pages/auth/OrganizationLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import TripsPage from './pages/admin/TripsPage';
 import AddTripPage from './pages/admin/AddTripPage';
+import ClientsPage from './pages/admin/ClientsPage';
 import DriversPage from './pages/admin/DriversPage';
+import VehiclesPage from './pages/admin/VehiclesPage';
+import ExpensesPage from './pages/admin/ExpensesPage';
+import DriverLedgerPage from './pages/admin/DriverLedgerPage';
+import InvoicesPage from './pages/admin/InvoicesPage';
+import PaymentsPage from './pages/admin/PaymentsPage';
 import EnrollmentRequestsPage from './pages/admin/EnrollmentRequestsPage';
 import SettlementsPage from './pages/admin/SettlementsPage';
 import ProfitAnalyticsPage from './pages/admin/ProfitAnalyticsPage';
 import MonthlyReportsPage from './pages/admin/MonthlyReportsPage';
+import BackupPage from './pages/admin/BackupPage';
 import SettingsPage from './pages/admin/SettingsPage';
 
 // Driver Pages
@@ -67,11 +74,18 @@ function App() {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="trips" element={<TripsPage />} />
             <Route path="trips/create" element={<AddTripPage />} />
+            <Route path="clients" element={<ClientsPage />} />
             <Route path="drivers" element={<DriversPage />} />
+            <Route path="vehicles" element={<VehiclesPage />} />
+            <Route path="expenses" element={<ExpensesPage />} />
+            <Route path="driver-ledger" element={<DriverLedgerPage />} />
+            <Route path="invoices" element={<InvoicesPage />} />
+            <Route path="payments" element={<PaymentsPage />} />
             <Route path="enrollment-requests" element={<EnrollmentRequestsPage />} />
             <Route path="settlements" element={<SettlementsPage />} />
             <Route path="profit-analytics" element={<ProfitAnalyticsPage />} />
             <Route path="monthly-reports" element={<MonthlyReportsPage />} />
+            <Route path="backup" element={<BackupPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

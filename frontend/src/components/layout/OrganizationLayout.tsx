@@ -152,3 +152,4 @@ const OrganizationLayout: React.FC = () => {
 };
 
 export default OrganizationLayout;
+
