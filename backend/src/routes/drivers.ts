@@ -7,36 +7,38 @@ const router = Router();
 router.post('/create', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   const {
     full_name,
-    employee_id,
-    username,
     phone,
-    email,
-    vehicle_number,
-    address,
+    username,
     password,
+    driving_licence_no,
+    employment_type,
+    monthly_salary,
+    per_trip_payment,
   } = req.body;
 
-  if (!full_name || !employee_id || !username || !phone || !password) {
+  if (!full_name || !phone || !password) {
     return res.status(400).json({
-      error: 'Missing required fields: full_name, employee_id, username, phone, password',
+      error: 'Missing required fields: full_name, phone, password',
     });
   }
 
-  const driverEmail = email || `${username.toLowerCase()}@villalemon.pickup`;
+  const cleanUsername = (username || phone).toLowerCase();
+  const driverEmail = `${cleanUsername}@villalemon.pickup`;
 
   try {
-    // Check if username already exists
+    // Check if phone or driver already exists
     const { data: existing } = await supabaseAdmin
-      .from('driver_employees')
+      .from('drivers')
       .select('id')
-      .eq('username', username.toLowerCase())
-      .single();
+      .eq('phone', phone)
+      .maybeSingle();
 
     if (existing) {
-      return res.status(400).json({ error: 'Username already exists' });
+      return res.status(400).json({ error: 'Driver with this phone number already exists' });
     }
 
     // Create Supabase Auth user
+    let authUserId: string | null = null;
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: driverEmail,
       password,
@@ -44,40 +46,48 @@ router.post('/create', authenticate, requireAdmin, async (req: AuthRequest, res:
       user_metadata: {
         role: 'driver',
         full_name,
-        username: username.toLowerCase(),
+        username: cleanUsername,
       },
     });
 
     if (authError || !authData?.user) {
       return res.status(400).json({ error: authError?.message || 'Failed to create driver auth user' });
     }
+    authUserId = authData.user.id;
 
-    // Insert driver employee record
+    // Create profile
+    await supabaseAdmin.from('profiles').upsert({
+      id: authUserId,
+      email: driverEmail,
+      full_name,
+      phone,
+      role: 'driver',
+      is_active: true,
+    });
+
+    // Insert driver record
     const { data: driverData, error: driverError } = await supabaseAdmin
-      .from('driver_employees')
+      .from('drivers')
       .insert({
-        user_id: authData.user.id,
-        employee_id,
+        profile_id: authUserId,
         full_name,
-        username: username.toLowerCase(),
         phone,
-        email: driverEmail,
-        vehicle_number,
-        address,
-        employment_status: 'active',
-        is_first_login: true,
-        created_by: req.user!.id,
+        driving_licence_no: driving_licence_no || 'PENDING',
+        employment_type: employment_type || 'Per-trip payment',
+        monthly_salary: Number(monthly_salary) || 0.00,
+        per_trip_payment: Number(per_trip_payment) || 500.00,
+        status: 'Active',
       })
       .select()
       .single();
 
     if (driverError) {
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
       return res.status(400).json({ error: driverError.message });
     }
 
     res.status(201).json({
-      message: 'Driver employee account created successfully',
+      message: 'Driver account created successfully',
       driver: driverData,
       loginEmail: driverEmail,
     });
@@ -97,25 +107,20 @@ router.post('/:driverId/reset-password', authenticate, requireAdmin, async (req:
 
   try {
     const { data: driver } = await supabaseAdmin
-      .from('driver_employees')
-      .select('user_id')
+      .from('drivers')
+      .select('profile_id')
       .eq('id', driverId)
       .single();
 
-    if (!driver?.user_id) {
-      return res.status(404).json({ error: 'Driver user profile not found' });
+    if (!driver?.profile_id) {
+      return res.status(404).json({ error: 'Driver auth profile not found' });
     }
 
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(driver.user_id, {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(driver.profile_id, {
       password: new_password,
     });
 
     if (error) return res.status(400).json({ error: error.message });
-
-    await supabaseAdmin
-      .from('driver_employees')
-      .update({ is_first_login: true })
-      .eq('id', driverId);
 
     res.json({ message: 'Password reset successfully' });
   } catch (err: any) {
@@ -128,34 +133,32 @@ router.patch('/:driverId/status', authenticate, requireAdmin, async (req: AuthRe
   const { driverId } = req.params;
   const { status } = req.body;
 
-  if (!['active', 'inactive', 'suspended'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid employment status' });
-  }
+  const dbStatus = status === 'active' || status === 'Active' ? 'Active' : 'Inactive';
 
   try {
     const { data: driver } = await supabaseAdmin
-      .from('driver_employees')
-      .select('user_id')
+      .from('drivers')
+      .select('profile_id')
       .eq('id', driverId)
       .single();
 
-    if (driver?.user_id) {
+    if (driver?.profile_id) {
       await supabaseAdmin
         .from('profiles')
-        .update({ is_active: status === 'active' })
-        .eq('id', driver.user_id);
+        .update({ is_active: dbStatus === 'Active' })
+        .eq('id', driver.profile_id);
     }
 
     const { data, error } = await supabaseAdmin
-      .from('driver_employees')
-      .update({ employment_status: status })
+      .from('drivers')
+      .update({ status: dbStatus })
       .eq('id', driverId)
       .select()
       .single();
 
     if (error) return res.status(400).json({ error: error.message });
 
-    res.json({ message: `Driver status updated to ${status}`, driver: data });
+    res.json({ message: `Driver status updated to ${dbStatus}`, driver: data });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -165,7 +168,7 @@ router.patch('/:driverId/status', authenticate, requireAdmin, async (req: AuthRe
 router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
-      .from('driver_employees')
+      .from('drivers')
       .select('*')
       .order('created_at', { ascending: false });
 
@@ -177,4 +180,3 @@ router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
 });
 
 export default router;
-

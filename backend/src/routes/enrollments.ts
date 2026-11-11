@@ -11,7 +11,7 @@ router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
       .select(`
         *,
         trip:trips(id, trip_number, customer_name, pickup_date, pickup_location, destination),
-        driver:driver_employees(id, full_name, username, vehicle_number, employee_id)
+        driver:drivers(id, full_name, phone)
       `)
       .order('requested_at', { ascending: false });
 

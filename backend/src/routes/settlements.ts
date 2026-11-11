@@ -12,7 +12,7 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
       .select(`
         *,
         trip:trips(id, trip_number, customer_name, pickup_date, pickup_location, destination),
-        driver:driver_employees(id, full_name, username, employee_id)
+        driver:drivers(id, full_name, phone)
       `)
       .order('updated_at', { ascending: false });
 

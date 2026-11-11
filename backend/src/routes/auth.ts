@@ -24,10 +24,10 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
 
     if (req.user!.role === 'driver') {
       const { data: driverData } = await supabaseAdmin
-        .from('driver_employees')
+        .from('drivers')
         .select('*')
-        .eq('user_id', req.user!.id)
-        .single();
+        .or(`profile_id.eq.${req.user!.id},id.eq.${req.user!.id}`)
+        .maybeSingle();
 
       return res.json({ profile: data, driver: driverData });
     }

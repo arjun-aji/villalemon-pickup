@@ -90,4 +90,48 @@ export const driverReportService = {
 
     return urlData?.publicUrl || '';
   },
+
+  async getAllReports(): Promise<any[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('driver_reports')
+        .select(`
+          *,
+          trip:trips(
+            id, 
+            trip_number, 
+            trip_date, 
+            guest_names, 
+            pickup_location, 
+            dropoff_location, 
+            trip_selling_price, 
+            amount_driver_must_collect, 
+            collection_rule, 
+            driver_trip_pay_override, 
+            organization:organizations(name),
+            vehicle:vehicles(registration_number, vehicle_type)
+          ),
+          driver:drivers(id, full_name, phone, driving_licence_no)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    }
+    return [];
+  },
+
+  async verifyReport(id: string, status: 'Verified OK' | 'Difference Flagged', _notes?: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('driver_reports')
+        .update({
+          check_status: status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    }
+  },
 };

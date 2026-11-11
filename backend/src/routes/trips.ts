@@ -12,7 +12,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       .from('trips')
       .select(`
         *,
-        driver:driver_employees(id, full_name, username, vehicle_number),
+        driver:drivers(id, full_name, phone),
         settlement:trip_settlements(*),
         expenses:trip_expenses(petrol_expense, other_expense, actual_amount_returned)
       `)

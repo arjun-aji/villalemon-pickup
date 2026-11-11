@@ -23,7 +23,7 @@ router.get('/generate', authenticate, requireAdmin, async (req: AuthRequest, res
       .from('trips')
       .select(`
         *,
-        driver:driver_employees(full_name, username, employee_id),
+        driver:drivers(full_name, phone),
         settlement:trip_settlements(*),
         expenses:trip_expenses(petrol_expense, other_expense, actual_amount_returned)
       `)
