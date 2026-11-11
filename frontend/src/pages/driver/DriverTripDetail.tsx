@@ -81,6 +81,10 @@ const DriverTripDetail: React.FC = () => {
   }
 
   const placard = trip.placard_text || `VILLALEMON PICKUP - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`;
+  const normSt = (trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const isAssigned = ['assigned', 'confirmed', 'upcoming'].includes(normSt);
+  const isInProgress = normSt === 'in_progress' || normSt === 'on_trip';
+  const isCompleted = normSt === 'completed';
 
   return (
     <div className="max-w-md mx-auto space-y-4 pb-16">
@@ -200,7 +204,7 @@ const DriverTripDetail: React.FC = () => {
 
       {/* Action Buttons */}
       <div className="space-y-2 pt-2">
-        {trip.trip_status === 'assigned' && (
+        {isAssigned && (
           <button
             onClick={handleStartTrip}
             className="w-full btn-primary justify-center py-3 rounded-2xl text-sm font-bold shadow-md shadow-green-primary/20 bg-blue-600 hover:bg-blue-700"
@@ -210,17 +214,17 @@ const DriverTripDetail: React.FC = () => {
           </button>
         )}
 
-        {trip.trip_status === 'in_progress' && (
+        {isInProgress && (
           <button
             onClick={() => navigate(`/driver/trips/${trip.id}/expenses`)}
-            className="w-full btn-primary justify-center py-3 rounded-2xl text-sm font-bold shadow-md shadow-green-primary/20"
+            className="w-full btn-primary justify-center py-3 rounded-2xl text-sm font-bold shadow-md shadow-green-primary/20 bg-emerald-600 hover:bg-emerald-700"
           >
             <FileText className="h-4 w-4" />
             <span>COMPLETE TRIP & ENTER EXPENSES</span>
           </button>
         )}
 
-        {trip.trip_status === 'completed' && (
+        {isCompleted && (
           <button
             onClick={() => navigate(`/driver/trips/${trip.id}/expenses`)}
             className="w-full btn-secondary justify-center py-3 rounded-2xl text-sm font-bold"

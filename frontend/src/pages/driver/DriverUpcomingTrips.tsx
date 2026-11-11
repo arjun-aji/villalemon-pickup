@@ -97,12 +97,17 @@ const DriverUpcomingTrips: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const [startingId, setStartingId] = useState<string | null>(null);
+
   const handleStartTrip = async (tripId: string) => {
     try {
-      await tripService.updateStatus(tripId, 'in_progress');
-      loadMyTrips();
+      setStartingId(tripId);
+      await tripService.updateStatus(tripId, 'In Progress');
+      await loadMyTrips();
     } catch (e: any) {
       alert(e.message || 'Failed to start trip');
+    } finally {
+      setStartingId(null);
     }
   };
 
@@ -210,20 +215,21 @@ const DriverUpcomingTrips: React.FC = () => {
                   View Details
                 </button>
 
-                {trip.trip_status === 'in_progress' ? (
+                {((trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_') === 'in_progress') ? (
                   <button
                     onClick={() => navigate(`/driver/trips/${trip.id}/expenses`)}
-                    className="btn-primary text-xs py-2 justify-center rounded-xl shadow-sm"
+                    className="btn-primary text-xs py-2 justify-center rounded-xl shadow-sm bg-emerald-600 hover:bg-emerald-700"
                   >
                     <span>Complete & Expenses</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => handleStartTrip(trip.id)}
-                    className="btn-primary text-xs py-2 justify-center rounded-xl shadow-sm bg-blue-600 hover:bg-blue-700"
+                    disabled={startingId === trip.id}
+                    className="btn-primary text-xs py-2 justify-center rounded-xl shadow-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
                   >
                     <Navigation className="h-3.5 w-3.5" />
-                    <span>Start Trip</span>
+                    <span>{startingId === trip.id ? 'Starting...' : 'Start Trip'}</span>
                   </button>
                 )}
               </div>

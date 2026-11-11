@@ -356,30 +356,60 @@ export const tripService = {
     return newTrip;
   },
 
-  async updateStatus(id: string, status: TripStatus): Promise<Trip> {
+  async updateStatus(id: string, status: TripStatus | string): Promise<Trip> {
+    const norm = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+    let mappedStatus: string = 'Confirmed';
+
+    if (norm === 'completed') mappedStatus = 'Completed';
+    else if (norm === 'in_progress' || norm === 'on_trip') mappedStatus = 'In Progress';
+    else if (norm === 'assigned') mappedStatus = 'Assigned';
+    else if (norm === 'upcoming' || norm === 'confirmed') mappedStatus = 'Confirmed';
+    else if (norm === 'cancelled') mappedStatus = 'Cancelled';
+    else if (norm === 'pending_approval' || norm === 'pending') mappedStatus = 'Pending Approval';
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('trips')
+        .update({
+          trip_status: mappedStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status),
+          vehicle:vehicles(id, registration_number, vehicle_type, status),
+          organization:organizations(id, name, type, contact_person, phone)
+        `)
+        .single();
+
+      if (error) {
+        console.error('Supabase trip updateStatus error:', error);
+        throw new Error(`Failed to update trip status: ${error.message}`);
+      }
+
+      if (data) {
+        const trips: Trip[] = getStored('trips', initialTrips);
+        const updated = trips.map(t => (t.id === id ? (data as Trip) : t));
+        setStored('trips', updated);
+        return data as Trip;
+      }
+    }
+
     const trips: Trip[] = getStored('trips', initialTrips);
     const updated = trips.map(t => {
       if (t.id === id) {
         return {
           ...t,
-          trip_status: status,
-          started_at: status === 'in_progress' ? new Date().toISOString() : t.started_at,
-          completed_at: status === 'completed' ? new Date().toISOString() : t.completed_at,
+          trip_status: mappedStatus as any,
+          started_at: norm === 'in_progress' ? new Date().toISOString() : t.started_at,
+          completed_at: norm === 'completed' ? new Date().toISOString() : t.completed_at,
           updated_at: new Date().toISOString(),
         };
       }
       return t;
     });
     setStored('trips', updated);
-
-    if (isSupabaseConfigured) {
-      let mappedStatus: string = status;
-      if (status === 'completed' || status === 'Completed') mappedStatus = 'Completed';
-      else if (status === 'assigned' || status === 'Assigned' || status === 'in_progress') mappedStatus = 'Assigned';
-      else if (status === 'upcoming' || status === 'Confirmed') mappedStatus = 'Confirmed';
-      else if (status === 'cancelled' || status === 'Cancelled') mappedStatus = 'Cancelled';
-      await supabase.from('trips').update({ trip_status: mappedStatus }).eq('id', id);
-    }
 
     return updated.find(t => t.id === id)!;
   },
