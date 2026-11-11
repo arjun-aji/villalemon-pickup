@@ -1,6 +1,6 @@
 // Currency and date formatting utilities for VillaLemon Pickup
 
-export const formatINR = (amount: number): string => {
+export const formatINR = (amount?: number | null): string => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -9,7 +9,7 @@ export const formatINR = (amount: number): string => {
   }).format(amount || 0);
 };
 
-export const formatINRCompact = (amount: number): string => {
+export const formatINRCompact = (amount?: number | null): string => {
   if (!amount) return '₹0';
   if (amount >= 100000) {
     return `₹${(amount / 100000).toFixed(1)}L`;
@@ -20,7 +20,7 @@ export const formatINRCompact = (amount: number): string => {
   return `₹${amount}`;
 };
 
-export const formatDate = (dateStr: string): string => {
+export const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
@@ -31,7 +31,7 @@ export const formatDate = (dateStr: string): string => {
   });
 };
 
-export const formatTime = (timeStr: string): string => {
+export const formatTime = (timeStr?: string | null): string => {
   if (!timeStr) return '-';
   if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
   const parts = timeStr.split(':');
@@ -43,7 +43,7 @@ export const formatTime = (timeStr: string): string => {
   return `${hour12}:${m} ${ampm}`;
 };
 
-export const formatDateTime = (dateStr: string): string => {
+export const formatDateTime = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;

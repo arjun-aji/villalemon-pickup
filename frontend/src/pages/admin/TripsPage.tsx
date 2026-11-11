@@ -116,11 +116,11 @@ const TripsPage: React.FC = () => {
 
     if (search) {
       const q = search.toLowerCase();
-      const matchNumber = trip.trip_number.toLowerCase().includes(q);
-      const matchCustomer = trip.customer_name.toLowerCase().includes(q);
-      const matchDriver = trip.driver?.full_name?.toLowerCase().includes(q);
-      const matchLocation = trip.pickup_location.toLowerCase().includes(q);
-      const matchDest = trip.destination.toLowerCase().includes(q);
+      const matchNumber = (trip.trip_number || '').toLowerCase().includes(q);
+      const matchCustomer = (trip.customer_name || trip.guest_names || '').toLowerCase().includes(q);
+      const matchDriver = (trip.driver?.full_name || '').toLowerCase().includes(q);
+      const matchLocation = (trip.pickup_location || '').toLowerCase().includes(q);
+      const matchDest = (trip.destination || trip.dropoff_location || '').toLowerCase().includes(q);
       return matchNumber || matchCustomer || matchDriver || matchLocation || matchDest;
     }
 
@@ -260,9 +260,10 @@ const TripsPage: React.FC = () => {
               <tbody className="divide-y divide-[#EDF2F7]">
                 {filteredTrips.map(trip => {
                   const s = trip.settlement;
-                  const profit = s?.net_profit !== undefined
-                    ? s.net_profit
-                    : trip.amount_to_collect - trip.driver_charge - (trip.other_fixed_charges || 0);
+                  const collectAmt = Number(trip.amount_to_collect || trip.amount_driver_must_collect || trip.trip_selling_price || 0);
+                  const driverChg = Number(trip.driver_charge || trip.driver_trip_pay_override || 0);
+                  const otherChg = Number(trip.other_fixed_charges || 0);
+                  const profit = s?.net_profit !== undefined ? s.net_profit : collectAmt - driverChg - otherChg;
 
                   return (
                     <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
@@ -271,17 +272,17 @@ const TripsPage: React.FC = () => {
                       </td>
                       <td className="table-cell">
                         <div>
-                          <p className="font-semibold text-text-primary text-sm">{trip.customer_name}</p>
-                          <p className="text-xs text-text-secondary">{trip.customer_phone}</p>
+                          <p className="font-semibold text-text-primary text-sm">{trip.customer_name || trip.guest_names || 'Guest'}</p>
+                          <p className="text-xs text-text-secondary">{trip.customer_phone || trip.guest_contact_number || '-'}</p>
                         </div>
                       </td>
                       <td className="table-cell text-xs">
-                        <p className="font-semibold text-text-primary">{formatDate(trip.pickup_date)}</p>
-                        <p className="text-text-secondary">{formatTime(trip.pickup_time)}</p>
+                        <p className="font-semibold text-text-primary">{formatDate(trip.pickup_date || trip.trip_date || '')}</p>
+                        <p className="text-text-secondary">{formatTime(trip.pickup_time || '')}</p>
                       </td>
                       <td className="table-cell text-xs text-text-secondary">
                         <p className="font-medium text-text-primary truncate max-w-[200px]">
-                          {trip.pickup_location} → {trip.destination}
+                          {trip.pickup_location} → {trip.destination || trip.dropoff_location}
                         </p>
                         {trip.flight_number && (
                           <span className="text-[11px] text-blue-600 font-semibold">
@@ -300,7 +301,7 @@ const TripsPage: React.FC = () => {
                         )}
                       </td>
                       <td className="table-cell font-bold text-text-primary">
-                        {formatINR(trip.amount_to_collect)}
+                        {formatINR(collectAmt)}
                       </td>
                       <td className="table-cell font-extrabold text-green-primary">
                         {formatINR(profit)}
@@ -361,8 +362,8 @@ const TripsPage: React.FC = () => {
             <div className="p-3 bg-gray-50 rounded-xl text-xs space-y-1">
               <p><strong>Customer:</strong> {assignModalTrip.customer_name}</p>
               <p><strong>Route:</strong> {assignModalTrip.pickup_location} → {assignModalTrip.destination}</p>
-              <p><strong>Date & Time:</strong> {formatDate(assignModalTrip.pickup_date)} at {formatTime(assignModalTrip.pickup_time)}</p>
-              <p><strong>Driver Charge:</strong> {formatINR(assignModalTrip.driver_charge)}</p>
+              <p><strong>Date & Time:</strong> {formatDate(assignModalTrip.pickup_date || assignModalTrip.trip_date || '')} at {formatTime(assignModalTrip.pickup_time || '')}</p>
+              <p><strong>Driver Charge:</strong> {formatINR(assignModalTrip.driver_charge || assignModalTrip.driver_trip_pay_override || 0)}</p>
             </div>
 
             <div>
@@ -413,13 +414,13 @@ const TripsPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <StatusBadge status={viewTrip.trip_status} />
                 <span className="text-xs text-text-secondary">
-                  Created {formatDate(viewTrip.created_at)}
+                  Created {formatDate(viewTrip.created_at || '')}
                 </span>
               </div>
               <div className="text-right">
                 <span className="text-xs text-text-secondary block">Amount to Collect</span>
                 <span className="text-lg font-black text-navy-primary font-mono">
-                  {formatINR(viewTrip.amount_to_collect)}
+                  {formatINR(viewTrip.amount_to_collect || viewTrip.amount_driver_must_collect || 0)}
                 </span>
               </div>
             </div>
@@ -428,14 +429,14 @@ const TripsPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-gray-50 rounded-xl space-y-1">
                 <p className="text-text-secondary font-semibold uppercase text-[10px]">Customer Information</p>
-                <p className="font-bold text-text-primary text-sm">{viewTrip.customer_name}</p>
+                <p className="font-bold text-text-primary text-sm">{viewTrip.customer_name || viewTrip.guest_names || 'Guest'}</p>
                 <p className="text-text-primary flex items-center gap-1 font-medium">
-                  <Phone className="h-3.5 w-3.5 text-green-primary" /> {viewTrip.customer_phone}
+                  <Phone className="h-3.5 w-3.5 text-green-primary" /> {viewTrip.customer_phone || viewTrip.guest_contact_number || '-'}
                 </p>
-                <p className="text-text-secondary">Passengers: {viewTrip.num_passengers || 1}</p>
-                {viewTrip.flight_number && (
+                <p className="text-text-secondary">Passengers: {viewTrip.num_passengers || viewTrip.total_people || 1}</p>
+                {(viewTrip.flight_number || viewTrip.flight_number_and_time) && (
                   <p className="text-blue-600 font-bold flex items-center gap-1">
-                    <Plane className="h-3.5 w-3.5" /> Flight: {viewTrip.flight_number}
+                    <Plane className="h-3.5 w-3.5" /> Flight: {viewTrip.flight_number || viewTrip.flight_number_and_time}
                   </p>
                 )}
               </div>
@@ -443,10 +444,10 @@ const TripsPage: React.FC = () => {
               <div className="p-3 bg-gray-50 rounded-xl space-y-1">
                 <p className="text-text-secondary font-semibold uppercase text-[10px]">Route & Schedule</p>
                 <p className="font-semibold text-text-primary">
-                  {viewTrip.pickup_location} → {viewTrip.destination}
+                  {viewTrip.pickup_location} → {viewTrip.destination || viewTrip.dropoff_location}
                 </p>
                 <p className="text-text-secondary flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5 text-green-primary" /> {formatDate(viewTrip.pickup_date)} at {formatTime(viewTrip.pickup_time)}
+                  <Calendar className="h-3.5 w-3.5 text-green-primary" /> {formatDate(viewTrip.pickup_date || viewTrip.trip_date || '')} at {formatTime(viewTrip.pickup_time || '')}
                 </p>
                 <p className="text-text-secondary mt-1">
                   Driver: <strong className="text-text-primary">{viewTrip.driver?.full_name || 'Unassigned'}</strong>
@@ -459,7 +460,7 @@ const TripsPage: React.FC = () => {
               <div className="flex items-center justify-between mb-1.5 text-xs">
                 <span className="font-bold text-text-secondary uppercase">Airport Name Board / Placard</span>
                 <button
-                  onClick={() => handleCopyPlacard(viewTrip.placard_text || `VARKALA HOLIDAYS - ${viewTrip.customer_name.toUpperCase()}`)}
+                  onClick={() => handleCopyPlacard(viewTrip.placard_text || `VARKALA HOLIDAYS - ${(viewTrip.customer_name || viewTrip.guest_names || 'GUEST').toUpperCase()}`)}
                   className="text-xs font-semibold text-green-primary hover:underline flex items-center gap-1"
                 >
                   {copiedPlacard ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -467,7 +468,7 @@ const TripsPage: React.FC = () => {
                 </button>
               </div>
               <div className="p-4 bg-navy-sidebar text-white rounded-xl text-center border-2 border-dashed border-green-primary/50 font-mono font-bold tracking-widest text-sm">
-                {viewTrip.placard_text || `VARKALA HOLIDAYS - ${viewTrip.customer_name.toUpperCase()}`}
+                {viewTrip.placard_text || `VARKALA HOLIDAYS - ${(viewTrip.customer_name || viewTrip.guest_names || 'GUEST').toUpperCase()}`}
               </div>
             </div>
 
@@ -476,11 +477,11 @@ const TripsPage: React.FC = () => {
               <p className="font-bold text-navy-primary uppercase text-[10px] tracking-wide">Financial Summary</p>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Customer Collection:</span>
-                <span className="font-bold text-text-primary">{formatINR(viewTrip.amount_to_collect)}</span>
+                <span className="font-bold text-text-primary">{formatINR(viewTrip.amount_to_collect || viewTrip.amount_driver_must_collect || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Driver Charge:</span>
-                <span className="font-medium text-text-primary">{formatINR(viewTrip.driver_charge)}</span>
+                <span className="font-medium text-text-primary">{formatINR(viewTrip.driver_charge || viewTrip.driver_trip_pay_override || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Additional Charges:</span>

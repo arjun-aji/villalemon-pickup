@@ -82,11 +82,11 @@ const DriverCompletedTrips: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 p-2.5 bg-gray-50 rounded-xl text-xs">
                   <div>
                     <span className="text-text-secondary block">Date:</span>
-                    <span className="font-semibold text-text-primary">{formatDate(trip.pickup_date)}</span>
+                    <span className="font-semibold text-text-primary">{formatDate(trip.pickup_date || trip.trip_date || '')}</span>
                   </div>
                   <div>
                     <span className="text-text-secondary block">Earnings:</span>
-                    <span className="font-bold text-green-primary">{formatINR(trip.driver_charge)}</span>
+                    <span className="font-bold text-green-primary">{formatINR(trip.driver_charge || trip.driver_trip_pay_override || 0)}</span>
                   </div>
                 </div>
 

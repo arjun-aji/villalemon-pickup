@@ -47,12 +47,12 @@ export const tripService = {
     }
     if (filters?.month && filters?.year) {
       trips = trips.filter(t => {
-        const d = new Date(t.pickup_date);
+        const d = new Date(t.pickup_date || t.trip_date || 0);
         return d.getMonth() + 1 === filters.month && d.getFullYear() === filters.year;
       });
     }
 
-    return trips.sort((a, b) => new Date(b.pickup_date).getTime() - new Date(a.pickup_date).getTime());
+    return trips.sort((a, b) => new Date(b.pickup_date || b.trip_date || 0).getTime() - new Date(a.pickup_date || a.trip_date || 0).getTime());
   },
 
   async getById(id: string): Promise<Trip | null> {
@@ -136,7 +136,8 @@ export const tripService = {
     const trips: Trip[] = getStored('trips', initialTrips);
     const tripCount = trips.length + 1;
     const tripNumber = `VH-${String(tripCount).padStart(3, '0')}`;
-    const placardText = input.placard_text || `VARKALA HOLIDAYS - ${input.customer_name.toUpperCase()}`;
+    const customerName = input.customer_name || input.guest_names || 'Guest';
+    const placardText = input.placard_text || `VARKALA HOLIDAYS - ${customerName.toUpperCase()}`;
 
     const tripStatus: TripStatus = input.assigned_driver_id
       ? 'assigned'
@@ -212,19 +213,25 @@ export const tripService = {
 
     // Create settlement record
     const settlements = getStored('settlements', initialSettlements);
+    const amountToCollect = Number(newTrip.amount_to_collect || newTrip.amount_driver_must_collect || 0);
+    const driverCharge = Number(newTrip.driver_charge || newTrip.driver_trip_pay_override || 0);
+    const otherCharges = Number(newTrip.other_fixed_charges || 0);
+    const totalExp = driverCharge + otherCharges;
+    const diff = amountToCollect - totalExp;
+
     const newSettlement = {
       id: `s-${Date.now()}`,
       trip_id: newTrip.id,
       driver_id: input.assigned_driver_id,
-      customer_collection: newTrip.amount_to_collect,
+      customer_collection: amountToCollect,
       petrol_expense: 0,
-      driver_charge: newTrip.driver_charge,
-      other_expenses: newTrip.other_fixed_charges,
-      total_expenses: newTrip.driver_charge + newTrip.other_fixed_charges,
-      net_profit: newTrip.amount_to_collect - newTrip.driver_charge - newTrip.other_fixed_charges,
-      expected_return: newTrip.amount_to_collect - newTrip.driver_charge - newTrip.other_fixed_charges,
+      driver_charge: driverCharge,
+      other_expenses: otherCharges,
+      total_expenses: totalExp,
+      net_profit: diff,
+      expected_return: diff,
       actual_return: 0,
-      settlement_difference: newTrip.amount_to_collect - newTrip.driver_charge - newTrip.other_fixed_charges,
+      settlement_difference: diff,
       settlement_status: 'expense_pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -352,8 +359,8 @@ export const tripService = {
         return {
           total_trips: tripList.length,
           upcoming_trips: tripList.filter(t => ['upcoming', 'assigned', 'available_for_enrollment'].includes(t.trip_status)).length,
-          completed_trips: tripList.filter(t => t.trip_status === 'completed').length,
-          in_progress_trips: tripList.filter(t => t.trip_status === 'in_progress').length,
+          completed_trips: tripList.filter(t => t.trip_status === 'completed' || t.trip_status === 'Completed').length,
+          in_progress_trips: tripList.filter(t => t.trip_status === 'in_progress' || t.trip_status === 'In Progress').length,
           total_collections: totalCollections,
           total_petrol: totalPetrol,
           total_driver_charges: totalDriverCharges,
@@ -361,8 +368,9 @@ export const tripService = {
           total_expenses: totalExpenses,
           net_profit: netProfit,
           pending_settlements: pendingSettlements.length,
+          pending_settlements_count: pendingSettlements.length,
           pending_settlement_amount: pendingAmount,
-        };
+        } as DashboardStats;
       } catch (e) {
         console.error('Error fetching Supabase stats:', e);
       }
@@ -386,8 +394,8 @@ export const tripService = {
     return {
       total_trips: trips.length,
       upcoming_trips: trips.filter(t => ['upcoming', 'assigned', 'available_for_enrollment'].includes(t.trip_status)).length,
-      completed_trips: trips.filter(t => t.trip_status === 'completed').length,
-      in_progress_trips: trips.filter(t => t.trip_status === 'in_progress').length,
+      completed_trips: trips.filter(t => t.trip_status === 'completed' || t.trip_status === 'Completed').length,
+      in_progress_trips: trips.filter(t => t.trip_status === 'in_progress' || t.trip_status === 'In Progress').length,
       total_collections: totalCollections,
       total_petrol: totalPetrol,
       total_driver_charges: totalDriverCharges,
@@ -395,8 +403,9 @@ export const tripService = {
       total_expenses: totalExpenses,
       net_profit: netProfit,
       pending_settlements: pendingSettlements.length,
+      pending_settlements_count: pendingSettlements.length,
       pending_settlement_amount: pendingAmount,
-    };
+    } as DashboardStats;
   },
 };
 

@@ -35,7 +35,7 @@ export const driverService = {
     const drivers = getStored('drivers', initialDrivers);
     
     // Check if username already exists
-    if (drivers.some((d: DriverEmployee) => d.username.toLowerCase() === input.username.toLowerCase())) {
+    if (drivers.some((d: DriverEmployee) => d.username && d.username.toLowerCase() === input.username.toLowerCase())) {
       throw new Error(`Username "${input.username}" is already taken.`);
     }
 
@@ -49,6 +49,11 @@ export const driverService = {
       email: input.email || `${input.username.toLowerCase()}@villalemon.pickup`,
       vehicle_number: input.vehicle_number || '',
       address: input.address || '',
+      driving_licence_no: '',
+      employment_type: 'Salaried (monthly)',
+      monthly_salary: 0,
+      per_trip_payment: 0,
+      status: 'Active',
       employment_status: 'active',
       is_first_login: true,
       created_at: new Date().toISOString(),

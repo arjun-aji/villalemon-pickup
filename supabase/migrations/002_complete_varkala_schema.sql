@@ -922,3 +922,4 @@ CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_ledger_driver ON driver_ledger(driver_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_org ON invoices(organization_id);
 CREATE INDEX IF NOT EXISTS idx_payments_org ON payments(organization_id);
+

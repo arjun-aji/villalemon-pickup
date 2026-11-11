@@ -57,9 +57,9 @@ const ProfitAnalyticsPage: React.FC = () => {
         const key = t.assigned_driver_id;
         const current = driverMap.get(key) || { name: t.driver.full_name, profit: 0, trips: 0 };
         const s = t.settlement;
-        const collect = s?.customer_collection || t.amount_to_collect;
+        const collect = Number(s?.customer_collection || t.amount_to_collect || t.trip_selling_price || 0);
         const petrol = s?.petrol_expense || 0;
-        const dCharge = s?.driver_charge || t.driver_charge;
+        const dCharge = Number(s?.driver_charge || t.driver_charge || t.driver_trip_pay_override || 0);
         const other = s?.other_expenses || 0;
         const profit = collect - petrol - dCharge - other;
 

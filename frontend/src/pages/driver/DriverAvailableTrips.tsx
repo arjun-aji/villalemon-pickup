@@ -106,18 +106,18 @@ const DriverAvailableTrips: React.FC = () => {
                   <div className="text-right">
                     <span className="text-xs text-text-secondary block">Driver Earnings</span>
                     <span className="text-sm font-black text-green-primary">
-                      {formatINR(trip.driver_charge)}
+                      {formatINR(trip.driver_charge || trip.driver_trip_pay_override || 0)}
                     </span>
                   </div>
                 </div>
 
                 {/* Customer & Route */}
                 <div>
-                  <p className="font-bold text-text-primary text-base">{trip.customer_name}</p>
+                  <p className="font-bold text-text-primary text-base">{trip.customer_name || trip.guest_names || 'Guest'}</p>
                   <div className="mt-1 flex items-start gap-1.5 text-xs text-text-secondary">
                     <MapPin className="h-4 w-4 text-green-primary shrink-0 mt-0.5" />
                     <span>
-                      <strong className="text-text-primary">{trip.pickup_location}</strong> → {trip.destination}
+                      <strong className="text-text-primary">{trip.pickup_location}</strong> → {trip.destination || trip.dropoff_location}
                     </span>
                   </div>
                 </div>
@@ -126,18 +126,18 @@ const DriverAvailableTrips: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 p-2.5 bg-gray-50 rounded-xl text-xs">
                   <div>
                     <span className="text-text-secondary block">Date:</span>
-                    <span className="font-semibold text-text-primary">{formatDate(trip.pickup_date)}</span>
+                    <span className="font-semibold text-text-primary">{formatDate(trip.pickup_date || trip.trip_date || '')}</span>
                   </div>
                   <div>
                     <span className="text-text-secondary block">Time:</span>
-                    <span className="font-semibold text-text-primary">{formatTime(trip.pickup_time)}</span>
+                    <span className="font-semibold text-text-primary">{formatTime(trip.pickup_time || '')}</span>
                   </div>
                 </div>
 
                 {/* Collect & Notes */}
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span className="text-text-secondary">
-                    Collect from guest: <strong className="text-navy-primary font-bold">{formatINR(trip.amount_to_collect)}</strong>
+                    Collect from guest: <strong className="text-navy-primary font-bold">{formatINR(trip.amount_to_collect || trip.amount_driver_must_collect || 0)}</strong>
                   </span>
                 </div>
 

@@ -47,7 +47,8 @@ const DriverTripDetail: React.FC = () => {
 
   const handleCopyPlacard = () => {
     if (!trip) return;
-    const text = trip.placard_text || `VILLALEMON PICKUP - ${trip.customer_name.toUpperCase()}`;
+    const cust = trip.customer_name || trip.guest_names || 'Guest';
+    const text = trip.placard_text || `VILLALEMON PICKUP - ${cust.toUpperCase()}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -79,7 +80,7 @@ const DriverTripDetail: React.FC = () => {
     );
   }
 
-  const placard = trip.placard_text || `VILLALEMON PICKUP - ${trip.customer_name.toUpperCase()}`;
+  const placard = trip.placard_text || `VILLALEMON PICKUP - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`;
 
   return (
     <div className="max-w-md mx-auto space-y-4 pb-16">
@@ -104,33 +105,33 @@ const DriverTripDetail: React.FC = () => {
         <div className="space-y-1.5 pb-4 border-b border-border">
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-secondary">Customer</span>
-            <span className="font-bold text-text-primary text-base">{trip.customer_name}</span>
+            <span className="font-bold text-text-primary text-base">{trip.customer_name || trip.guest_names || 'Guest'}</span>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-secondary">Phone</span>
             <a
-              href={`tel:${trip.customer_phone}`}
+              href={`tel:${trip.customer_phone || trip.guest_contact_number || ''}`}
               className="text-xs font-semibold text-green-primary flex items-center gap-1 hover:underline"
             >
               <Phone className="h-3.5 w-3.5" />
-              <span>{trip.customer_phone}</span>
+              <span>{trip.customer_phone || trip.guest_contact_number || '-'}</span>
             </a>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-secondary">Date & Time</span>
             <span className="text-xs font-semibold text-text-primary">
-              {formatDate(trip.pickup_date)}, {formatTime(trip.pickup_time)}
+              {formatDate(trip.pickup_date || trip.trip_date || '')}, {formatTime(trip.pickup_time || '')}
             </span>
           </div>
 
-          {trip.flight_number && (
+          {(trip.flight_number || trip.flight_number_and_time) && (
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-secondary">Flight / Train</span>
               <span className="text-xs font-bold text-blue-600 flex items-center gap-1">
                 <Plane className="h-3 w-3" />
-                {trip.flight_number}
+                {trip.flight_number || trip.flight_number_and_time}
               </span>
             </div>
           )}
@@ -144,7 +145,7 @@ const DriverTripDetail: React.FC = () => {
           </div>
           <div className="flex items-start justify-between">
             <span className="text-text-secondary">Destination:</span>
-            <span className="font-bold text-text-primary text-right">{trip.destination}</span>
+            <span className="font-bold text-text-primary text-right">{trip.destination || trip.dropoff_location}</span>
           </div>
         </div>
 
@@ -157,13 +158,13 @@ const DriverTripDetail: React.FC = () => {
             <span className="text-xs text-text-secondary">From customer upon arrival</span>
           </div>
           <span className="text-xl font-black text-navy-primary font-mono">
-            {formatINR(trip.amount_to_collect)}
+            {formatINR(trip.amount_to_collect || trip.amount_driver_must_collect || 0)}
           </span>
         </div>
 
         <div className="flex items-center justify-between px-1 text-xs">
           <span className="text-text-secondary">Your Driver Charge:</span>
-          <span className="font-bold text-green-primary text-sm">{formatINR(trip.driver_charge)}</span>
+          <span className="font-bold text-green-primary text-sm">{formatINR(trip.driver_charge || trip.driver_trip_pay_override || 0)}</span>
         </div>
 
         {/* Placard / Name Board Box (Matches mockup) */}

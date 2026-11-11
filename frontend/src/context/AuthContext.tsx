@@ -1,17 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Profile, UserRole, DriverEmployee } from '../types';
+import { Profile, UserRole, Driver, Organization } from '../types';
 import { getStored, setStored } from '../lib/mockData';
 
 interface AuthContextType {
   user: { id: string; email?: string } | null;
   profile: Profile | null;
-  driver: DriverEmployee | null;
+  driver: Driver | null;
+  organization: Organization | null;
   role: UserRole | null;
   loading: boolean;
   signInAdmin: (emailOrUsername: string, password: string) => Promise<{ error: string | null }>;
   signUpAdmin: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signInDriver: (username: string, password: string) => Promise<{ error: string | null }>;
+  signInOrganization: (emailOrUsername: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   updateDriverPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -25,8 +27,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(() => {
     return getStored('current_profile', null);
   });
-  const [driver, setDriver] = useState<DriverEmployee | null>(() => {
+  const [driver, setDriver] = useState<Driver | null>(() => {
     return getStored('current_driver', null);
+  });
+  const [organization, setOrganization] = useState<Organization | null>(() => {
+    return getStored('current_organization', null);
   });
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStored('current_user', user);
     setStored('current_profile', profile);
     setStored('current_driver', driver);
-  }, [user, profile, driver]);
+    setStored('current_organization', organization);
+  }, [user, profile, driver, organization]);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,13 +66,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (data && !error && isMounted) {
               setProfile(data as Profile);
+
               if (data.role === 'driver') {
+                // Try 'drivers' first, fallback to 'driver_employees'
                 const { data: dData } = await supabase
-                  .from('driver_employees')
+                  .from('drivers')
                   .select('*')
-                  .eq('user_id', session.user.id)
-                  .single();
-                if (dData && isMounted) setDriver(dData as DriverEmployee);
+                  .or(`profile_id.eq.${session.user.id},id.eq.${session.user.id}`)
+                  .maybeSingle();
+
+                if (dData && isMounted) {
+                  setDriver(dData as Driver);
+                } else {
+                  const { data: oldDData } = await supabase
+                    .from('driver_employees')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .maybeSingle();
+                  if (oldDData && isMounted) setDriver(oldDData as Driver);
+                }
+              } else if (data.role === 'organization') {
+                const { data: orgUserData } = await supabase
+                  .from('organization_users')
+                  .select('*, organization:organizations(*)')
+                  .or(`profile_id.eq.${session.user.id},user_id.eq.${session.user.id}`)
+                  .maybeSingle();
+
+                if (orgUserData?.organization && isMounted) {
+                  setOrganization(orgUserData.organization as Organization);
+                }
               }
             } else if (isMounted) {
               setProfile({
@@ -109,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         setProfile(null);
         setDriver(null);
+        setOrganization(null);
       }
     });
 
@@ -118,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Admin Registration (for setting up initial strong admin account on fresh Supabase)
+  // Admin Registration
   const signUpAdmin = async (email: string, password: string, fullName: string): Promise<{ error: string | null }> => {
     try {
       const cleanEmail = email.trim();
@@ -136,7 +165,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) return { error: error.message };
       if (!data.user) return { error: 'Failed to create admin user' };
 
-      // Attempt to upsert into profiles if table exists
       try {
         await supabase.from('profiles').upsert({
           id: data.user.id,
@@ -146,7 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           is_active: true,
         });
       } catch {
-        // Table might not be ready yet
+        // Table might not be ready
       }
 
       const adminProfile: Profile = {
@@ -162,13 +190,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser({ id: data.user.id, email: cleanEmail });
       setProfile(adminProfile);
       setDriver(null);
+      setOrganization(null);
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Registration failed' };
     }
   };
 
-  // Admin Login (supports email or username)
+  // Admin Login
   const signInAdmin = async (emailOrUsername: string, password: string): Promise<{ error: string | null }> => {
     if (!emailOrUsername || !password) {
       return { error: 'Please enter both username/email and password' };
@@ -200,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             adminProfile = pData as Profile;
           }
         } catch {
-          // Fallback to user metadata
+          // Fallback
         }
 
         if (!adminProfile) {
@@ -230,6 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser({ id: data.user.id, email: data.user.email });
         setProfile(adminProfile);
         setDriver(null);
+        setOrganization(null);
         return { error: null };
       }
 
@@ -239,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Driver Login (queries driver_employees table in Supabase)
+  // Driver Login
   const signInDriver = async (username: string, password: string): Promise<{ error: string | null }> => {
     if (!username || !password) {
       return { error: 'Please enter driver username and password' };
@@ -248,22 +278,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanUsername = username.trim().toLowerCase();
 
     try {
-      // Look up driver employee record from Supabase
-      const { data: driverData, error: driverLookupError } = await supabase
-        .from('driver_employees')
+      // First check 'drivers' table
+      let driverData: any = null;
+      const { data: dData } = await supabase
+        .from('drivers')
         .select('*')
-        .eq('username', cleanUsername)
-        .single();
+        .or(`phone.eq.${cleanUsername},full_name.ilike.%${cleanUsername}%`)
+        .maybeSingle();
 
-      if (driverLookupError || !driverData) {
-        return { error: `Driver with username "${cleanUsername}" was not found. Please contact admin.` };
+      if (dData) {
+        driverData = dData;
+      } else {
+        const { data: oldData } = await supabase
+          .from('driver_employees')
+          .select('*')
+          .eq('username', cleanUsername)
+          .maybeSingle();
+        driverData = oldData;
       }
 
-      if (driverData.employment_status !== 'active') {
-        return { error: 'This driver account is inactive or suspended. Please contact admin.' };
-      }
-
-      const driverEmail = driverData.email || `${cleanUsername}@villalemon.pickup`;
+      const driverEmail = driverData?.email || `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`;
 
       let authUser = null;
       try {
@@ -279,24 +313,120 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const driverProfile: Profile = {
-        id: authUser?.id || driverData.user_id || driverData.id,
+        id: authUser?.id || driverData?.profile_id || driverData?.id || 'driver-temp-id',
         role: 'driver',
-        full_name: driverData.full_name,
+        full_name: driverData?.full_name || username,
         email: driverEmail,
-        phone: driverData.phone,
+        phone: driverData?.phone,
         is_active: true,
-        created_at: driverData.created_at,
-        updated_at: driverData.updated_at,
+        created_at: driverData?.created_at || new Date().toISOString(),
+        updated_at: driverData?.updated_at || new Date().toISOString(),
+      };
+
+      const finalDriver: Driver = driverData || {
+        id: driverProfile.id,
+        full_name: driverProfile.full_name,
+        phone: driverProfile.phone || '',
+        driving_licence_no: '',
+        employment_type: 'Salaried (monthly)',
+        monthly_salary: 0,
+        per_trip_payment: 0,
+        status: 'Active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       setUser({ id: driverProfile.id, email: driverEmail });
       setProfile(driverProfile);
-      setDriver(driverData as DriverEmployee);
-      localStorage.setItem('villalemon_current_profile', JSON.stringify(driverProfile));
-      localStorage.setItem('villalemon_current_driver', JSON.stringify(driverData));
+      setDriver(finalDriver);
+      setOrganization(null);
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Driver login failed' };
+    }
+  };
+
+  // Organization Partner Login
+  const signInOrganization = async (emailOrUsername: string, password: string): Promise<{ error: string | null }> => {
+    if (!emailOrUsername || !password) {
+      return { error: 'Please enter organization email and password' };
+    }
+
+    const cleanInput = emailOrUsername.trim();
+    const loginEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput.replace(/\s+/g, '').toLowerCase()}@partner.villalemon.in`;
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: password,
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      if (data.user) {
+        // Fetch profile
+        let orgProfile: Profile | null = null;
+        try {
+          const { data: pData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (pData) orgProfile = pData as Profile;
+        } catch {
+          // Fallback
+        }
+
+        if (!orgProfile) {
+          orgProfile = {
+            id: data.user.id,
+            role: 'organization',
+            full_name: data.user.user_metadata?.full_name || 'Organization Partner',
+            email: data.user.email,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+        }
+
+        // Fetch associated organization record
+        let orgData: Organization | null = null;
+        try {
+          const { data: orgUser } = await supabase
+            .from('organization_users')
+            .select('*, organization:organizations(*)')
+            .or(`profile_id.eq.${data.user.id},user_id.eq.${data.user.id}`)
+            .maybeSingle();
+
+          if (orgUser?.organization) {
+            orgData = orgUser.organization as Organization;
+          } else {
+            // Check direct organizations table
+            const { data: directOrg } = await supabase
+              .from('organizations')
+              .select('*')
+              .or(`email.eq.${loginEmail},name.ilike.%${cleanInput}%`)
+              .maybeSingle();
+
+            if (directOrg) orgData = directOrg as Organization;
+          }
+        } catch (e) {
+          console.warn('Organization lookup error:', e);
+        }
+
+        setUser({ id: data.user.id, email: data.user.email });
+        setProfile(orgProfile);
+        setOrganization(orgData);
+        setDriver(null);
+        return { error: null };
+      }
+
+      return { error: 'Organization partner authentication failed' };
+    } catch (err: any) {
+      return { error: err.message || 'Organization login failed' };
     }
   };
 
@@ -309,9 +439,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setProfile(null);
     setDriver(null);
+    setOrganization(null);
     localStorage.removeItem('villalemon_current_user');
     localStorage.removeItem('villalemon_current_profile');
     localStorage.removeItem('villalemon_current_driver');
+    localStorage.removeItem('villalemon_current_organization');
   };
 
   const updateDriverPassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
@@ -322,10 +454,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) return { success: false, error: error.message };
 
       if (driver) {
-        await supabase
-          .from('driver_employees')
-          .update({ is_first_login: false })
-          .eq('id', driver.id);
+        try {
+          await supabase
+            .from('driver_employees')
+            .update({ is_first_login: false })
+            .eq('id', driver.id);
+        } catch {
+          // Ignore
+        }
         setDriver({ ...driver, is_first_login: false });
       }
       return { success: true };
@@ -340,11 +476,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         driver,
+        organization,
         role: profile?.role ?? null,
         loading,
         signInAdmin,
         signUpAdmin,
         signInDriver,
+        signInOrganization,
         signOut,
         updateDriverPassword,
       }}

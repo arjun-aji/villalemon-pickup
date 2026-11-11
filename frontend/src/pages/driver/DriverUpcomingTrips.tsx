@@ -52,7 +52,8 @@ const DriverUpcomingTrips: React.FC = () => {
   };
 
   const handleCopyPlacard = (trip: Trip) => {
-    const text = trip.placard_text || `VARKALA HOLIDAYS - ${trip.customer_name.toUpperCase()}`;
+    const cust = trip.customer_name || trip.guest_names || 'Guest';
+    const text = trip.placard_text || `VARKALA HOLIDAYS - ${cust.toUpperCase()}`;
     navigator.clipboard.writeText(text);
     setCopiedId(trip.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -148,7 +149,7 @@ const DriverUpcomingTrips: React.FC = () => {
                     Name Board / Placard
                   </span>
                   <p className="text-xs font-mono font-bold truncate">
-                    {trip.placard_text || `VARKALA HOLIDAYS - ${trip.customer_name.toUpperCase()}`}
+                    {trip.placard_text || `VARKALA HOLIDAYS - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`}
                   </p>
                 </div>
                 <button

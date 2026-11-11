@@ -118,9 +118,9 @@ const DriversPage: React.FC = () => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      d.full_name.toLowerCase().includes(q) ||
-      d.username.toLowerCase().includes(q) ||
-      d.phone.includes(q) ||
+      (d.full_name || '').toLowerCase().includes(q) ||
+      (d.username || '').toLowerCase().includes(q) ||
+      (d.phone || '').includes(q) ||
       (d.vehicle_number && d.vehicle_number.toLowerCase().includes(q))
     );
   });
@@ -211,12 +211,12 @@ const DriversPage: React.FC = () => {
                         </div>
                         <div>
                           <p className="font-bold text-text-primary text-sm">{d.full_name}</p>
-                          <p className="text-[11px] text-text-secondary">{d.employee_id}</p>
+                          <p className="text-[11px] text-text-secondary">{d.employee_id || d.id.slice(0, 8)}</p>
                         </div>
                       </div>
                     </td>
                     <td className="table-cell font-mono text-xs text-text-secondary">
-                      {d.username}
+                      {d.username || '-'}
                     </td>
                     <td className="table-cell text-xs text-text-primary">
                       {d.phone}
@@ -228,7 +228,7 @@ const DriversPage: React.FC = () => {
                       {d.total_trips || 0}
                     </td>
                     <td className="table-cell">
-                      <StatusBadge status={d.employment_status} type="driver" />
+                      <StatusBadge status={d.employment_status || d.status || 'Active'} type="driver" />
                     </td>
                     <td className="table-cell text-right">
                       <div className="flex items-center justify-end gap-1.5">

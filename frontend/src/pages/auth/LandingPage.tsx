@@ -40,14 +40,41 @@ const DriverCarIcon: React.FC<{ className?: string }> = ({ className = 'w-9 h-9'
   </svg>
 );
 
+const OrgBuildingIcon: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => (
+  <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Main tower */}
+    <path
+      d="M10 40V14C10 12.9 10.9 12 12 12H26C27.1 12 28 12.9 28 14V40H10Z"
+      fill="#1E3A8A"
+    />
+    {/* Side wing */}
+    <path
+      d="M28 22H36C37.1 22 38 22.9 38 24V40H28V22Z"
+      fill="#3B82F6"
+    />
+    {/* Windows on main tower */}
+    <rect x="14" y="17" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="20.5" y="17" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="14" y="24" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="20.5" y="24" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="14" y="31" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="20.5" y="31" width="3.5" height="3.5" rx="0.75" fill="white" />
+    {/* Windows on side building */}
+    <rect x="31" y="26" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <rect x="31" y="32" width="3.5" height="3.5" rx="0.75" fill="white" />
+    <line x1="8" y1="40" x2="40" y2="40" stroke="#1E3A8A" strokeWidth="2.5" strokeLinecap="round" />
+  </svg>
+);
+
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { profile, loading } = useAuth();
 
   React.useEffect(() => {
     if (!loading && profile) {
-      if (profile.role === 'admin') navigate('/admin/dashboard');
+      if (profile.role === 'admin' || profile.role === 'super_admin') navigate('/admin/dashboard');
       else if (profile.role === 'driver') navigate('/driver/dashboard');
+      else if (profile.role === 'organization') navigate('/org/dashboard');
     }
   }, [profile, loading, navigate]);
 
@@ -59,17 +86,16 @@ const LandingPage: React.FC = () => {
       }}
     >
       {/* Soft ambient overlay to ensure highest contrast and legibility */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-black/35 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-black/40 pointer-events-none" />
 
       {/* Main Container */}
-      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 flex flex-col justify-between py-6 sm:py-8 lg:py-10">
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 flex flex-col justify-between py-6 sm:py-8 lg:py-10">
         {/* ========================================================= */}
         {/* TOP BRAND & WELCOME HEADER (Centered)                    */}
         {/* ========================================================= */}
         <div className="text-center pt-2 sm:pt-4 max-w-2xl mx-auto">
           {/* Logo with Leaf-Sprout Emblem */}
           <div className="inline-flex items-center justify-center gap-3 mb-1">
-            {/* Custom Leaf-Sprout Car Logo */}
             <div className="relative w-12 h-12 shrink-0 drop-shadow-sm">
               <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                 {/* Leaf sprout growing from the roof */}
@@ -107,7 +133,7 @@ const LandingPage: React.FC = () => {
             </h1>
           </div>
 
-          {/* Subtitle with Flanking Green Lines matching screenshot */}
+          {/* Subtitle with Flanking Green Lines */}
           <div className="flex items-center justify-center gap-2.5 text-xs font-semibold text-slate-700 tracking-wide mt-0.5 mb-3">
             <span className="w-8 sm:w-12 h-[1.5px] bg-[#00875A] rounded-full" />
             <span>Pickup & Driver Management System</span>
@@ -115,37 +141,37 @@ const LandingPage: React.FC = () => {
           </div>
 
           {/* Welcome Headline */}
-          <h2 className="text-2xl sm:text-3xl lg:text-[38px] font-black tracking-tight text-[#10243A] leading-tight">
+          <h2 className="text-2xl sm:text-3xl lg:text-[36px] font-black tracking-tight text-[#10243A] leading-tight">
             <span>Welcome to VillaLemon </span>
             <span className="text-[#00875A]">Pickup</span>
           </h2>
 
           <p className="text-xs sm:text-sm font-semibold text-slate-700 mt-1 max-w-lg mx-auto">
-            Manage trips, drivers, expenses and business performance in one place.
+            Manage trips, drivers, partner requests, expenses and settlements in one place.
           </p>
         </div>
 
         {/* ========================================================= */}
-        {/* CENTERED DUAL CARDS (FROSTED GLASS EFFECT MATCHING IMAGE) */}
+        {/* 3 PORTAL CARDS (FROSTED GLASS EFFECT)                     */}
         {/* ========================================================= */}
         <div className="my-auto py-4 sm:py-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 w-full max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 w-full max-w-5xl mx-auto">
             {/* CARD 1: ADMIN LOGIN */}
             <div
               onClick={() => navigate('/admin/login')}
-              className="group bg-white/90 hover:bg-white backdrop-blur-md rounded-[26px] p-6 sm:p-7 shadow-[0_15px_40px_rgba(16,36,58,0.12)] border border-white/70 hover:border-[#00875A]/40 hover:shadow-[0_20px_50px_rgba(0,135,90,0.18)] hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer flex flex-col justify-between text-center"
+              className="group bg-white/90 hover:bg-white backdrop-blur-md rounded-[26px] p-6 shadow-[0_15px_40px_rgba(16,36,58,0.12)] border border-white/70 hover:border-[#00875A]/40 hover:shadow-[0_20px_50px_rgba(0,135,90,0.18)] hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer flex flex-col justify-between text-center"
             >
               <div>
                 {/* Pale Blue Circular Badge */}
-                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-[#EBF3FE] flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform duration-300 shadow-sm">
-                  <AdminShieldIcon className="w-8 h-8 sm:w-9 sm:h-9" />
+                <div className="w-16 h-16 rounded-full bg-[#EBF3FE] flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform duration-300 shadow-sm">
+                  <AdminShieldIcon className="w-8 h-8" />
                 </div>
 
-                <h3 className="text-xl sm:text-2xl font-black text-[#10243A] tracking-tight mb-2">
+                <h3 className="text-xl font-black text-[#10243A] tracking-tight mb-2">
                   Admin Login
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed min-h-[40px] max-w-[220px] mx-auto mb-5">
-                  Manage drivers, trips, expenses, settlements and business insights.
+                  Manage drivers, fleet, expenses, client billing, settlements and reports.
                 </p>
               </div>
 
@@ -155,7 +181,7 @@ const LandingPage: React.FC = () => {
                   e.stopPropagation();
                   navigate('/admin/login');
                 }}
-                className="w-full bg-[#007A50] hover:bg-[#006642] active:bg-[#005738] text-white font-extrabold text-xs sm:text-sm tracking-wider uppercase py-3.5 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#007A50]/25 transition-all"
+                className="w-full bg-[#007A50] hover:bg-[#006642] active:bg-[#005738] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#007A50]/25 transition-all"
               >
                 <span>LOGIN AS ADMIN</span>
                 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -165,19 +191,19 @@ const LandingPage: React.FC = () => {
             {/* CARD 2: DRIVER LOGIN */}
             <div
               onClick={() => navigate('/driver/login')}
-              className="group bg-white/90 hover:bg-white backdrop-blur-md rounded-[26px] p-6 sm:p-7 shadow-[0_15px_40px_rgba(16,36,58,0.12)] border border-white/70 hover:border-[#00875A]/40 hover:shadow-[0_20px_50px_rgba(0,135,90,0.18)] hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer flex flex-col justify-between text-center"
+              className="group bg-white/90 hover:bg-white backdrop-blur-md rounded-[26px] p-6 shadow-[0_15px_40px_rgba(16,36,58,0.12)] border border-white/70 hover:border-[#00875A]/40 hover:shadow-[0_20px_50px_rgba(0,135,90,0.18)] hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer flex flex-col justify-between text-center"
             >
               <div>
                 {/* Pale Mint-Green Circular Badge */}
-                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-[#E6F7F0] flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform duration-300 shadow-sm">
-                  <DriverCarIcon className="w-8 h-8 sm:w-9 sm:h-9" />
+                <div className="w-16 h-16 rounded-full bg-[#E6F7F0] flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform duration-300 shadow-sm">
+                  <DriverCarIcon className="w-8 h-8" />
                 </div>
 
-                <h3 className="text-xl sm:text-2xl font-black text-[#10243A] tracking-tight mb-2">
+                <h3 className="text-xl font-black text-[#10243A] tracking-tight mb-2">
                   Driver Login
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed min-h-[40px] max-w-[220px] mx-auto mb-5">
-                  Access upcoming trips, enroll in available trips and update trip expenses.
+                  Access assigned duties, view placards, enroll in open trips and log expenses.
                 </p>
               </div>
 
@@ -187,9 +213,41 @@ const LandingPage: React.FC = () => {
                   e.stopPropagation();
                   navigate('/driver/login');
                 }}
-                className="w-full bg-[#007A50] hover:bg-[#006642] active:bg-[#005738] text-white font-extrabold text-xs sm:text-sm tracking-wider uppercase py-3.5 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#007A50]/25 transition-all"
+                className="w-full bg-[#007A50] hover:bg-[#006642] active:bg-[#005738] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#007A50]/25 transition-all"
               >
                 <span>LOGIN AS DRIVER</span>
+                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+
+            {/* CARD 3: ORGANIZATION LOGIN */}
+            <div
+              onClick={() => navigate('/org/login')}
+              className="group bg-white/90 hover:bg-white backdrop-blur-md rounded-[26px] p-6 shadow-[0_15px_40px_rgba(16,36,58,0.12)] border border-white/70 hover:border-[#1E3A8A]/40 hover:shadow-[0_20px_50px_rgba(30,58,138,0.18)] hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer flex flex-col justify-between text-center"
+            >
+              <div>
+                {/* Pale Indigo/Blue Circular Badge */}
+                <div className="w-16 h-16 rounded-full bg-[#EEF2FF] flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform duration-300 shadow-sm">
+                  <OrgBuildingIcon className="w-8 h-8" />
+                </div>
+
+                <h3 className="text-xl font-black text-[#10243A] tracking-tight mb-2">
+                  Organization Login
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed min-h-[40px] max-w-[220px] mx-auto mb-5">
+                  Submit guest trip requests, track arrivals, check invoices and download statements.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  navigate('/org/login');
+                }}
+                className="w-full bg-[#1E3A8A] hover:bg-[#172554] active:bg-[#0F172A] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#1E3A8A]/25 transition-all"
+              >
+                <span>LOGIN AS PARTNER</span>
                 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>

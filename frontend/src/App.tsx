@@ -6,11 +6,13 @@ import ProtectedRoute from './routes/ProtectedRoute';
 // Layouts
 import AdminLayout from './components/layout/AdminLayout';
 import DriverLayout from './components/layout/DriverLayout';
+import OrganizationLayout from './components/layout/OrganizationLayout';
 
 // Auth Pages
 import LandingPage from './pages/auth/LandingPage';
 import AdminLogin from './pages/auth/AdminLogin';
 import DriverLogin from './pages/auth/DriverLogin';
+import OrganizationLogin from './pages/auth/OrganizationLogin';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -34,6 +36,12 @@ import DriverCompletedTrips from './pages/driver/DriverCompletedTrips';
 import DriverSettlements from './pages/driver/DriverSettlements';
 import DriverProfile from './pages/driver/DriverProfile';
 
+// Organization Partner Pages
+import OrganizationDashboard from './pages/organization/OrganizationDashboard';
+import OrganizationSubmitTrip from './pages/organization/OrganizationSubmitTrip';
+import OrganizationTrips from './pages/organization/OrganizationTrips';
+import OrganizationInvoices from './pages/organization/OrganizationInvoices';
+
 function App() {
   return (
     <AuthProvider>
@@ -41,14 +49,16 @@ function App() {
         <Routes>
           {/* Public Landing & Login Selection */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Navigate to="/admin/login" replace />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/driver/login" element={<DriverLogin />} />
+          <Route path="/org/login" element={<OrganizationLogin />} />
 
-          {/* Admin Protected Portal */}
+          {/* 1. Admin Portal */}
           <Route
             path="/admin"
             element={
-              <ProtectedRoute requiredRole="admin">
+              <ProtectedRoute requiredRole={['admin', 'super_admin']}>
                 <AdminLayout />
               </ProtectedRoute>
             }
@@ -65,7 +75,7 @@ function App() {
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
-          {/* Driver Protected Portal */}
+          {/* 2. Driver Employee Portal */}
           <Route
             path="/driver"
             element={
@@ -84,6 +94,22 @@ function App() {
             <Route path="completed-trips" element={<DriverCompletedTrips />} />
             <Route path="settlements" element={<DriverSettlements />} />
             <Route path="profile" element={<DriverProfile />} />
+          </Route>
+
+          {/* 3. Organization / Partner Portal */}
+          <Route
+            path="/org"
+            element={
+              <ProtectedRoute requiredRole="organization">
+                <OrganizationLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/org/dashboard" replace />} />
+            <Route path="dashboard" element={<OrganizationDashboard />} />
+            <Route path="trips/new" element={<OrganizationSubmitTrip />} />
+            <Route path="trips" element={<OrganizationTrips />} />
+            <Route path="invoices" element={<OrganizationInvoices />} />
           </Route>
 
           {/* Catch-all */}

@@ -53,13 +53,15 @@ const DriverExpenseEntry: React.FC = () => {
       setTrip(tripData);
 
       if (existingExpense) {
-        setPetrolExpense(existingExpense.petrol_expense);
-        setOtherExpense(existingExpense.other_expense);
+        setPetrolExpense(existingExpense.petrol_expense || 0);
+        setOtherExpense(existingExpense.other_expense || 0);
         setOtherDescription(existingExpense.expense_description || '');
-        setActualAmountReturned(existingExpense.actual_amount_returned);
+        setActualAmountReturned(existingExpense.actual_amount_returned || 0);
         setDriverNotes(existingExpense.notes || '');
       } else if (tripData) {
-        const expected = Math.max(tripData.amount_to_collect - tripData.driver_charge, 0);
+        const toCollect = Number(tripData.amount_to_collect || tripData.amount_driver_must_collect || 0);
+        const dCharge = Number(tripData.driver_charge || tripData.driver_trip_pay_override || 0);
+        const expected = Math.max(toCollect - dCharge, 0);
         setActualAmountReturned(expected);
       }
     } catch (e) {
@@ -87,8 +89,8 @@ const DriverExpenseEntry: React.FC = () => {
         expense_description: otherDescription,
         actual_amount_returned: Number(actualAmountReturned),
         notes: driverNotes,
-        customer_collection: Number(trip.amount_to_collect),
-        driver_charge: Number(trip.driver_charge),
+        customer_collection: Number(trip.amount_to_collect || trip.amount_driver_must_collect || 0),
+        driver_charge: Number(trip.driver_charge || trip.driver_trip_pay_override || 0),
       });
 
       setSavedSuccess(true);
@@ -119,9 +121,9 @@ const DriverExpenseEntry: React.FC = () => {
   }
 
   const financials = calculateFinancials(
-    trip.amount_to_collect,
+    Number(trip.amount_to_collect || trip.amount_driver_must_collect || 0),
     petrolExpense,
-    trip.driver_charge,
+    Number(trip.driver_charge || trip.driver_trip_pay_override || 0),
     otherExpense,
     actualAmountReturned
   );

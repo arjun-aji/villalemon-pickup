@@ -389,9 +389,10 @@ const AdminDashboard: React.FC = () => {
                 recentTrips.map(trip => {
                   const s = trip.settlement;
                   const petrol = s?.petrol_expense || 0;
-                  const dCharge = s?.driver_charge || trip.driver_charge;
+                  const dCharge = Number(s?.driver_charge || trip.driver_charge || trip.driver_trip_pay_override || 0);
                   const other = s?.other_expenses || 0;
-                  const profit = (s?.customer_collection || trip.amount_to_collect) - petrol - dCharge - other;
+                  const collect = Number(s?.customer_collection || trip.amount_to_collect || trip.trip_selling_price || 0);
+                  const profit = collect - petrol - dCharge - other;
 
                   return (
                     <tr key={trip.id} className="hover:bg-slate-50 transition-colors">

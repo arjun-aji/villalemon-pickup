@@ -111,9 +111,10 @@ const MonthlyReportsPage: React.FC = () => {
       trips.forEach(t => {
         const s = t.settlement;
         const petrol = s?.petrol_expense || 0;
-        const dCharge = s?.driver_charge || t.driver_charge;
+        const dCharge = Number(s?.driver_charge || t.driver_charge || t.driver_trip_pay_override || 0);
         const other = s?.other_expenses || t.other_fixed_charges || 0;
-        const profit = (s?.customer_collection || t.amount_to_collect) - petrol - dCharge - other;
+        const collect = Number(s?.customer_collection || t.amount_to_collect || t.trip_selling_price || 0);
+        const profit = collect - petrol - dCharge - other;
 
         tripSheet.addRow([
           t.trip_number,

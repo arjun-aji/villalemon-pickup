@@ -54,7 +54,7 @@ const AddTripPage: React.FC = () => {
 
   useEffect(() => {
     driverService.getAll().then(list => {
-      setDrivers(list.filter(d => d.employment_status === 'active'));
+      setDrivers(list.filter(d => (d.status === 'Active' || d.employment_status === 'active')));
       if (list.length > 0) {
         setAssignedDriverId(list[0].id);
       }
@@ -367,7 +367,7 @@ const AddTripPage: React.FC = () => {
                   <option value="">-- Select Active Driver --</option>
                   {drivers.map(d => (
                     <option key={d.id} value={d.id}>
-                      {d.full_name} ({d.username}) • {d.vehicle_number}
+                      {d.full_name} {d.phone ? `(${d.phone})` : ''} {d.vehicle_number ? `• ${d.vehicle_number}` : ''}
                     </option>
                   ))}
                 </select>

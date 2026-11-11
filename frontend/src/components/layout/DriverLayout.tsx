@@ -61,7 +61,7 @@ const DriverLayout: React.FC = () => {
             </span>
             <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-primary animate-pulse" />
-              <span>{driver?.vehicle_number || 'Driver Employee'}</span>
+              <span>{driver?.vehicle_number || driver?.phone || 'Driver Employee'}</span>
               <span>•</span>
               <span className="text-slate-300 font-semibold">{displayName}</span>
             </p>
@@ -118,7 +118,7 @@ const DriverLayout: React.FC = () => {
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">{displayName}</p>
               <p className="text-[10px] text-slate-400 font-mono truncate">
-                {driver?.vehicle_number || 'Driver Employee'}
+                {driver?.vehicle_number || driver?.phone || 'Driver Employee'}
               </p>
             </div>
             <button
