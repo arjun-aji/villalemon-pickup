@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { tripService } from '../../services/tripService';
 import { enrollmentService } from '../../services/enrollmentService';
 import { settlementService } from '../../services/settlementService';
+import { supabase } from '../../lib/supabase';
 import { Trip } from '../../types';
 import { formatINR } from '../../utils/formatters';
 
@@ -42,30 +43,33 @@ const DriverDashboard: React.FC = () => {
   const loadDriverData = async () => {
     try {
       setLoading(true);
-      const [allTrips, enrollments, settlements] = await Promise.all([
+      const [allTrips, enrollments, driverBalances] = await Promise.all([
         tripService.getAll(),
         driverId ? enrollmentService.getDriverEnrollments(driverId) : Promise.resolve([]),
-        settlementService.getAll(),
+        supabase.from('v_driver_balances').select('*'),
       ]);
 
-      const myAssigned = allTrips.filter(t => t.assigned_driver_id === driverId);
-      const upcoming = myAssigned.filter(t => ['upcoming', 'assigned'].includes(t.trip_status));
-      const inProg = myAssigned.filter(t => t.trip_status === 'in_progress');
-      const completed = myAssigned.filter(t => t.trip_status === 'completed');
+      const myAssigned = (allTrips as Trip[]).filter(
+        (t: Trip) => t.assigned_driver_id === driverId || (!driverId && t.driver?.full_name?.toLowerCase() === driverName.toLowerCase())
+      );
+      const upcoming = myAssigned.filter((t: Trip) => ['upcoming', 'assigned', 'Confirmed', 'Assigned'].includes(t.trip_status));
+      const inProg = myAssigned.filter((t: Trip) => ['in_progress', 'On Trip'].includes(t.trip_status));
+      const completed = myAssigned.filter((t: Trip) => ['completed', 'Completed'].includes(t.trip_status));
 
       setUpcomingTrips(upcoming);
       setInProgressCount(inProg.length);
       setCompletedCount(completed.length);
 
-      const openTrips = allTrips.filter(t => t.is_published_for_enrollment && !t.assigned_driver_id);
+      const openTrips = (allTrips as Trip[]).filter((t: Trip) => (t.is_published_for_enrollment || t.trip_status === 'Pending Approval') && !t.assigned_driver_id);
       setAvailableCount(openTrips.length);
 
-      const pendingEnrollments = enrollments.filter(e => e.status === 'pending');
+      const pendingEnrollments = (enrollments as any[]).filter((e: any) => e.status === 'pending');
       setEnrolledCount(pendingEnrollments.length);
 
-      const myPending = settlements.filter(s => s.driver_id === driverId && s.settlement_status !== 'settled');
-      const totalPending = myPending.reduce((sum, s) => sum + (Number(s.expected_return) || 0), 0);
-      setPendingSettlementAmount(totalPending);
+      const myBalance = (driverBalances.data || []).find(
+        (b: any) => b.driver_id === driverId || b.full_name?.toLowerCase() === driverName.toLowerCase()
+      );
+      setPendingSettlementAmount(Math.abs(Number(myBalance?.balance_payable_to_driver || 0)));
     } catch (e) {
       console.error(e);
     } finally {

@@ -332,51 +332,102 @@ export const tripService = {
     if (isSupabaseConfigured) {
       try {
         let tripsQuery = supabase.from('trips').select('*');
-        let settlementsQuery = supabase.from('trip_settlements').select('*');
-
         if (month && year) {
           const start = `${year}-${String(month).padStart(2, '0')}-01`;
           const end = new Date(year, month, 0).toISOString().split('T')[0];
-          tripsQuery = tripsQuery.gte('pickup_date', start).lte('pickup_date', end);
+          tripsQuery = tripsQuery.gte('trip_date', start).lte('trip_date', end);
         }
 
-        const [{ data: trips }, { data: settlements }] = await Promise.all([
+        const [
+          { data: trips },
+          { data: financials },
+          { data: clientSummaries },
+          { data: driverBalances },
+          { data: docAlerts },
+          { data: expenses }
+        ] = await Promise.all([
           tripsQuery,
-          settlementsQuery,
+          supabase.from('v_trip_financials').select('*'),
+          supabase.from('v_client_summary').select('*'),
+          supabase.from('v_driver_balances').select('*'),
+          supabase.from('v_vehicle_document_alerts').select('*'),
+          supabase.from('expenses').select('*')
         ]);
 
         const tripList = trips || [];
-        const settlementList = settlements || [];
+        const finList = financials || [];
+        const clientList = clientSummaries || [];
+        const driverList = driverBalances || [];
+        const alertsList = docAlerts || [];
+        const expenseList = expenses || [];
 
-        const totalCollections = settlementList.reduce((sum, s) => sum + (Number(s.customer_collection) || 0), 0);
-        const totalPetrol = settlementList.reduce((sum, s) => sum + (Number(s.petrol_expense) || 0), 0);
-        const totalDriverCharges = settlementList.reduce((sum, s) => sum + (Number(s.driver_charge) || 0), 0);
-        const totalOther = settlementList.reduce((sum, s) => sum + (Number(s.other_expenses) || 0), 0);
-        const totalExpenses = totalPetrol + totalDriverCharges + totalOther;
-        const netProfit = totalCollections - totalExpenses;
-
-        const pendingSettlements = settlementList.filter(s =>
-          ['driver_submitted', 'pending_verification', 'expense_pending', 'difference'].includes(s.settlement_status)
+        // Real calculations matching Excel formulas
+        const completedTrips = tripList.filter(t => 
+          t.trip_status === 'Completed' || t.trip_status === 'completed'
         );
-        const pendingAmount = pendingSettlements.reduce((sum, s) => sum + (Number(s.expected_return) || 0), 0);
+        const upcomingTrips = tripList.filter(t => 
+          ['Confirmed', 'Assigned', 'upcoming', 'assigned', 'Pending Approval'].includes(t.trip_status)
+        );
+        const pendingApproval = tripList.filter(t => 
+          t.trip_status === 'Pending Approval' || t.trip_status === 'available_for_enrollment'
+        );
+
+        // Revenue from completed trips
+        const totalRevenue = completedTrips.reduce((sum, t) => 
+          sum + (Number(t.trip_selling_price) || 0), 0
+        );
+
+        // Expenses: driver reports + office general expenses
+        const tripExpenses = finList.reduce((sum, f) => 
+          sum + (Number(f.total_trip_expenses) || 0), 0
+        );
+        const officeExpenses = expenseList.reduce((sum, e) => 
+          sum + (Number(e.amount) || 0), 0
+        );
+        const totalExpenses = Math.max(tripExpenses, officeExpenses);
+        const netProfit = totalRevenue - totalExpenses;
+
+        // Client Outstanding & Over limit count
+        const totalClientOutstanding = clientList.reduce((sum, c) => 
+          sum + (Number(c.outstanding_amount) || 0), 0
+        );
+        const overLimitClientsCount = clientList.filter(c => c.credit_status === 'OVER LIMIT').length;
+
+        // Driver Payable & Driver Cash held
+        const totalDriverPayable = driverList.reduce((sum, d) => 
+          sum + Math.max(Number(d.balance_payable_to_driver) || 0, 0), 0
+        );
+        const totalDriverCashHeld = driverList.reduce((sum, d) => 
+          sum + Math.max(Number(d.cash_owed_to_office) || 0, 0), 0
+        );
+
+        // Vehicle Document alerts count
+        const activeDocAlertsCount = alertsList.filter(a => a.document_alert && a.document_alert !== 'OK').length;
 
         return {
           total_trips: tripList.length,
-          upcoming_trips: tripList.filter(t => ['upcoming', 'assigned', 'available_for_enrollment'].includes(t.trip_status)).length,
-          completed_trips: tripList.filter(t => t.trip_status === 'completed' || t.trip_status === 'Completed').length,
-          in_progress_trips: tripList.filter(t => t.trip_status === 'in_progress' || t.trip_status === 'In Progress').length,
-          total_collections: totalCollections,
-          total_petrol: totalPetrol,
-          total_driver_charges: totalDriverCharges,
-          total_other_expenses: totalOther,
+          upcoming_trips: upcomingTrips.length,
+          completed_trips: completedTrips.length,
+          in_progress_trips: tripList.filter(t => t.trip_status === 'On Trip' || t.trip_status === 'in_progress').length,
+          pending_approval_trips: pendingApproval.length,
+          total_collections: totalRevenue,
+          total_petrol: finList.reduce((s, f) => s + (Number(f.diesel_reported) || 0), 0),
+          total_driver_charges: finList.reduce((s, f) => s + (Number(f.driver_trip_pay) || 0), 0),
+          total_other_expenses: finList.reduce((s, f) => s + (Number(f.parking_toll_food_reported) || 0), 0),
           total_expenses: totalExpenses,
           net_profit: netProfit,
-          pending_settlements: pendingSettlements.length,
-          pending_settlements_count: pendingSettlements.length,
-          pending_settlement_amount: pendingAmount,
+          total_revenue: totalRevenue,
+          client_outstanding: totalClientOutstanding,
+          over_limit_count: overLimitClientsCount,
+          driver_payable: totalDriverPayable,
+          driver_cash_held: totalDriverCashHeld,
+          vehicle_alerts_count: activeDocAlertsCount,
+          pending_settlements: driverList.filter(d => Number(d.net_settlement_amount) !== 0).length,
+          pending_settlements_count: driverList.filter(d => Number(d.net_settlement_amount) !== 0).length,
+          pending_settlement_amount: Math.abs(driverList.reduce((s, d) => s + (Number(d.net_settlement_amount) || 0), 0)),
         } as DashboardStats;
       } catch (e) {
-        console.error('Error fetching Supabase stats:', e);
+        console.error('Error fetching Supabase stats from views:', e);
       }
     }
 

@@ -31,6 +31,7 @@ import KPICard from '../../components/ui/KPICard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { tripService } from '../../services/tripService';
+import { excelExportService } from '../../services/excelExportService';
 import { formatINR } from '../../utils/formatters';
 import { Trip, DashboardStats } from '../../types';
 
@@ -39,6 +40,7 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -48,15 +50,28 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       const [statsData, allTrips] = await Promise.all([
-        tripService.getDashboardStats(11, 2026),
+        tripService.getDashboardStats(),
         tripService.getAll(),
       ]);
       setStats(statsData);
-      setRecentTrips(allTrips.slice(0, 5));
+      setRecentTrips(allTrips.slice(0, 8));
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const filename = `VillaLemon_Pickup_System_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const blob = await excelExportService.exportFullWorkbook();
+      excelExportService.downloadBlob(blob, filename);
+    } catch (err: any) {
+      alert(err.message || 'Error exporting Excel workbook');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -92,14 +107,69 @@ const AdminDashboard: React.FC = () => {
           </button>
 
           <button
-            onClick={() => navigate('/admin/monthly-reports')}
+            onClick={handleExportExcel}
+            disabled={exporting}
             className="btn-secondary text-xs py-2 px-3.5 rounded-xl"
+            title="Download full 10-sheet Excel Workbook matching original business sheet"
           >
             <FileSpreadsheet className="h-4 w-4 text-green-primary" />
-            <span>Export Excel</span>
+            <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
         </div>
       </div>
+
+      {/* Critical Operational Alerts Banner */}
+      {((stats?.vehicle_alerts_count ?? 0) > 0 || (stats?.over_limit_count ?? 0) > 0 || (stats?.pending_approval_trips ?? 0) > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(stats?.vehicle_alerts_count ?? 0) > 0 && (
+            <Link
+              to="/admin/vehicles"
+              className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between hover:bg-amber-100/80 transition-colors shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold">{stats?.vehicle_alerts_count} Vehicle Documents</span>
+                  <p className="text-[11px] text-amber-700">Expired or due for renewal soon</p>
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-amber-600" />
+            </Link>
+          )}
+
+          {(stats?.over_limit_count ?? 0) > 0 && (
+            <Link
+              to="/admin/clients"
+              className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-center justify-between hover:bg-red-100/80 transition-colors shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <div>
+                  <span className="font-bold">{stats?.over_limit_count} Client Over Limit</span>
+                  <p className="text-[11px] text-red-700">Exceeded authorized credit threshold</p>
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-red-600" />
+            </Link>
+          )}
+
+          {(stats?.pending_approval_trips ?? 0) > 0 && (
+            <Link
+              to="/admin/trips"
+              className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between hover:bg-blue-100/80 transition-colors shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                <div>
+                  <span className="font-bold">{stats?.pending_approval_trips} New Trip Requests</span>
+                  <p className="text-[11px] text-blue-700">Submitted by partner organizations</p>
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* 6 Primary KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">

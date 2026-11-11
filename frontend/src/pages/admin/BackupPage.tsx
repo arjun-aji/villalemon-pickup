@@ -11,6 +11,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { backupService } from '../../services/adminOperationsService';
+import { excelExportService } from '../../services/excelExportService';
 import { BackupRecord } from '../../types';
 import { formatDateTime } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -43,19 +44,20 @@ const BackupPage: React.FC = () => {
       setMessage(null);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = type === 'database_snapshot'
-        ? `villalemon_db_snapshot_${timestamp}.json`
-        : `Varkala_Holidays_Backup_${timestamp}.xlsx`;
+      const filename = `Varkala_Holidays_Backup_${timestamp}.xlsx`;
+
+      const blob = await excelExportService.exportFullWorkbook();
+      excelExportService.downloadBlob(blob, filename);
 
       await backupService.createRecord({
         backup_type: type,
         file_name: filename,
-        file_size_bytes: Math.floor(Math.random() * 800000) + 200000,
+        file_size_bytes: blob.size,
         storage_path: `backups/${filename}`,
         status: 'completed',
       });
 
-      setMessage(`Successfully created backup archive: ${filename}`);
+      setMessage(`Successfully created & downloaded complete Excel workbook: ${filename}`);
       loadBackups();
     } catch (err: any) {
       alert(err.message || 'Error generating backup');
@@ -64,21 +66,17 @@ const BackupPage: React.FC = () => {
     }
   };
 
-  const handleDownloadExcel = () => {
-    // Generate a simple CSV / JSON export of system data
-    const exportData = {
-      timestamp: new Date().toISOString(),
-      appName: 'VillaLemon Pickup',
-      version: '2.0-Varkala',
-      status: 'Verified Healthy',
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `villalemon_pickup_backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownloadExcel = async () => {
+    try {
+      setTriggering(true);
+      const filename = `Varkala_Holidays_Taxi_System_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const blob = await excelExportService.exportFullWorkbook();
+      excelExportService.downloadBlob(blob, filename);
+    } catch (e: any) {
+      alert(e.message || 'Failed to export Excel');
+    } finally {
+      setTriggering(false);
+    }
   };
 
   return (
