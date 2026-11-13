@@ -14,12 +14,27 @@ import {
 import AdminSidebar from './AdminSidebar';
 import VillaLemonLogo from '../ui/VillaLemonLogo';
 import { useAuth } from '../../context/AuthContext';
+import { excelExportService } from '../../services/excelExportService';
 
 const AdminLayout: React.FC = () => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+
+  const handleExportExcel = async () => {
+    try {
+      setExportingExcel(true);
+      const blob = await excelExportService.exportFullWorkbook();
+      const filename = `Varkala_Holidays_Taxi_System_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      excelExportService.downloadBlob(blob, filename);
+    } catch (e: any) {
+      alert(e.message || 'Failed to export Excel');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -80,11 +95,13 @@ const AdminLayout: React.FC = () => {
 
           {/* Quick Export Excel */}
           <button
-            onClick={() => navigate('/admin/monthly-reports')}
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
             className="hidden lg:flex px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-semibold text-white transition-colors items-center gap-1.5"
+            title="Download full Excel system workbook with Trip Sheet"
           >
             <FileSpreadsheet className="h-3.5 w-3.5 text-green-primary" />
-            <span>Excel</span>
+            <span>{exportingExcel ? 'Exporting...' : 'Excel'}</span>
           </button>
 
           {/* Notifications Bell with unread dot */}
