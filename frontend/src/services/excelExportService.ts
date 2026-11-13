@@ -42,7 +42,20 @@ export const excelExportService = {
       supabase.from('system_settings').select('*').limit(1).maybeSingle(),
     ]);
 
-    const allTrips = trips || [];
+    // In Excel: strictly order trips with date (chronological: ascending trip_date & pickup_time)
+    const allTrips = [...(trips || [])].sort((a, b) => {
+      const dateA = a.trip_date || a.pickup_date || '';
+      const dateB = b.trip_date || b.pickup_date || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+
+      const timeA = a.pickup_time || '';
+      const timeB = b.pickup_time || '';
+      if (timeA !== timeB) return timeA.localeCompare(timeB);
+
+      const numA = a.trip_number || '';
+      const numB = b.trip_number || '';
+      return numA.localeCompare(numB);
+    });
     const businessName = settings?.data?.business_name || 'Varkala Holidays';
     const businessPhone = settings?.data?.phone || '+91 90482 79460';
 

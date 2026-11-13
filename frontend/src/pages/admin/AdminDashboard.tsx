@@ -32,8 +32,47 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { tripService } from '../../services/tripService';
 import { excelExportService } from '../../services/excelExportService';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatDate, formatTime } from '../../utils/formatters';
 import { Trip, DashboardStats } from '../../types';
+
+// Helper to sort trips: Upcoming first (with latest upcoming trip first), and Completed after upcoming
+const sortDashboardTrips = (trips: Trip[]): Trip[] => {
+  const getStatusRank = (status?: string) => {
+    const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'in_progress') return 1;
+    if (['assigned', 'confirmed', 'pending_approval', 'upcoming', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) return 2;
+    if (s === 'completed') return 3;
+    if (s === 'cancelled') return 4;
+    return 2;
+  };
+
+  return [...trips].sort((a, b) => {
+    const rankA = getStatusRank(a.trip_status);
+    const rankB = getStatusRank(b.trip_status);
+
+    // 1. Group by status rank: In Progress (1) -> Upcoming (2) -> Completed (3) -> Cancelled (4)
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+
+    // 2. Within each group: Latest trip first (trip_date descending, then pickup_time descending, then created_at descending)
+    const dateA = a.trip_date || a.pickup_date || '';
+    const dateB = b.trip_date || b.pickup_date || '';
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+
+    const timeA = a.pickup_time || '';
+    const timeB = b.pickup_time || '';
+    if (timeA !== timeB) {
+      return timeB.localeCompare(timeA);
+    }
+
+    const createdA = a.created_at || '';
+    const createdB = b.created_at || '';
+    return createdB.localeCompare(createdA);
+  });
+};
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -54,7 +93,10 @@ const AdminDashboard: React.FC = () => {
         tripService.getAll(),
       ]);
       setStats(statsData);
-      setRecentTrips(allTrips.slice(0, 8));
+
+      // Order trips: Latest upcoming trip first, completed after upcoming
+      const sorted = sortDashboardTrips(allTrips);
+      setRecentTrips(sorted.slice(0, 10));
     } catch (e) {
       console.error(e);
     } finally {
@@ -436,6 +478,7 @@ const AdminDashboard: React.FC = () => {
               <tr className="border-b border-border bg-[#F8FAFC]">
                 <th className="table-header">Trip ID</th>
                 <th className="table-header">Customer</th>
+                <th className="table-header">Date & Time</th>
                 <th className="table-header">Route</th>
                 <th className="table-header">Driver</th>
                 <th className="table-header">Collect</th>
@@ -449,14 +492,14 @@ const AdminDashboard: React.FC = () => {
             <tbody className="divide-y divide-[#EDF2F7]">
               {recentTrips.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-text-secondary text-xs">
+                  <td colSpan={11} className="text-center py-12 text-text-secondary text-xs">
                     <Car className="h-8 w-8 mx-auto text-slate-300 mb-2" />
                     <p className="font-semibold text-text-primary text-sm">No trips recorded yet</p>
                     <p className="mt-1">Add a pickup trip to view real-time collections and profit breakdown.</p>
                   </td>
                 </tr>
               ) : (
-                recentTrips.map(trip => {
+                recentTrips.map((trip, idx) => {
                   const s = trip.settlement;
                   const petrol = s?.petrol_expense || 0;
                   const dCharge = Number(s?.driver_charge || trip.driver_charge || trip.driver_trip_pay_override || 0);
@@ -464,44 +507,65 @@ const AdminDashboard: React.FC = () => {
                   const collect = Number(s?.customer_collection || trip.amount_to_collect || trip.trip_selling_price || 0);
                   const profit = collect - petrol - dCharge - other;
 
+                  // Check if this is the boundary where completed trips start
+                  const prevTrip = idx > 0 ? recentTrips[idx - 1] : null;
+                  const isCompleted = trip.trip_status === 'Completed';
+                  const showCompletedDivider = isCompleted && prevTrip && prevTrip.trip_status !== 'Completed';
+
                   return (
-                    <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="table-cell font-mono font-bold text-navy-primary">
-                        {trip.trip_number}
-                      </td>
-                      <td className="table-cell font-semibold text-text-primary">
-                        {trip.customer_name}
-                      </td>
-                      <td className="table-cell text-xs text-text-secondary">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-primary shrink-0" />
-                          <span className="font-medium text-text-primary">{trip.pickup_location}</span>
-                          <span>→</span>
-                          <span>{trip.destination}</span>
-                        </span>
-                      </td>
-                      <td className="table-cell text-xs font-semibold">
-                        {trip.driver?.full_name || 'Unassigned'}
-                      </td>
-                      <td className="table-cell font-bold text-text-primary">
-                        {formatINR(s?.customer_collection || trip.amount_to_collect)}
-                      </td>
-                      <td className="table-cell text-xs text-text-secondary">
-                        {petrol ? formatINR(petrol) : '-'}
-                      </td>
-                      <td className="table-cell text-xs text-text-secondary">
-                        {formatINR(dCharge)}
-                      </td>
-                      <td className="table-cell text-xs text-text-secondary">
-                        {other ? formatINR(other) : '-'}
-                      </td>
-                      <td className="table-cell font-extrabold text-green-primary">
-                        {formatINR(profit)}
-                      </td>
-                      <td className="table-cell">
-                        <StatusBadge status={trip.trip_status} />
-                      </td>
-                    </tr>
+                    <React.Fragment key={trip.id}>
+                      {showCompletedDivider && (
+                        <tr className="bg-slate-50/80 border-y border-slate-200">
+                          <td colSpan={11} className="py-2 px-4 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Completed Trips</span>
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="hover:bg-slate-50 transition-colors">
+                        <td className="table-cell font-mono font-bold text-navy-primary">
+                          {trip.trip_number}
+                        </td>
+                        <td className="table-cell font-semibold text-text-primary">
+                          {trip.customer_name}
+                        </td>
+                        <td className="table-cell text-xs">
+                          <div className="font-bold text-slate-800">{formatDate(trip.pickup_date || trip.trip_date || '')}</div>
+                          <div className="text-slate-500 text-[11px] font-medium">{formatTime(trip.pickup_time || '')}</div>
+                        </td>
+                        <td className="table-cell text-xs text-text-secondary">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-primary shrink-0" />
+                            <span className="font-medium text-text-primary">{trip.pickup_location}</span>
+                            <span>→</span>
+                            <span>{trip.destination}</span>
+                          </span>
+                        </td>
+                        <td className="table-cell text-xs font-semibold">
+                          {trip.driver?.full_name || 'Unassigned'}
+                        </td>
+                        <td className="table-cell font-bold text-text-primary">
+                          {formatINR(s?.customer_collection || trip.amount_to_collect)}
+                        </td>
+                        <td className="table-cell text-xs text-text-secondary">
+                          {petrol ? formatINR(petrol) : '-'}
+                        </td>
+                        <td className="table-cell text-xs text-text-secondary">
+                          {formatINR(dCharge)}
+                        </td>
+                        <td className="table-cell text-xs text-text-secondary">
+                          {other ? formatINR(other) : '-'}
+                        </td>
+                        <td className="table-cell font-extrabold text-green-primary">
+                          {formatINR(profit)}
+                        </td>
+                        <td className="table-cell">
+                          <StatusBadge status={trip.trip_status} />
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   );
                 }))}
             </tbody>

@@ -201,71 +201,113 @@ _Please confirm receipt and report duty start._`;
   // Status normalizer helper (e.g. 'Assigned' -> 'assigned', 'Pending Approval' -> 'pending_approval')
   const getNormStatus = (status?: string) => (status || '').toLowerCase().replace(/[\s-]+/g, '_');
 
-  // Filtered trips for Standard View
-  const filteredTrips = trips.filter(trip => {
-    const s = getNormStatus(trip.trip_status);
-    if (activeTab === 'upcoming' && !['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) {
-      return false;
-    }
-    if (activeTab === 'in_progress' && s !== 'in_progress') {
-      return false;
-    }
-    if (activeTab === 'completed' && s !== 'completed') {
-      return false;
-    }
+  // Helper to sort trips: Upcoming first (with latest upcoming trip first), and Completed after upcoming
+  const sortTripsUpcomingFirst = (tripsList: Trip[]): Trip[] => {
+    const getStatusRank = (status?: string) => {
+      const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      if (s === 'in_progress') return 1;
+      if (['assigned', 'confirmed', 'pending_approval', 'upcoming', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) return 2;
+      if (s === 'completed') return 3;
+      if (s === 'cancelled') return 4;
+      return 2;
+    };
 
-    if (selectedDriver && trip.assigned_driver_id !== selectedDriver) {
-      return false;
-    }
+    return [...tripsList].sort((a, b) => {
+      const rankA = getStatusRank(a.trip_status);
+      const rankB = getStatusRank(b.trip_status);
+      if (rankA !== rankB) return rankA - rankB;
 
-    if (selectedStatus && s !== getNormStatus(selectedStatus)) {
-      return false;
-    }
+      const dateA = a.trip_date || a.pickup_date || '';
+      const dateB = b.trip_date || b.pickup_date || '';
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
 
-    if (search) {
-      const q = search.toLowerCase();
-      const matchNumber = (trip.trip_number || '').toLowerCase().includes(q);
-      const matchCustomer = (trip.customer_name || trip.guest_names || '').toLowerCase().includes(q);
-      const matchDriver = (trip.driver?.full_name || '').toLowerCase().includes(q);
-      const matchLocation = (trip.pickup_location || '').toLowerCase().includes(q);
-      const matchDest = (trip.destination || trip.dropoff_location || '').toLowerCase().includes(q);
-      return matchNumber || matchCustomer || matchDriver || matchLocation || matchDest;
-    }
+      const timeA = a.pickup_time || '';
+      const timeB = b.pickup_time || '';
+      if (timeA !== timeB) return timeB.localeCompare(timeA);
 
-    return true;
-  });
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+  };
 
-  // Filtered trips for Trip Sheet View (Excel replica mode)
-  const tripSheetTrips = trips.filter(trip => {
-    // 1. If single trip ID is provided
-    if (tripSheetTripId.trim()) {
-      return (trip.trip_number || '').toLowerCase().includes(tripSheetTripId.trim().toLowerCase());
-    }
+  // Filtered trips for Standard View (ordered: latest upcoming first, completed after upcoming)
+  const filteredTrips = sortTripsUpcomingFirst(
+    trips.filter(trip => {
+      const s = getNormStatus(trip.trip_status);
+      if (activeTab === 'upcoming' && !['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) {
+        return false;
+      }
+      if (activeTab === 'in_progress' && s !== 'in_progress') {
+        return false;
+      }
+      if (activeTab === 'completed' && s !== 'completed') {
+        return false;
+      }
 
-    // 2. Driver filter
-    if (tripSheetDriver) {
-      const matchDriverId = trip.assigned_driver_id === tripSheetDriver;
-      const matchDriverName = trip.driver?.full_name?.toLowerCase() === tripSheetDriver.toLowerCase();
-      if (!matchDriverId && !matchDriverName) return false;
-    }
+      if (selectedDriver && trip.assigned_driver_id !== selectedDriver) {
+        return false;
+      }
 
-    // 3. Date range filter
-    if (tripSheetStartDate) {
-      const tripDateStr = trip.trip_date || trip.pickup_date;
-      if (tripDateStr) {
-        const tripDate = new Date(tripDateStr);
-        const startDate = new Date(tripSheetStartDate);
-        const endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + (tripSheetDays || 100));
+      if (selectedStatus && s !== getNormStatus(selectedStatus)) {
+        return false;
+      }
 
-        if (tripDate < startDate || tripDate > endDate) {
-          return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const matchNumber = (trip.trip_number || '').toLowerCase().includes(q);
+        const matchCustomer = (trip.customer_name || trip.guest_names || '').toLowerCase().includes(q);
+        const matchDriver = (trip.driver?.full_name || '').toLowerCase().includes(q);
+        const matchLocation = (trip.pickup_location || '').toLowerCase().includes(q);
+        const matchDest = (trip.destination || trip.dropoff_location || '').toLowerCase().includes(q);
+        return matchNumber || matchCustomer || matchDriver || matchLocation || matchDest;
+      }
+
+      return true;
+    })
+  );
+
+  // Filtered trips for Trip Sheet View (Excel replica mode: ordered with date chronologically)
+  const tripSheetTrips = trips
+    .filter(trip => {
+      // 1. If single trip ID is provided
+      if (tripSheetTripId.trim()) {
+        return (trip.trip_number || '').toLowerCase().includes(tripSheetTripId.trim().toLowerCase());
+      }
+
+      // 2. Driver filter
+      if (tripSheetDriver) {
+        const matchDriverId = trip.assigned_driver_id === tripSheetDriver;
+        const matchDriverName = trip.driver?.full_name?.toLowerCase() === tripSheetDriver.toLowerCase();
+        if (!matchDriverId && !matchDriverName) return false;
+      }
+
+      // 3. Date range filter
+      if (tripSheetStartDate) {
+        const tripDateStr = trip.trip_date || trip.pickup_date;
+        if (tripDateStr) {
+          const tripDate = new Date(tripDateStr);
+          const startDate = new Date(tripSheetStartDate);
+          const endDate = new Date(startDate);
+          endDate.setDate(startDate.getDate() + (tripSheetDays || 100));
+
+          if (tripDate < startDate || tripDate > endDate) {
+            return false;
+          }
         }
       }
-    }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = a.trip_date || a.pickup_date || '';
+      const dateB = b.trip_date || b.pickup_date || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+
+      const timeA = a.pickup_time || '';
+      const timeB = b.pickup_time || '';
+      if (timeA !== timeB) return timeA.localeCompare(timeB);
+
+      return (a.trip_number || '').localeCompare(b.trip_number || '');
+    });
 
   // End date calculation for Trip Sheet summary banner
   const getTripSheetEndDate = () => {
