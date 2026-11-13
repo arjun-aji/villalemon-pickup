@@ -322,19 +322,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const realDriverId = driverData?.id;
-      const driverEmail = driverData?.phone ? `${driverData.phone}@villalemon.pickup` : `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`;
+      const emailsToTry = [
+        `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`,
+        driverData?.phone ? `${driverData.phone}@villalemon.pickup` : null,
+      ].filter(Boolean) as string[];
 
       let authUser = null;
-      try {
-        const { data: authData } = await supabase.auth.signInWithPassword({
-          email: driverEmail,
-          password: password,
-        });
-        if (authData?.user) {
-          authUser = authData.user;
+      for (const email of emailsToTry) {
+        try {
+          const { data: authData } = await supabase.auth.signInWithPassword({
+            email,
+            password: password,
+          });
+          if (authData?.user) {
+            authUser = authData.user;
+            break;
+          }
+        } catch {
+          // Try next email option
         }
-      } catch {
-        // Fallback to driver record
       }
 
       // Extract metadata from payment_arrangement_notes or driver record

@@ -57,7 +57,7 @@ const DriverDashboard: React.FC = () => {
 
   useEffect(() => {
     loadDriverData();
-  }, [rawDriverId]);
+  }, [rawDriverId, driver?.full_name, profile?.full_name, driver?.phone, profile?.phone]);
 
   const loadDriverData = async () => {
     try {
@@ -80,6 +80,7 @@ const DriverDashboard: React.FC = () => {
             if (cleanPhone && cleanPhone.length >= 6 && dPhone.includes(cleanPhone)) return true;
             const dAlpha = (d.full_name || '').toLowerCase().replace(/[^a-z]/g, '');
             if (cleanAlpha && (dAlpha === cleanAlpha || dAlpha.includes(cleanAlpha) || cleanAlpha.includes(dAlpha))) return true;
+            if (d.payment_arrangement_notes && cleanAlpha && d.payment_arrangement_notes.toLowerCase().includes(cleanAlpha)) return true;
             return false;
           });
 
@@ -121,6 +122,9 @@ const DriverDashboard: React.FC = () => {
         const tDrvName = (t.driver?.full_name || '').toLowerCase();
         const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
         if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
+        const tPhone = (t.driver?.phone || '').replace(/[^0-9]/g, '');
+        const myPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+        if (myPhone && myPhone.length >= 6 && tPhone.includes(myPhone)) return true;
         return false;
       });
 

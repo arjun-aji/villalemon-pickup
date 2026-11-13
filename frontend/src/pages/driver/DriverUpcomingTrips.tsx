@@ -32,7 +32,7 @@ const DriverUpcomingTrips: React.FC = () => {
 
   useEffect(() => {
     loadMyTrips();
-  }, [rawDriverId]);
+  }, [rawDriverId, driver?.full_name, profile?.full_name, driver?.phone, profile?.phone]);
 
   const loadMyTrips = async () => {
     try {
@@ -78,6 +78,9 @@ const DriverUpcomingTrips: React.FC = () => {
         const tDrvName = (t.driver?.full_name || '').toLowerCase();
         const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
         if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
+        const tPhone = (t.driver?.phone || '').replace(/[^0-9]/g, '');
+        const myPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+        if (myPhone && myPhone.length >= 6 && tPhone.includes(myPhone)) return true;
         return false;
       });
 
