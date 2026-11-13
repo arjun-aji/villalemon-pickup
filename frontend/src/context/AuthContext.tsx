@@ -17,6 +17,15 @@ interface AuthContextType {
   signInOrganization: (emailOrUsername: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   updateDriverPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  completeDriverProfile: (updates: {
+    drivingLicenceNo: string;
+    licenceExpiry?: string;
+    avatarUrl?: string;
+    newPassword?: string;
+    address?: string;
+    phone?: string;
+    vehicleNumber?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -328,12 +337,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fallback to driver record
       }
 
+      // Extract metadata from payment_arrangement_notes or driver record
+      const notesStr = driverData?.payment_arrangement_notes || '';
+      const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_]+)/i);
+      const addressMatch = notesStr.match(/Address:\s*([^|]+)/i);
+      const vehicleMatch = notesStr.match(/Vehicle:\s*([^|]+)/i);
+      const photoMatch = notesStr.match(/Photo:\s*([^|]+)/i);
+
+      let avatarUrl = photoMatch ? photoMatch[1].trim() : null;
+      if (!avatarUrl && (realDriverId || authUser?.id)) {
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', realDriverId || authUser?.id)
+            .maybeSingle();
+          if (prof?.avatar_url) avatarUrl = prof.avatar_url;
+        } catch {
+          // ignore
+        }
+      }
+
+      const isFirstLogin = !driverData?.driving_licence_no ||
+                           driverData.driving_licence_no === 'N/A' ||
+                           driverData.driving_licence_no === 'PENDING' ||
+                           notesStr.includes('first_login:true') ||
+                           !notesStr.includes('profile_completed:true');
+
       const driverProfile: Profile = {
         id: realDriverId || authUser?.id || driverData?.profile_id || 'driver-temp-id',
         role: 'driver',
         full_name: driverData?.full_name || username,
         email: driverEmail,
         phone: driverData?.phone,
+        avatar_url: avatarUrl,
         is_active: true,
         created_at: driverData?.created_at || new Date().toISOString(),
         updated_at: driverData?.updated_at || new Date().toISOString(),
@@ -343,10 +380,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: driverData.id,
         full_name: driverData.full_name,
         phone: driverData.phone || '',
+        username: userMatch ? userMatch[1].trim() : cleanUsername,
         driving_licence_no: driverData.driving_licence_no || '',
+        licence_expiry: driverData.licence_expiry || '',
+        vehicle_number: vehicleMatch ? vehicleMatch[1].trim() : '',
+        address: addressMatch ? addressMatch[1].trim() : '',
+        photo_url: avatarUrl || '',
+        is_first_login: isFirstLogin,
+        profile_completed: !isFirstLogin,
         employment_type: driverData.employment_type || 'Per-trip payment',
         monthly_salary: Number(driverData.monthly_salary) || 0,
         per_trip_payment: Number(driverData.per_trip_payment) || 500,
+        payment_arrangement_notes: driverData.payment_arrangement_notes || '',
         status: driverData.status || 'Active',
         created_at: driverData.created_at || new Date().toISOString(),
         updated_at: driverData.updated_at || new Date().toISOString(),
@@ -354,7 +399,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: driverProfile.id,
         full_name: driverProfile.full_name,
         phone: driverProfile.phone || '',
+        username: cleanUsername,
         driving_licence_no: '',
+        vehicle_number: '',
+        address: '',
+        photo_url: '',
+        is_first_login: true,
+        profile_completed: false,
         employment_type: 'Per-trip payment',
         monthly_salary: 0,
         per_trip_payment: 500,
@@ -483,8 +534,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (driver) {
         try {
           await supabase
-            .from('driver_employees')
-            .update({ is_first_login: false })
+            .from('drivers')
+            .update({
+              payment_arrangement_notes: driver.payment_arrangement_notes
+                ? `${driver.payment_arrangement_notes} | first_login:false`
+                : 'first_login:false',
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', driver.id);
         } catch {
           // Ignore
@@ -494,6 +550,108 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
+    }
+  };
+
+  const completeDriverProfile = async (updates: {
+    drivingLicenceNo: string;
+    licenceExpiry?: string;
+    avatarUrl?: string;
+    newPassword?: string;
+    address?: string;
+    phone?: string;
+    vehicleNumber?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // 1. If new password provided, update user password
+      if (updates.newPassword && updates.newPassword.length >= 6) {
+        try {
+          await supabase.auth.updateUser({ password: updates.newPassword });
+        } catch (pwErr) {
+          console.warn('Password update notice:', pwErr);
+        }
+      }
+
+      // 2. Resolve real driver ID
+      const effectiveDriverId = driver?.id;
+      if (!effectiveDriverId) {
+        return { success: false, error: 'No active driver found to update' };
+      }
+
+      // 3. Format payment_arrangement_notes metadata
+      const cleanUsername = driver.username || driver.full_name.toLowerCase().replace(/\s+/g, '');
+      const parts = [
+        `Username: ${cleanUsername}`,
+        updates.address ? `Address: ${updates.address}` : '',
+        updates.vehicleNumber ? `Vehicle: ${updates.vehicleNumber}` : '',
+        updates.avatarUrl ? `Photo: ${updates.avatarUrl}` : '',
+        'profile_completed:true',
+        'first_login:false'
+      ].filter(Boolean);
+
+      const updatedNotes = parts.join(' | ');
+
+      // 4. Update 'drivers' table in Supabase
+      const { error: dbError } = await supabase
+        .from('drivers')
+        .update({
+          driving_licence_no: updates.drivingLicenceNo,
+          licence_expiry: updates.licenceExpiry || null,
+          phone: updates.phone || driver.phone,
+          payment_arrangement_notes: updatedNotes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', effectiveDriverId);
+
+      if (dbError) {
+        console.error('Failed to update driver record:', dbError);
+      }
+
+      // 5. Update 'profiles' table in Supabase
+      const profileId = profile?.id || driver.profile_id;
+      if (profileId) {
+        try {
+          const profilePayload: any = {
+            updated_at: new Date().toISOString(),
+          };
+          if (updates.avatarUrl) profilePayload.avatar_url = updates.avatarUrl;
+          if (updates.phone) profilePayload.phone = updates.phone;
+
+          await supabase.from('profiles').update(profilePayload).eq('id', profileId);
+        } catch (profErr) {
+          console.warn('Profile avatar update notice:', profErr);
+        }
+      }
+
+      // 6. Update local context state
+      const updatedDriver: Driver = {
+        ...driver,
+        driving_licence_no: updates.drivingLicenceNo,
+        licence_expiry: updates.licenceExpiry,
+        phone: updates.phone || driver.phone,
+        vehicle_number: updates.vehicleNumber || driver.vehicle_number,
+        address: updates.address || driver.address,
+        payment_arrangement_notes: updatedNotes,
+        is_first_login: false,
+        profile_completed: true,
+        photo_url: updates.avatarUrl || driver.photo_url,
+      };
+
+      const updatedProfile: Profile | null = profile ? {
+        ...profile,
+        avatar_url: updates.avatarUrl || profile.avatar_url,
+        phone: updates.phone || profile.phone,
+      } : null;
+
+      setDriver(updatedDriver);
+      if (updatedProfile) setProfile(updatedProfile);
+
+      localStorage.setItem('villalemon_current_driver', JSON.stringify(updatedDriver));
+      if (updatedProfile) localStorage.setItem('villalemon_current_profile', JSON.stringify(updatedProfile));
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to complete profile' };
     }
   };
 
@@ -513,6 +671,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInOrganization,
         signOut,
         updateDriverPassword,
+        completeDriverProfile,
       }}
     >
       {children}

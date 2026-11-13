@@ -13,6 +13,9 @@ import {
   IndianRupee,
   Sparkles,
   ArrowRight,
+  Shield,
+  AlertCircle,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { tripService } from '../../services/tripService';
@@ -21,6 +24,7 @@ import { settlementService } from '../../services/settlementService';
 import { supabase } from '../../lib/supabase';
 import { Trip } from '../../types';
 import { formatINR } from '../../utils/formatters';
+import CompleteProfileModal from '../../components/driver/CompleteProfileModal';
 
 const DriverDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -33,9 +37,23 @@ const DriverDashboard: React.FC = () => {
   const [inProgressCount, setInProgressCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // First-time login / Profile incomplete modal
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const isProfileIncomplete = !driver?.driving_licence_no || 
+                              driver.driving_licence_no === 'N/A' || 
+                              driver.driving_licence_no === 'PENDING' || 
+                              driver?.is_first_login === true || 
+                              driver?.profile_completed === false;
+
   const rawDriverId = driver?.id || '';
   const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
   const [displayName, setDisplayName] = useState(initialDriverName);
+
+  useEffect(() => {
+    if (isProfileIncomplete) {
+      setShowCompleteModal(true);
+    }
+  }, [isProfileIncomplete]);
 
   useEffect(() => {
     loadDriverData();
@@ -133,6 +151,29 @@ const DriverDashboard: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto space-y-4">
+      {/* First-Time Login / Profile Incomplete Banner */}
+      {isProfileIncomplete && (
+        <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0">
+              <Shield className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-xs">Complete Your Driver Profile</h3>
+              <p className="text-[11px] text-slate-600">
+                Upload your photo, licence details & set your private strong password.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCompleteModal(true)}
+            className="px-3.5 py-2 bg-navy-primary hover:bg-navy-light text-white text-xs font-bold rounded-xl shadow-sm transition-all shrink-0"
+          >
+            Complete Now
+          </button>
+        </div>
+      )}
+
       {/* Driver Welcome Hero Card (matching phone screen 2 in the reference image) */}
       <div className="card p-6 bg-gradient-to-br from-white to-[#F0FAF5] border border-green-primary/20 shadow-md relative overflow-hidden">
         {/* Subtle decorative glow */}
@@ -148,8 +189,16 @@ const DriverDashboard: React.FC = () => {
               Driver Portal • {driver?.vehicle_number || 'Registered Driver'}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-green-primary to-green-secondary flex items-center justify-center text-white shadow-lg shadow-green-primary/30">
-            <Car className="h-6 w-6" />
+          <div
+            onClick={() => setShowCompleteModal(true)}
+            className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-tr from-green-primary to-green-secondary flex items-center justify-center text-white shadow-lg shadow-green-primary/30 border-2 border-white cursor-pointer hover:scale-105 transition-transform"
+            title="Click to view/edit profile"
+          >
+            {driver?.photo_url || profile?.avatar_url ? (
+              <img src={driver?.photo_url || profile?.avatar_url} alt="Driver" className="w-full h-full object-cover" />
+            ) : (
+              <Car className="h-6 w-6" />
+            )}
           </div>
         </div>
 
@@ -270,6 +319,13 @@ const DriverDashboard: React.FC = () => {
           <ChevronRight className="h-5 w-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-purple-600 transition-all" />
         </div>
       </div>
+
+      {/* First-Time Login / Profile Completion Modal */}
+      <CompleteProfileModal
+        isOpen={showCompleteModal}
+        onClose={() => setShowCompleteModal(false)}
+        onSuccess={() => loadDriverData()}
+      />
     </div>
   );
 };

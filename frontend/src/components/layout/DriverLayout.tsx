@@ -112,8 +112,12 @@ const DriverLayout: React.FC = () => {
         {/* Driver Profile Tag */}
         <div className="p-3 border-t border-[#152B44] bg-[#081524]">
           <div className="flex items-center gap-3 p-1.5 rounded-xl">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-primary to-emerald-400 flex items-center justify-center font-bold text-white text-xs shadow shrink-0">
-              {displayName.charAt(0)}
+            <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-tr from-green-primary to-emerald-400 flex items-center justify-center font-bold text-white text-xs shadow shrink-0 border border-emerald-500/30">
+              {driver?.photo_url || profile?.avatar_url ? (
+                <img src={driver.photo_url || profile?.avatar_url} alt="Driver" className="w-full h-full object-cover" />
+              ) : (
+                displayName.charAt(0)
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">{displayName}</p>

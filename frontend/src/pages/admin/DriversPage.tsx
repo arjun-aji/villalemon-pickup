@@ -33,6 +33,7 @@ const DriversPage: React.FC = () => {
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formPassword, setFormPassword] = useState('');
+  const [sendWhatsAppOnCreate, setSendWhatsAppOnCreate] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   // Success credential alert with full driver details for WhatsApp
@@ -51,7 +52,24 @@ const DriversPage: React.FC = () => {
 
   const generateDriverLoginMessage = (name: string, username: string, pass: string, phone: string) => {
     const origin = window.location.origin;
-    return `🚖 *VillaLemon Pickup — Driver Portal Login*\n\nHello *${name}*,\n\nHere are your login credentials for the VillaLemon Pickup Driver Portal:\n\n🌐 *Portal URL:* ${origin}/driver/login\n👤 *Username / Phone:* ${username || phone}\n🔑 *Password:* ${pass}\n\nPlease click the link to log in and access your assigned duty rides, submit trip expenses, and check your earnings ledger.\n\nThank you,\n*VillaLemon Pickup Operations*`;
+    return `🚖 *VillaLemon Pickup — Driver Account Created*
+
+Hello *${name}*,
+Welcome to the VillaLemon Pickup team!
+
+Here are your login credentials to access the Driver Portal:
+🌐 *Driver Portal:* ${origin}/driver/login
+👤 *Username / Phone:* ${username || phone}
+🔑 *Temporary Password:* ${pass}
+
+⚠️ *First Login Action:*
+Please log in now to complete your driver profile:
+1. Set your new private strong password
+2. Upload your driver photo
+3. Enter your Driving Licence number and details
+
+Thank you,
+*VillaLemon Pickup Operations*`;
   };
 
   useEffect(() => {
@@ -108,6 +126,16 @@ const DriversPage: React.FC = () => {
         username: cleanUsername,
         pass: formPassword,
       });
+
+      // If option is checked, automatically open WhatsApp with the credentials
+      if (sendWhatsAppOnCreate) {
+        const wpUrl = formatWhatsAppUrl(
+          formPhone.trim(),
+          generateDriverLoginMessage(formName.trim(), cleanUsername, formPassword, formPhone.trim())
+        );
+        window.open(wpUrl, '_blank');
+      }
+
       loadDrivers();
     } catch (err: any) {
       alert(err.message || 'Failed to create driver account');
@@ -129,7 +157,14 @@ const DriversPage: React.FC = () => {
   const handleResetPassword = async (driver: DriverEmployee) => {
     try {
       const res = await driverService.resetPassword(driver.id);
-      alert(`Password reset for ${driver.full_name}!\nTemporary Password: ${res.tempPassword || 'driver123'}\nDriver must change password upon next login.`);
+      const tempPass = res.tempPassword || 'driver123';
+      setCreatedInfo({
+        name: driver.full_name,
+        phone: driver.phone,
+        username: driver.username || driver.phone,
+        pass: tempPass,
+      });
+      alert(`Password reset for ${driver.full_name}!\nTemporary Password: ${tempPass}\nClick 'Send on WhatsApp' in the green alert above to share credentials directly with the driver.`);
     } catch (e: any) {
       alert(e.message || 'Failed to reset password');
     }
@@ -402,7 +437,21 @@ const DriversPage: React.FC = () => {
           </div>
 
           <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-xl">
-            <span className="font-bold">Security Notice:</span> Drivers use their username and temporary password to log in via the Driver Portal. They can change their password after first login.
+            <span className="font-bold">Security Notice:</span> Drivers use their username and temporary password to log in via the Driver Portal. They will be prompted to complete their profile (upload photo, licence number, and new strong password) on first login.
+          </div>
+
+          <div className="flex items-center gap-2 pt-1 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+            <input
+              type="checkbox"
+              id="sendWhatsApp"
+              checked={sendWhatsAppOnCreate}
+              onChange={e => setSendWhatsAppOnCreate(e.target.checked)}
+              className="rounded text-green-primary focus:ring-green-primary w-4 h-4 cursor-pointer"
+            />
+            <label htmlFor="sendWhatsApp" className="text-xs text-slate-800 font-semibold cursor-pointer flex items-center gap-1.5 select-none">
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Send login credentials to driver on WhatsApp immediately</span>
+            </label>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

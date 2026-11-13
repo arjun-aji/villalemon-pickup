@@ -9,8 +9,12 @@ import {
   ArrowLeft,
   CheckCircle2,
   LogOut,
+  Camera,
+  Edit3,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import CompleteProfileModal from '../../components/driver/CompleteProfileModal';
 
 const DriverProfile: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +22,7 @@ const DriverProfile: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,16 +68,40 @@ const DriverProfile: React.FC = () => {
 
       {/* Profile Details Card */}
       <div className="card p-6 border border-border space-y-4 shadow-card">
-        <div className="flex items-center gap-4 pb-4 border-b border-border">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-green-primary to-green-secondary text-white font-black text-xl flex items-center justify-center shadow-md">
-            {driver?.full_name?.charAt(0) || profile?.full_name?.charAt(0) || 'D'}
+        <div className="flex items-center justify-between pb-4 border-b border-border">
+          <div className="flex items-center gap-3.5">
+            <div className="relative">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-green-primary to-green-secondary text-white font-black text-xl flex items-center justify-center shadow-md border-2 border-emerald-500">
+                {driver?.photo_url || profile?.avatar_url ? (
+                  <img src={driver.photo_url || profile?.avatar_url} alt="Driver" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{driver?.full_name?.charAt(0) || profile?.full_name?.charAt(0) || 'D'}</span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="absolute -bottom-1 -right-1 p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-sm"
+                title="Change Photo"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-text-primary">{driver?.full_name || profile?.full_name || 'Driver'}</h2>
+              <p className="text-xs text-green-primary font-semibold">
+                ID: {driver?.employee_id || '-'} • {driver?.employment_status?.toUpperCase() || 'ACTIVE'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base font-bold text-text-primary">{driver?.full_name || profile?.full_name || 'Driver'}</h2>
-            <p className="text-xs text-green-primary font-semibold">
-              ID: {driver?.employee_id || '-'} • {driver?.employment_status?.toUpperCase() || 'ACTIVE'}
-            </p>
-          </div>
+
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 transition-colors"
+            title="Edit Full Profile"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>Edit</span>
+          </button>
         </div>
 
         <div className="space-y-3 text-xs">
@@ -87,6 +116,22 @@ const DriverProfile: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between">
+            <span className="text-text-secondary">Driving Licence No:</span>
+            <span className="font-mono font-bold text-slate-900">
+              {driver?.driving_licence_no && driver.driving_licence_no !== 'N/A' && driver.driving_licence_no !== 'PENDING'
+                ? driver.driving_licence_no
+                : <span className="text-amber-600 font-semibold">Pending Verification</span>}
+            </span>
+          </div>
+
+          {driver?.licence_expiry && (
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary">Licence Expiry:</span>
+              <span className="font-medium text-text-primary">{driver.licence_expiry}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
             <span className="text-text-secondary">Assigned Vehicle:</span>
             <span className="font-mono font-bold text-text-primary">{driver?.vehicle_number || '-'}</span>
           </div>
@@ -96,6 +141,14 @@ const DriverProfile: React.FC = () => {
             <span className="font-medium text-text-primary">{driver?.address || '-'}</span>
           </div>
         </div>
+
+        <button
+          onClick={() => setShowEditModal(true)}
+          className="w-full mt-2 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-emerald-200"
+        >
+          <Shield className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Update Licence, Photo & Vehicle</span>
+        </button>
       </div>
 
       {/* Change Password Card */}
@@ -137,6 +190,12 @@ const DriverProfile: React.FC = () => {
         <LogOut className="h-4 w-4" />
         <span>SIGN OUT OF DRIVER PORTAL</span>
       </button>
+
+      {/* Complete / Edit Profile Modal */}
+      <CompleteProfileModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
     </div>
   );
 };

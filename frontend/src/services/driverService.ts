@@ -123,7 +123,8 @@ export const driverService = {
 
       const notes = input.payment_arrangement_notes || input.address || '';
       const usernameNote = cleanUsername ? `Username: ${cleanUsername}` : '';
-      const combinedNotes = [notes, usernameNote].filter(Boolean).join(' | ') || null;
+      const firstLoginNote = 'first_login:true';
+      const combinedNotes = [notes, usernameNote, firstLoginNote].filter(Boolean).join(' | ') || null;
 
       const driverPayload: any = {
         profile_id: authUserId,
