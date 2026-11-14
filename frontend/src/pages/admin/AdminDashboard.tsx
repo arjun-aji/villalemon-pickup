@@ -485,6 +485,7 @@ const AdminDashboard: React.FC = () => {
                 <th className="table-header">Petrol</th>
                 <th className="table-header">Driver Charge</th>
                 <th className="table-header">Other</th>
+                <th className="table-header">Returned Fund</th>
                 <th className="table-header">Profit</th>
                 <th className="table-header">Status</th>
               </tr>
@@ -492,7 +493,7 @@ const AdminDashboard: React.FC = () => {
             <tbody className="divide-y divide-[#EDF2F7]">
               {recentTrips.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-text-secondary text-xs">
+                  <td colSpan={12} className="text-center py-12 text-text-secondary text-xs">
                     <Car className="h-8 w-8 mx-auto text-slate-300 mb-2" />
                     <p className="font-semibold text-text-primary text-sm">No trips recorded yet</p>
                     <p className="mt-1">Add a pickup trip to view real-time collections and profit breakdown.</p>
@@ -516,7 +517,7 @@ const AdminDashboard: React.FC = () => {
                     <React.Fragment key={trip.id}>
                       {showCompletedDivider && (
                         <tr className="bg-slate-50/80 border-y border-slate-200">
-                          <td colSpan={11} className="py-2 px-4 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                          <td colSpan={12} className="py-2 px-4 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                             <span className="flex items-center gap-1.5">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                               <span>Completed Trips</span>
@@ -557,6 +558,25 @@ const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="table-cell text-xs text-text-secondary">
                           {other ? formatINR(other) : '-'}
+                        </td>
+                        <td className="table-cell">
+                          {isCompleted ? (
+                            (collect - petrol - other) > 0 ? (
+                              <span className="font-mono font-bold text-xs text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300">
+                                +{formatINR(collect - petrol - other)}
+                              </span>
+                            ) : (collect - petrol - other) === 0 ? (
+                              <span className="font-mono text-xs text-slate-500">₹0</span>
+                            ) : (
+                              <span className="font-mono font-bold text-xs text-blue-800 bg-blue-100/90 px-2 py-0.5 rounded-md border border-blue-300">
+                                -{formatINR(Math.abs(collect - petrol - other))}
+                              </span>
+                            )
+                          ) : trip.collection_rule === 'Do not collect' ? (
+                            <span className="text-[10px] text-slate-400">Prepaid</span>
+                          ) : (
+                            <span className="text-slate-500 font-mono text-xs">Est: {formatINR(collect)}</span>
+                          )}
                         </td>
                         <td className="table-cell font-extrabold text-green-primary">
                           {formatINR(profit)}

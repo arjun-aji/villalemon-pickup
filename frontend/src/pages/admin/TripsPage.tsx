@@ -25,6 +25,9 @@ import {
   FileText,
   FileSpreadsheet,
   Download,
+  Fuel,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
@@ -258,6 +261,40 @@ const TripsPage: React.FC = () => {
 
       return true;
     })
+  );
+
+  // Summary financial calculations for Classic Table View
+  const classicMetrics = filteredTrips.reduce(
+    (acc, trip) => {
+      const s = trip.settlement;
+      const rep = (trip as any).driver_reports
+        ? Array.isArray((trip as any).driver_reports)
+          ? (trip as any).driver_reports[0]
+          : (trip as any).driver_reports
+        : null;
+      const petrol = Number(rep?.diesel_expense ?? s?.petrol_expense ?? 0);
+      const foodToll = Number(rep?.parking_toll_permits_tickets_food ?? 0);
+      const workshop = Number(rep?.workshop_expense ?? s?.other_expenses ?? trip.other_fixed_charges ?? 0);
+      const other = foodToll + workshop;
+      const totalExp = petrol + other;
+      const collect = Number(trip.trip_selling_price || trip.amount_driver_must_collect || trip.amount_to_collect || 0);
+      const driverPay = Number(trip.driver_trip_pay_override || trip.driver_charge || (trip.driver?.employment_type === 'Per-trip payment' ? trip.driver?.per_trip_payment : 0) || 0);
+      const profit = s?.net_profit !== undefined ? s.net_profit : collect - driverPay - totalExp;
+
+      const normSt = (trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
+      const isDone = normSt === 'completed' || Boolean(rep);
+      const isPrepaid = trip.collection_rule === 'Do not collect';
+      const driverColl = Number(rep?.amount_collected ?? (isPrepaid ? 0 : (trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)));
+      const returned = isDone ? driverColl - totalExp : 0;
+
+      acc.totalCollect += collect;
+      acc.totalPetrol += petrol;
+      acc.totalOther += other;
+      acc.totalReturned += returned;
+      acc.totalProfit += profit;
+      return acc;
+    },
+    { totalCollect: 0, totalPetrol: 0, totalOther: 0, totalReturned: 0, totalProfit: 0 }
   );
 
   // Filtered trips for Trip Sheet View (Excel replica mode: ordered with date chronologically)
@@ -702,6 +739,30 @@ const TripsPage: React.FC = () => {
             </button>
           </div>
 
+          {/* Classic View Financial KPI Summary Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Billed</span>
+              <span className="text-base font-black text-slate-900 font-mono">{formatINR(classicMetrics.totalCollect)}</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-rose-200/80 shadow-2xs">
+              <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">Petrol / Fuel Exp</span>
+              <span className="text-base font-black text-rose-600 font-mono">-{formatINR(classicMetrics.totalPetrol)}</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-amber-200/80 shadow-2xs">
+              <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Other (Food/Toll/WS)</span>
+              <span className="text-base font-black text-amber-700 font-mono">-{formatINR(classicMetrics.totalOther)}</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-emerald-200/80 shadow-2xs">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Returned to Office</span>
+              <span className="text-base font-black text-emerald-700 font-mono">+{formatINR(classicMetrics.totalReturned)}</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-emerald-300 shadow-2xs bg-gradient-to-br from-emerald-50/40 to-white">
+              <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider block">Net Total Profit</span>
+              <span className="text-base font-black text-emerald-600 font-mono">+{formatINR(classicMetrics.totalProfit)}</span>
+            </div>
+          </div>
+
           {/* Filter and Search Bar */}
           <div className="card p-3.5 flex flex-wrap items-center gap-3">
             <SearchInput
@@ -757,10 +818,13 @@ const TripsPage: React.FC = () => {
                       <th className="table-header">Trip ID</th>
                       <th className="table-header">Customer</th>
                       <th className="table-header">Date & Time</th>
-                      <th className="table-header">Route</th>
+                      <th className="table-header">Route & Cab</th>
                       <th className="table-header">Driver</th>
                       <th className="table-header">Collect</th>
-                      <th className="table-header">Profit</th>
+                      <th className="table-header">Petrol Exp</th>
+                      <th className="table-header">Other Exp</th>
+                      <th className="table-header">Returned Fund</th>
+                      <th className="table-header">Total Profit</th>
                       <th className="table-header">Status</th>
                       <th className="table-header text-right">Actions</th>
                     </tr>
@@ -771,59 +835,153 @@ const TripsPage: React.FC = () => {
                       const rep = (trip as any).driver_reports ? (Array.isArray((trip as any).driver_reports) ? (trip as any).driver_reports[0] : (trip as any).driver_reports) : null;
                       const petrolExp = Number(rep?.diesel_expense ?? s?.petrol_expense ?? 0);
                       const foodTollExp = Number(rep?.parking_toll_permits_tickets_food ?? 0);
-                      const otherExp = Number(rep?.workshop_expense ?? s?.other_expenses ?? trip.other_fixed_charges ?? 0);
-                      const totalExp = petrolExp + foodTollExp + otherExp;
+                      const workshopExp = Number(rep?.workshop_expense ?? s?.other_expenses ?? trip.other_fixed_charges ?? 0);
+                      const otherExp = foodTollExp + workshopExp;
+                      const totalExp = petrolExp + otherExp;
 
                       const collectAmt = Number(trip.trip_selling_price || trip.amount_driver_must_collect || trip.amount_to_collect || 0);
                       const driverChg = Number(trip.driver_trip_pay_override || trip.driver_charge || (trip.driver?.employment_type === 'Per-trip payment' ? trip.driver?.per_trip_payment : 0) || 0);
                       const profit = s?.net_profit !== undefined ? s.net_profit : collectAmt - driverChg - totalExp;
 
+                      const normSt = (trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
+                      const isDone = normSt === 'completed' || Boolean(rep);
+                      const isPrepaid = trip.collection_rule === 'Do not collect';
+                      const driverCollectedAmt = Number(rep?.amount_collected ?? (isPrepaid ? 0 : (trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)));
+                      const returnedFund = driverCollectedAmt - totalExp;
+
                       return (
                         <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="table-cell font-mono font-bold text-navy-primary">
-                            {trip.trip_number}
+                          <td className="table-cell">
+                            <span className="font-mono font-bold text-navy-primary block">{trip.trip_number}</span>
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">
+                              {trip.trip_category || 'Duty'}
+                            </span>
                           </td>
                           <td className="table-cell">
                             <div>
                               <p className="font-semibold text-text-primary text-sm">{trip.customer_name || trip.guest_names || 'Guest'}</p>
                               <p className="text-xs text-text-secondary">{trip.customer_phone || trip.guest_contact_number || '-'}</p>
+                              {(trip.total_people || trip.num_passengers) && (
+                                <p className="text-[10px] text-slate-500 font-medium">{trip.total_people || trip.num_passengers} Pax</p>
+                              )}
                             </div>
                           </td>
                           <td className="table-cell text-xs">
                             <p className="font-semibold text-text-primary">{formatDate(trip.pickup_date || trip.trip_date || '')}</p>
-                            <p className="text-text-secondary">{formatTime(trip.pickup_time || '')}</p>
+                            <p className="text-text-secondary font-mono">{formatTime(trip.pickup_time || '')}</p>
                           </td>
                           <td className="table-cell text-xs text-text-secondary">
-                            <p className="font-medium text-text-primary truncate max-w-[200px]">
+                            <p className="font-medium text-text-primary truncate max-w-[190px]" title={`${trip.pickup_location} → ${trip.destination || trip.dropoff_location}`}>
                               {trip.pickup_location} → {trip.destination || trip.dropoff_location}
                             </p>
-                            {trip.flight_number && (
-                              <span className="text-[11px] text-blue-600 font-semibold">
-                                Flt: {trip.flight_number}
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              {trip.vehicle?.registration_number ? `${trip.vehicle.registration_number} (${trip.vehicle.vehicle_type || trip.required_cab_type || 'Cab'})` : (trip.required_cab_type || 'Cab')}
+                            </p>
+                            {(trip.flight_number || trip.flight_number_and_time) && (
+                              <span className="text-[10px] text-blue-600 font-semibold block">
+                                ✈️ {trip.flight_number || trip.flight_number_and_time}
                               </span>
                             )}
                           </td>
-                          <td className="table-cell text-sm">
+                          <td className="table-cell text-xs">
                             {trip.driver ? (
                               <div>
-                                <span className="font-semibold text-text-primary text-xs">{trip.driver.full_name}</span>
-                                <p className="text-[11px] text-text-secondary font-mono">{trip.driver.vehicle_number || ''}</p>
+                                <span className="font-bold text-text-primary text-xs">{trip.driver.full_name}</span>
+                                <p className="text-[11px] text-text-secondary font-mono">{trip.driver.phone || ''}</p>
+                                {trip.driver.employment_type === 'Outside Driver' && (
+                                  <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800">
+                                    Outside Driver
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <span className="badge-yellow text-xs">Unassigned</span>
                             )}
                           </td>
-                          <td className="table-cell font-bold text-text-primary">
+                          <td className="table-cell font-mono font-bold text-slate-900">
                             {formatINR(collectAmt)}
+                            <span className="block text-[10px] font-sans font-medium text-slate-500">
+                              {isPrepaid ? 'Office bill' : 'From guest'}
+                            </span>
+                          </td>
+                          <td className="table-cell">
+                            {petrolExp > 0 ? (
+                              <div>
+                                <span className="font-mono font-bold text-xs text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                                  {formatINR(petrolExp)}
+                                </span>
+                                <p className="text-[10px] text-slate-500 font-medium mt-0.5">Diesel / Petrol</p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-xs">₹0</span>
+                            )}
+                          </td>
+                          <td className="table-cell">
+                            {otherExp > 0 ? (
+                              <div>
+                                <span className="font-mono font-bold text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                  {formatINR(otherExp)}
+                                </span>
+                                <p className="text-[10px] text-slate-500 font-medium mt-0.5 truncate max-w-[120px]" title={foodTollExp > 0 && workshopExp > 0 ? `Food/Toll: ₹${foodTollExp}, WS: ₹${workshopExp}` : foodTollExp > 0 ? `Food/Toll: ₹${foodTollExp}` : `WS: ₹${workshopExp}`}>
+                                  {foodTollExp > 0 && workshopExp > 0 ? `₹${foodTollExp} toll + ₹${workshopExp} ws` : foodTollExp > 0 ? `₹${foodTollExp} food/toll` : `₹${workshopExp} workshop`}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-xs">₹0</span>
+                            )}
+                          </td>
+                          <td className="table-cell">
+                            {isDone ? (
+                              returnedFund > 0 ? (
+                                <div>
+                                  <span className="font-mono font-black text-xs text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300 inline-block shadow-2xs">
+                                    +{formatINR(returnedFund)}
+                                  </span>
+                                  <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">Handed to Office</p>
+                                </div>
+                              ) : returnedFund === 0 ? (
+                                <div>
+                                  <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                    ₹0
+                                  </span>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">All spent</p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="font-mono font-black text-xs text-blue-800 bg-blue-100/90 px-2 py-0.5 rounded-md border border-blue-300 inline-block">
+                                    -{formatINR(Math.abs(returnedFund))}
+                                  </span>
+                                  <p className="text-[10px] text-blue-700 font-semibold mt-0.5">Office Paid Driver</p>
+                                </div>
+                              )
+                            ) : isPrepaid ? (
+                              <div>
+                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  Prepaid
+                                </span>
+                                <p className="text-[10px] text-slate-400 mt-0.5">No guest cash</p>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-mono text-xs font-semibold text-slate-600">
+                                  Est: {formatINR(trip.amount_driver_must_collect || trip.amount_to_collect || 0)}
+                                </span>
+                                <p className="text-[10px] text-amber-600 font-semibold mt-0.5">Pending duty</p>
+                              </div>
+                            )}
                           </td>
                           <td className="table-cell">
                             <div>
-                              <p className={`font-mono font-extrabold text-sm ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {formatINR(profit)}
-                              </p>
-                              {totalExp > 0 && (
-                                <p className="text-[10px] text-slate-500 font-medium">
-                                  -₹{totalExp} exp ({petrolExp > 0 ? `₹${petrolExp} fuel` : ''}{petrolExp > 0 && foodTollExp > 0 ? ', ' : ''}{foodTollExp > 0 ? `₹${foodTollExp} food/toll` : ''})
+                              <span className={`font-mono font-black text-sm px-2.5 py-1 rounded-lg border inline-block shadow-2xs ${
+                                profit >= 0
+                                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                  : 'text-rose-700 bg-rose-50 border-rose-200'
+                              }`}>
+                                {profit >= 0 ? `+${formatINR(profit)}` : `-${formatINR(Math.abs(profit))}`}
+                              </span>
+                              {driverChg > 0 && (
+                                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                  Driver pay: ₹{driverChg}
                                 </p>
                               )}
                             </div>
