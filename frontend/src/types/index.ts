@@ -36,6 +36,7 @@ export type TripCategory =
   | 'Airport Pick-up'
   | 'Airport Drop'
   | 'Sightseeing'
+  | 'Others'
   | 'Drop Only at Location'
   | 'Pick-up from Location';
 
@@ -88,6 +89,10 @@ export interface CreateTripInput {
   organization_id?: string;
   collection_rule?: CollectionRule;
   is_published_for_enrollment?: boolean;
+  outside_driver_name?: string;
+  outside_driver_phone?: string;
+  outside_vehicle_reg?: string;
+  outside_vehicle_type?: string;
   [key: string]: any;
 }
 
@@ -298,6 +303,10 @@ export interface Trip {
   driver_charge?: number;
   other_fixed_charges?: number;
   placard_text?: string;
+  outside_driver_name?: string;
+  outside_driver_phone?: string;
+  outside_vehicle_reg?: string;
+  outside_vehicle_type?: string;
   destination?: string;
   fare?: number;
   settlement_status?: string;

@@ -29,3 +29,4 @@ export const compressImage = (file: File, maxWidth = 400, quality = 0.75): Promi
     reader.onerror = err => reject(err);
   });
 };
+

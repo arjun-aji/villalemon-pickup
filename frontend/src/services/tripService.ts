@@ -38,8 +38,38 @@ export const tripService = {
             const dPay = Number(t.driver_trip_pay_override || t.driver_charge || (t.driver?.employment_type === 'Per-trip payment' ? t.driver?.per_trip_payment : 0) || 0);
             const netProfit = sellPrice - dPay - totalExp;
 
+            // Handle outside driver & vehicle metadata encoded in special_instructions
+            let driverObj = t.driver;
+            let vehicleObj = t.vehicle;
+            const outsideMatch = (t.special_instructions || '').match(/\[Outside Driver:\s*([^|\]]+)(?:\|\s*Phone:\s*([^|\]]+))?(?:\|\s*Vehicle:\s*([^|\]]+))?\]/i);
+            if (!driverObj && outsideMatch) {
+              const oName = outsideMatch[1]?.trim();
+              const oPhone = outsideMatch[2]?.trim() || '';
+              const oVeh = outsideMatch[3]?.trim() || '';
+              if (oName) {
+                driverObj = {
+                  id: `outside-${t.id}`,
+                  full_name: `${oName} (Outside)`,
+                  phone: oPhone,
+                  employment_type: 'Outside Driver',
+                  driving_licence_no: 'N/A',
+                  status: 'Active',
+                };
+              }
+              if (oVeh && !vehicleObj) {
+                vehicleObj = {
+                  id: `outside-veh-${t.id}`,
+                  registration_number: oVeh,
+                  vehicle_type: t.required_cab_type || 'Vehicle',
+                  status: 'Available',
+                };
+              }
+            }
+
             return {
               ...t,
+              driver: driverObj,
+              vehicle: vehicleObj,
               settlement: {
                 trip_id: t.id,
                 driver_id: t.assigned_driver_id,
@@ -251,7 +281,7 @@ export const tripService = {
       // 3. Map status to PostgreSQL enum ('Pending Approval' | 'Confirmed' | 'Assigned' | 'In Progress' | 'Completed' | 'Cancelled')
       let dbTripStatus = 'Confirmed';
       const rawStatus = (input.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
-      if (rawStatus === 'assigned' || (input.assigned_driver_id && rawStatus !== 'completed' && rawStatus !== 'cancelled')) {
+      if (input.outside_driver_name || rawStatus === 'assigned' || (input.assigned_driver_id && rawStatus !== 'completed' && rawStatus !== 'cancelled')) {
         dbTripStatus = 'Assigned';
       } else if (rawStatus === 'in_progress') {
         dbTripStatus = 'In Progress';
@@ -263,6 +293,19 @@ export const tripService = {
         dbTripStatus = 'Pending Approval';
       } else if (rawStatus === 'confirmed' || rawStatus === 'upcoming' || rawStatus === 'available_for_enrollment') {
         dbTripStatus = 'Confirmed';
+      }
+
+      // Map category safely for DB enum
+      let dbTripCategory = input.trip_category || 'Airport Pick-up';
+      if (dbTripCategory === 'Others') {
+        dbTripCategory = 'Drop Only at Location';
+      }
+
+      // Combine outside driver info into special_instructions if provided
+      let effectiveInstructions = input.special_instructions || input.trip_notes || null;
+      if (input.outside_driver_name) {
+        const outsideTag = `[Outside Driver: ${input.outside_driver_name.trim()}${input.outside_driver_phone ? ` | Phone: ${input.outside_driver_phone.trim()}` : ''}${input.outside_vehicle_reg ? ` | Vehicle: ${input.outside_vehicle_reg.trim()}` : ''}]`;
+        effectiveInstructions = [outsideTag, effectiveInstructions].filter(Boolean).join(' ');
       }
 
       // 4. Map airport terminal
@@ -299,7 +342,7 @@ export const tripService = {
         ordered_by: input.ordered_by || input.customer_name || 'Front Desk',
         trip_date: input.trip_date || input.pickup_date || new Date().toISOString().split('T')[0],
         pickup_time: input.pickup_time || '10:00',
-        trip_category: input.trip_category || 'Airport Pick-up',
+        trip_category: dbTripCategory,
         guest_names: input.guest_names || input.customer_name || 'Guest',
         guest_contact_number: input.guest_contact_number || input.customer_phone || null,
         total_people: Number(input.total_people || input.num_passengers || 1),
@@ -309,7 +352,7 @@ export const tripService = {
         flight_number_and_time: input.flight_number_and_time || input.flight_number || null,
         airport_terminal: dbTerminal,
         required_cab_type: input.required_cab_type || 'Sedan',
-        special_instructions: input.special_instructions || input.trip_notes || null,
+        special_instructions: effectiveInstructions,
         assigned_driver_id: isUuid(input.assigned_driver_id) ? input.assigned_driver_id : null,
         assigned_vehicle_id: isUuid(input.assigned_vehicle_id) ? input.assigned_vehicle_id : null,
         trip_selling_price: Number(input.trip_selling_price || input.amount_to_collect || 0),
@@ -339,6 +382,27 @@ export const tripService = {
       }
 
       if (data) {
+        if (input.outside_driver_name) {
+          (data as any).driver = {
+            id: `outside-${data.id}`,
+            full_name: `${input.outside_driver_name} (Outside)`,
+            phone: input.outside_driver_phone || '',
+            employment_type: 'Outside Driver',
+            driving_licence_no: 'N/A',
+            status: 'Active',
+          };
+          if (input.outside_vehicle_reg) {
+            (data as any).vehicle = {
+              id: `outside-veh-${data.id}`,
+              registration_number: input.outside_vehicle_reg,
+              vehicle_type: input.outside_vehicle_type || input.required_cab_type || 'Vehicle',
+              status: 'Available',
+            };
+          }
+        }
+        (data as any).trip_category = input.trip_category || data.trip_category;
+        (data as any).placard_text = placardText;
+
         const trips: Trip[] = getStored('trips', initialTrips);
         setStored('trips', [data as Trip, ...trips.filter(t => t.id !== data.id)]);
         return data as Trip;
@@ -514,6 +578,54 @@ export const tripService = {
     return updated.find(t => t.id === tripId)!;
   },
 
+  async assignOutsideDriver(tripId: string, name: string, vehicleReg: string, phone?: string): Promise<Trip> {
+    const outsideTag = `[Outside Driver: ${name.trim()}${phone ? ` | Phone: ${phone.trim()}` : ''}${vehicleReg ? ` | Vehicle: ${vehicleReg.trim()}` : ''}]`;
+    
+    if (isSupabaseConfigured) {
+      const { data: current } = await supabase.from('trips').select('special_instructions').eq('id', tripId).maybeSingle();
+      const cleanNotes = (current?.special_instructions || '').replace(/\[Outside Driver:[^\]]+\]/gi, '').trim();
+      const combinedNotes = [outsideTag, cleanNotes].filter(Boolean).join(' ');
+
+      await supabase
+        .from('trips')
+        .update({
+          assigned_driver_id: null,
+          special_instructions: combinedNotes,
+          trip_status: 'Assigned',
+          is_published_for_enrollment: false,
+        })
+        .eq('id', tripId);
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => {
+      if (t.id === tripId) {
+        return {
+          ...t,
+          assigned_driver_id: undefined,
+          trip_status: 'Assigned' as TripStatus,
+          special_instructions: outsideTag,
+          driver: {
+            id: `outside-${t.id}`,
+            full_name: `${name} (Outside)`,
+            phone: phone || '',
+            employment_type: 'Outside Driver',
+            status: 'Active',
+          } as any,
+          vehicle: {
+            id: `outside-veh-${t.id}`,
+            registration_number: vehicleReg,
+            vehicle_type: 'Vehicle',
+            status: 'Available',
+          } as any,
+        };
+      }
+      return t;
+    });
+    setStored('trips', updated);
+    return updated.find(t => t.id === tripId)!;
+  },
+
   async publishForEnrollment(tripId: string): Promise<Trip> {
     const trips: Trip[] = getStored('trips', initialTrips);
     const updated = trips.map(t => {
@@ -536,6 +648,54 @@ export const tripService = {
         .eq('id', tripId);
     }
 
+    return updated.find(t => t.id === tripId)!;
+  },
+
+  async assignOutsideDriver(tripId: string, name: string, vehicleReg: string, phone?: string): Promise<Trip> {
+    const outsideTag = `[Outside Driver: ${name.trim()}${phone ? ` | Phone: ${phone.trim()}` : ''}${vehicleReg ? ` | Vehicle: ${vehicleReg.trim()}` : ''}]`;
+    
+    if (isSupabaseConfigured) {
+      const { data: current } = await supabase.from('trips').select('special_instructions').eq('id', tripId).maybeSingle();
+      const cleanNotes = (current?.special_instructions || '').replace(/\[Outside Driver:[^\]]+\]/gi, '').trim();
+      const combinedNotes = [outsideTag, cleanNotes].filter(Boolean).join(' ');
+
+      await supabase
+        .from('trips')
+        .update({
+          assigned_driver_id: null,
+          special_instructions: combinedNotes,
+          trip_status: 'Assigned',
+          is_published_for_enrollment: false,
+        })
+        .eq('id', tripId);
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => {
+      if (t.id === tripId) {
+        return {
+          ...t,
+          assigned_driver_id: undefined,
+          trip_status: 'Assigned' as TripStatus,
+          special_instructions: outsideTag,
+          driver: {
+            id: `outside-${t.id}`,
+            full_name: `${name} (Outside)`,
+            phone: phone || '',
+            employment_type: 'Outside Driver',
+            status: 'Active',
+          } as any,
+          vehicle: {
+            id: `outside-veh-${t.id}`,
+            registration_number: vehicleReg,
+            vehicle_type: 'Vehicle',
+            status: 'Available',
+          } as any,
+        };
+      }
+      return t;
+    });
+    setStored('trips', updated);
     return updated.find(t => t.id === tripId)!;
   },
 

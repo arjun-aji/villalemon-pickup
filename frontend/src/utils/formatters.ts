@@ -151,3 +151,82 @@ export const generatePlacardText = (customerName: string): string => {
   return `VILLALEMON PICKUP - ${customerName.trim().toUpperCase()}`;
 };
 
+export interface DriverDispatchMessageData {
+  tripNumber?: string;
+  tripCategory?: string;
+  tripDate?: string;
+  pickupTime?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  finalDropoff?: string;
+  guestNames?: string;
+  guestContact?: string;
+  totalPeople?: number;
+  flightNumberAndTime?: string;
+  airportTerminal?: string;
+  placardText?: string;
+  requiredCabType?: string;
+  vehicleReg?: string;
+  driverName?: string;
+  specialInstructions?: string;
+}
+
+/**
+ * Generates a clean, professional dispatch message for drivers via WhatsApp / SMS.
+ * Strictly DOES NOT mention price or client cost, per business rules.
+ * Placard is only included if it is an Airport pickup / airport service.
+ */
+export const generateDriverDispatchMessage = (data: DriverDispatchMessageData): string => {
+  const isAirport = (data.tripCategory || '').toLowerCase().includes('airport');
+  const cleanNotes = (data.specialInstructions || '')
+    .replace(/\[Outside Driver:[^\]]+\]/gi, '')
+    .trim();
+
+  let msg = `🚖 *VARKALA HOLIDAYS — TRIP DISPATCH*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🆔 *Trip ID:* ${data.tripNumber || 'New Trip'}\n`;
+  msg += `🏷️ *Service:* ${data.tripCategory || 'Transport'}\n`;
+  msg += `📅 *Date & Time:* ${formatDate(data.tripDate)}, ${formatTime(data.pickupTime)}\n\n`;
+
+  msg += `👤 *Guest Name:* ${data.guestNames || 'Guest'}\n`;
+  if (data.guestContact) {
+    msg += `📞 *Guest Contact:* ${data.guestContact}\n`;
+  }
+  msg += `👥 *Passengers:* ${data.totalPeople || 1} Pax\n\n`;
+
+  msg += `📍 *Pickup Point:* ${data.pickupLocation || 'Pickup'}\n`;
+  msg += `🏁 *Drop-off Point:* ${data.dropoffLocation || 'Destination'}\n`;
+  if (data.finalDropoff) {
+    msg += `🔄 *Final Drop-off:* ${data.finalDropoff}\n`;
+  }
+
+  if (isAirport) {
+    if (data.flightNumberAndTime) {
+      msg += `✈️ *Flight/Train:* ${data.flightNumberAndTime}${data.airportTerminal ? ` (${data.airportTerminal})` : ''}\n`;
+    }
+    if (data.placardText) {
+      msg += `🪧 *Airport Placard / Name Board:*\n👉 *${data.placardText.toUpperCase()}*\n`;
+    }
+  }
+
+  msg += `\n🚗 *Vehicle:* ${data.vehicleReg ? `${data.vehicleReg} (${data.requiredCabType || 'Cab'})` : (data.requiredCabType || 'Sedan')}\n`;
+  msg += `👨‍✈️ *Assigned Driver:* ${data.driverName || 'Driver'}\n`;
+
+  if (cleanNotes) {
+    msg += `\n📝 *Driver Notes:*\n${cleanNotes}\n`;
+  }
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `_Please confirm receipt and report duty start._`;
+
+  return msg;
+};
+
+export const formatWhatsAppShareUrl = (phone?: string, text?: string): string => {
+  const cleanDigits = (phone || '').replace(/[^0-9]/g, '');
+  const targetPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+  return targetPhone
+    ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(text || '')}`
+    : `https://wa.me/?text=${encodeURIComponent(text || '')}`;
+};
+

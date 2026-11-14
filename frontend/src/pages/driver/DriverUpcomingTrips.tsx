@@ -190,24 +190,26 @@ const DriverUpcomingTrips: React.FC = () => {
                 </div>
               </div>
 
-              {/* Placard Box */}
-              <div className="p-3 bg-navy-sidebar text-white rounded-xl flex items-center justify-between">
-                <div className="min-w-0 pr-2">
-                  <span className="text-[9px] uppercase tracking-wider text-green-primary font-bold block">
-                    Name Board / Placard
-                  </span>
-                  <p className="text-xs font-mono font-bold truncate">
-                    {trip.placard_text || `VARKALA HOLIDAYS - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`}
-                  </p>
+              {/* Placard Box (Only for Airport trips or when placard text is set) */}
+              {(trip.trip_category?.toLowerCase().includes('airport') || Boolean(trip.placard_text)) && (
+                <div className="p-3 bg-navy-sidebar text-white rounded-xl flex items-center justify-between">
+                  <div className="min-w-0 pr-2">
+                    <span className="text-[9px] uppercase tracking-wider text-green-primary font-bold block">
+                      Name Board / Placard
+                    </span>
+                    <p className="text-xs font-mono font-bold truncate">
+                      {trip.placard_text || `VARKALA HOLIDAYS - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCopyPlacard(trip)}
+                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1"
+                  >
+                    {copiedId === trip.id ? <Check className="h-3 w-3 text-green-primary" /> : <Copy className="h-3 w-3" />}
+                    <span>{copiedId === trip.id ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleCopyPlacard(trip)}
-                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1"
-                >
-                  {copiedId === trip.id ? <Check className="h-3 w-3 text-green-primary" /> : <Copy className="h-3 w-3" />}
-                  <span>{copiedId === trip.id ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-2 pt-1">

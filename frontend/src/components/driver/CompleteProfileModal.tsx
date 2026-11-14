@@ -331,3 +331,4 @@ const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({ isOpen, onC
 };
 
 export default CompleteProfileModal;
+

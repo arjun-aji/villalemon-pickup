@@ -34,7 +34,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import SearchInput from '../../components/ui/SearchInput';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { formatINR, formatDate, formatTime } from '../../utils/formatters';
+import { formatINR, formatDate, formatTime, generateDriverDispatchMessage } from '../../utils/formatters';
 
 const TripsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -60,7 +60,11 @@ const TripsPage: React.FC = () => {
 
   // Modals
   const [assignModalTrip, setAssignModalTrip] = useState<Trip | null>(null);
+  const [assignType, setAssignType] = useState<'fleet' | 'outside'>('fleet');
   const [selectedAssignDriverId, setSelectedAssignDriverId] = useState('');
+  const [assignOutsideName, setAssignOutsideName] = useState('');
+  const [assignOutsidePhone, setAssignOutsidePhone] = useState('');
+  const [assignOutsideVeh, setAssignOutsideVeh] = useState('');
   const [viewTrip, setViewTrip] = useState<Trip | null>(null);
   const [dispatchTrip, setDispatchTrip] = useState<Trip | null>(null);
   const [tripSheetTrip, setTripSheetTrip] = useState<Trip | null>(null);
@@ -101,10 +105,27 @@ const TripsPage: React.FC = () => {
   };
 
   const handleAssignDriver = async () => {
-    if (!assignModalTrip || !selectedAssignDriverId) return;
+    if (!assignModalTrip) return;
     try {
-      await tripService.assignDriver(assignModalTrip.id, selectedAssignDriverId);
+      if (assignType === 'outside') {
+        if (!assignOutsideName.trim() || !assignOutsideVeh.trim()) {
+          alert('Please enter outside driver name and vehicle registration number');
+          return;
+        }
+        await tripService.assignOutsideDriver(
+          assignModalTrip.id,
+          assignOutsideName.trim(),
+          assignOutsideVeh.trim(),
+          assignOutsidePhone.trim() || undefined
+        );
+      } else {
+        if (!selectedAssignDriverId) return;
+        await tripService.assignDriver(assignModalTrip.id, selectedAssignDriverId);
+      }
       setAssignModalTrip(null);
+      setAssignOutsideName('');
+      setAssignOutsidePhone('');
+      setAssignOutsideVeh('');
       loadData();
     } catch (e: any) {
       alert(e.message || 'Failed to assign driver');
@@ -127,51 +148,25 @@ const TripsPage: React.FC = () => {
   };
 
   const generateWhatsAppText = (t: Trip) => {
-    const tripNum = t.trip_number;
-    const dateStr = formatDate(t.trip_date || t.pickup_date || '');
-    const timeStr = formatTime(t.pickup_time || '');
-    const guest = t.guest_names || t.customer_name || 'Guest';
-    const phone = t.guest_contact_number || t.customer_phone || '-';
-    const pax = t.total_people || t.num_passengers || 1;
-    const cat = t.trip_category || 'Airport Pick-up';
-    const flight = t.flight_number_and_time || t.flight_number || '-';
-    const terminal = t.airport_terminal ? ` (${t.airport_terminal})` : '';
-    const pickup = t.pickup_location;
-    const drop = t.dropoff_location || t.destination;
-    const vehicle = t.vehicle ? `${t.vehicle.vehicle_type} (${t.vehicle.registration_number})` : (t.required_cab_type || 'Cab');
-    const driver = t.driver ? `${t.driver.full_name} (${t.driver.phone})` : 'Unassigned';
-    const collect = t.collection_rule === 'Do not collect'
-      ? 'DO NOT COLLECT (Office Billed)'
-      : `Collect ${formatINR(t.amount_driver_must_collect || t.amount_to_collect || 0)} from guest`;
-    const pay = formatINR(t.driver_trip_pay_override || t.driver_charge || 0);
-    const placard = t.placard_text || `VARKALA HOLIDAYS - ${guest.toUpperCase()}`;
-    const notes = t.special_instructions || t.trip_notes || 'None';
-
-    return `🚖 *VARKALA HOLIDAYS — TRIP DISPATCH* 🚖
-━━━━━━━━━━━━━━━━━━━━━
-📋 *Trip ID:* ${tripNum}
-📅 *Date & Time:* ${dateStr} at ${timeStr}
-🏷️ *Category:* ${cat}
-
-👤 *Guest Name:* ${guest}
-📞 *Guest Phone:* ${phone}
-👥 *Passengers:* ${pax} pax
-
-📍 *Pickup:* ${pickup}
-🏁 *Drop-off:* ${drop}
-✈️ *Flight/Train:* ${flight}${terminal}
-
-🚗 *Vehicle:* ${vehicle}
-👨‍✈️ *Driver:* ${driver}
-
-💰 *Collection Rule:* *${collect}*
-💵 *Driver Pay:* ${pay}
-🪧 *Airport Placard:* ${placard}
-
-📝 *Special Instructions:*
-${notes}
-━━━━━━━━━━━━━━━━━━━━━
-_Please confirm receipt and report duty start._`;
+    return generateDriverDispatchMessage({
+      tripNumber: t.trip_number,
+      tripCategory: t.trip_category,
+      tripDate: t.trip_date || t.pickup_date,
+      pickupTime: t.pickup_time,
+      pickupLocation: t.pickup_location,
+      dropoffLocation: t.dropoff_location || t.destination,
+      finalDropoff: t.final_dropoff,
+      guestNames: t.guest_names || t.customer_name,
+      guestContact: t.guest_contact_number || t.customer_phone,
+      totalPeople: t.total_people || t.num_passengers,
+      flightNumberAndTime: t.flight_number_and_time || t.flight_number,
+      airportTerminal: t.airport_terminal,
+      placardText: t.placard_text,
+      requiredCabType: t.required_cab_type,
+      vehicleReg: t.vehicle?.registration_number,
+      driverName: t.driver?.full_name,
+      specialInstructions: t.special_instructions || t.trip_notes,
+    });
   };
 
   const handleCopyDispatch = (t: Trip) => {
@@ -913,29 +908,87 @@ _Please confirm receipt and report duty start._`;
         >
           <div className="space-y-4">
             <div className="p-3 bg-gray-50 rounded-xl text-xs space-y-1">
-              <p><strong>Customer:</strong> {assignModalTrip.customer_name}</p>
-              <p><strong>Route:</strong> {assignModalTrip.pickup_location} → {assignModalTrip.destination}</p>
+              <p><strong>Customer:</strong> {assignModalTrip.customer_name || assignModalTrip.guest_names}</p>
+              <p><strong>Route:</strong> {assignModalTrip.pickup_location} → {assignModalTrip.dropoff_location || assignModalTrip.destination}</p>
               <p><strong>Date & Time:</strong> {formatDate(assignModalTrip.pickup_date || assignModalTrip.trip_date || '')} at {formatTime(assignModalTrip.pickup_time || '')}</p>
-              <p><strong>Driver Charge:</strong> {formatINR(assignModalTrip.driver_charge || assignModalTrip.driver_trip_pay_override || 0)}</p>
             </div>
 
-            <div>
-              <label className="label">Select Driver</label>
-              <select
-                value={selectedAssignDriverId}
-                onChange={e => setSelectedAssignDriverId(e.target.value)}
-                className="input-field"
+            {/* Assignment Mode Toggle */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setAssignType('fleet')}
+                className={`py-1.5 px-3 rounded-lg font-bold text-xs transition-all ${
+                  assignType === 'fleet' ? 'bg-navy-primary text-white shadow-sm' : 'text-slate-600'
+                }`}
               >
-                <option value="">-- Choose an active driver --</option>
-                {drivers
-                  .filter(d => d.employment_status === 'active')
-                  .map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.full_name} ({d.username}) • {d.vehicle_number || 'No Vehicle'}
-                    </option>
-                  ))}
-              </select>
+                Fleet Driver (Profile)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignType('outside')}
+                className={`py-1.5 px-3 rounded-lg font-bold text-xs transition-all ${
+                  assignType === 'outside' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600'
+                }`}
+              >
+                Outside Driver
+              </button>
             </div>
+
+            {assignType === 'fleet' ? (
+              <div>
+                <label className="label">Select Fleet Driver with Profile</label>
+                <select
+                  value={selectedAssignDriverId}
+                  onChange={e => setSelectedAssignDriverId(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">-- Choose an active driver --</option>
+                  {drivers
+                    .filter(d => d.employment_status === 'active' || d.status === 'Active')
+                    .map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.full_name} ({d.phone}) • {d.vehicle_number || 'No Vehicle'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-3 p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-800 mb-1">Outside Driver Name *</label>
+                  <input
+                    type="text"
+                    value={assignOutsideName}
+                    onChange={e => setAssignOutsideName(e.target.value)}
+                    placeholder="e.g. Ramesh External"
+                    className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-800 mb-1">Driver Phone</label>
+                    <input
+                      type="tel"
+                      value={assignOutsidePhone}
+                      onChange={e => setAssignOutsidePhone(e.target.value)}
+                      placeholder="e.g. 9847123456"
+                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-800 mb-1">Vehicle Reg No *</label>
+                    <input
+                      type="text"
+                      value={assignOutsideVeh}
+                      onChange={e => setAssignOutsideVeh(e.target.value.toUpperCase())}
+                      placeholder="e.g. KL 16 Q 7965"
+                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setAssignModalTrip(null)} className="btn-secondary text-xs">
@@ -943,7 +996,7 @@ _Please confirm receipt and report duty start._`;
               </button>
               <button
                 onClick={handleAssignDriver}
-                disabled={!selectedAssignDriverId}
+                disabled={assignType === 'fleet' ? !selectedAssignDriverId : (!assignOutsideName.trim() || !assignOutsideVeh.trim())}
                 className="btn-primary text-xs"
               >
                 Confirm Assignment

@@ -171,27 +171,29 @@ const DriverTripDetail: React.FC = () => {
           <span className="font-bold text-green-primary text-sm">{formatINR(trip.driver_charge || trip.driver_trip_pay_override || 0)}</span>
         </div>
 
-        {/* Placard / Name Board Box (Matches mockup) */}
-        <div className="pt-2">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-text-secondary">Placard / Name Board</span>
-            <button
-              onClick={handleCopyPlacard}
-              className="text-xs font-semibold text-green-primary hover:underline flex items-center gap-1"
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy Placard'}</span>
-            </button>
+        {/* Placard / Name Board Box (ONLY for Airport trips or if placard set) */}
+        {(trip.trip_category?.toLowerCase().includes('airport') || Boolean(trip.placard_text)) && (
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-text-secondary">Placard / Name Board</span>
+              <button
+                onClick={handleCopyPlacard}
+                className="text-xs font-semibold text-green-primary hover:underline flex items-center gap-1"
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copied ? 'Copied' : 'Copy Placard'}</span>
+              </button>
+            </div>
+            <div className="p-4 bg-navy-sidebar text-white rounded-2xl text-center border-2 border-dashed border-green-primary/50 shadow-inner">
+              <span className="text-[9px] uppercase tracking-widest text-green-primary font-extrabold block mb-1">
+                Display to Guest
+              </span>
+              <p className="text-base font-black tracking-widest font-mono text-white">
+                {placard}
+              </p>
+            </div>
           </div>
-          <div className="p-4 bg-navy-sidebar text-white rounded-2xl text-center border-2 border-dashed border-green-primary/50 shadow-inner">
-            <span className="text-[9px] uppercase tracking-widest text-green-primary font-extrabold block mb-1">
-              Display to Guest
-            </span>
-            <p className="text-base font-black tracking-widest font-mono text-white">
-              {placard}
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* Trip Instructions */}
         {trip.trip_notes && (
