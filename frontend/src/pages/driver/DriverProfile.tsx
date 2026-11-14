@@ -73,7 +73,7 @@ const DriverProfile: React.FC = () => {
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-green-primary to-green-secondary text-white font-black text-xl flex items-center justify-center shadow-md border-2 border-emerald-500">
                 {driver?.photo_url || profile?.avatar_url ? (
-                  <img src={driver.photo_url || profile?.avatar_url} alt="Driver" className="w-full h-full object-cover" />
+                  <img src={driver?.photo_url || profile?.avatar_url} alt="Driver" className="w-full h-full object-cover" />
                 ) : (
                   <span>{driver?.full_name?.charAt(0) || profile?.full_name?.charAt(0) || 'D'}</span>
                 )}

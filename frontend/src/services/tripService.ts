@@ -651,54 +651,6 @@ export const tripService = {
     return updated.find(t => t.id === tripId)!;
   },
 
-  async assignOutsideDriver(tripId: string, name: string, vehicleReg: string, phone?: string): Promise<Trip> {
-    const outsideTag = `[Outside Driver: ${name.trim()}${phone ? ` | Phone: ${phone.trim()}` : ''}${vehicleReg ? ` | Vehicle: ${vehicleReg.trim()}` : ''}]`;
-    
-    if (isSupabaseConfigured) {
-      const { data: current } = await supabase.from('trips').select('special_instructions').eq('id', tripId).maybeSingle();
-      const cleanNotes = (current?.special_instructions || '').replace(/\[Outside Driver:[^\]]+\]/gi, '').trim();
-      const combinedNotes = [outsideTag, cleanNotes].filter(Boolean).join(' ');
-
-      await supabase
-        .from('trips')
-        .update({
-          assigned_driver_id: null,
-          special_instructions: combinedNotes,
-          trip_status: 'Assigned',
-          is_published_for_enrollment: false,
-        })
-        .eq('id', tripId);
-    }
-
-    const trips: Trip[] = getStored('trips', initialTrips);
-    const updated = trips.map(t => {
-      if (t.id === tripId) {
-        return {
-          ...t,
-          assigned_driver_id: undefined,
-          trip_status: 'Assigned' as TripStatus,
-          special_instructions: outsideTag,
-          driver: {
-            id: `outside-${t.id}`,
-            full_name: `${name} (Outside)`,
-            phone: phone || '',
-            employment_type: 'Outside Driver',
-            status: 'Active',
-          } as any,
-          vehicle: {
-            id: `outside-veh-${t.id}`,
-            registration_number: vehicleReg,
-            vehicle_type: 'Vehicle',
-            status: 'Available',
-          } as any,
-        };
-      }
-      return t;
-    });
-    setStored('trips', updated);
-    return updated.find(t => t.id === tripId)!;
-  },
-
   async getDashboardStats(month?: number, year?: number): Promise<DashboardStats> {
     if (isSupabaseConfigured) {
       try {

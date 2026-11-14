@@ -13,6 +13,10 @@ import {
   FileText,
   DollarSign,
   TrendingUp,
+  PlusCircle,
+  X,
+  Send,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { driverLedgerService } from '../../services/adminOperationsService';
@@ -28,6 +32,14 @@ const DriverSettlements: React.FC = () => {
   const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
   const [completedTrips, setCompletedTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resolvedDriverId, setResolvedDriverId] = useState<string>('');
+
+  // Return Cash to Office Modal State
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnAmount, setReturnAmount] = useState<string>('');
+  const [returnMethod, setReturnMethod] = useState<'Cash' | 'UPI'>('Cash');
+  const [returnNotes, setReturnNotes] = useState('');
+  const [submittingReturn, setSubmittingReturn] = useState(false);
 
   const driverId = driver?.id || '';
 
@@ -60,6 +72,7 @@ const DriverSettlements: React.FC = () => {
       }
 
       if (effectiveDriverId) {
+        setResolvedDriverId(effectiveDriverId);
         await fetchDetails(effectiveDriverId);
       }
     } catch (e) {
@@ -82,6 +95,46 @@ const DriverSettlements: React.FC = () => {
       setCompletedTrips(trips.data || []);
     } catch (err) {
       console.error('Error fetching driver settlements:', err);
+    }
+  };
+
+  const handleOpenReturnModal = () => {
+    const cash = Number(driverBalance?.cash_owed_to_office) || 0;
+    setReturnAmount(cash > 0 ? String(cash) : '');
+    setReturnMethod('Cash');
+    setReturnNotes('');
+    setShowReturnModal(true);
+  };
+
+  const handleSubmitCashReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resolvedDriverId) {
+      alert('Driver account not resolved');
+      return;
+    }
+    const val = Number(returnAmount);
+    if (!val || val <= 0) {
+      alert('Please enter a valid amount greater than 0');
+      return;
+    }
+
+    try {
+      setSubmittingReturn(true);
+      await driverLedgerService.createEntry({
+        entry_date: new Date().toISOString().split('T')[0],
+        driver_id: resolvedDriverId,
+        entry_type: 'Cash handed to office',
+        amount: val,
+        notes: `[Pending Admin Confirmation] ${returnNotes ? returnNotes + ' ' : ''}(${returnMethod})`,
+      });
+      setShowReturnModal(false);
+      await fetchDetails(resolvedDriverId);
+      alert('Cash return recorded successfully! Admin will confirm receipt.');
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error recording cash return');
+    } finally {
+      setSubmittingReturn(false);
     }
   };
 
@@ -172,6 +225,15 @@ const DriverSettlements: React.FC = () => {
             </div>
           </div>
 
+          {/* Quick Action: Record Cash Returned to Office */}
+          <button
+            onClick={handleOpenReturnModal}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Record Cash Returned to Office</span>
+          </button>
+
           {/* Quick Action: Completed Trips on Record */}
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -225,23 +287,42 @@ const DriverSettlements: React.FC = () => {
               <div className="divide-y divide-slate-100">
                 {ledgerEntries.map(entry => {
                   const isPositive = ['Salary due', 'Payment made'].includes(entry.entry_type);
+                  const isPending = entry.notes?.includes('[Pending Admin Confirmation]');
+                  const isConfirmed = entry.notes?.includes('[Confirmed by Admin');
+                  const cleanNotes = (entry.notes || '')
+                    .replace(/\[Pending Admin Confirmation\]/gi, '')
+                    .replace(/\[Confirmed by Admin[^\]]*\]/gi, '')
+                    .trim();
+
                   return (
-                    <div key={entry.id} className="py-2.5 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-1.5">
+                    <div key={entry.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-slate-800">{entry.entry_type}</span>
                           {entry.trip?.trip_number && (
                             <span className="font-mono text-[10px] text-blue-600 bg-blue-50 px-1 rounded">
                               {entry.trip.trip_number}
                             </span>
                           )}
+                          {isPending && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <Clock className="w-2.5 h-2.5" />
+                              Pending Confirmation
+                            </span>
+                          )}
+                          {isConfirmed && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              Confirmed
+                            </span>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-400">
-                          {formatDate(entry.entry_date)} {entry.notes && `• ${entry.notes}`}
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {formatDate(entry.entry_date)} {cleanNotes && `• ${cleanNotes}`}
                         </p>
                       </div>
                       <span
-                        className={`font-mono font-bold ${
+                        className={`font-mono font-bold shrink-0 ${
                           isPositive ? 'text-emerald-600' : 'text-slate-900'
                         }`}
                       >
@@ -254,6 +335,99 @@ const DriverSettlements: React.FC = () => {
             )}
           </div>
         </>
+      )}
+
+      {/* Record Cash Return Modal */}
+      {showReturnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100">
+            <div className="p-4 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-amber-200" />
+                <h3 className="font-bold text-sm">Record Cash Returned to Office</h3>
+              </div>
+              <button
+                onClick={() => setShowReturnModal(false)}
+                className="p-1 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitCashReturn} className="p-4 space-y-4">
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-semibold text-slate-600">Current Cash Held:</span>
+                  <span className="font-mono font-bold text-amber-700">{formatINR(cashHeld)}</span>
+                </div>
+                <p className="text-[11px] text-amber-700">
+                  Enter the exact amount you handed over to the office. Admin will verify and confirm.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Amount Handed Over / Returned (₹) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="1"
+                  value={returnAmount}
+                  onChange={e => setReturnAmount(e.target.value)}
+                  placeholder="e.g. 1900"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-base text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Payment Mode *
+                </label>
+                <select
+                  value={returnMethod}
+                  onChange={e => setReturnMethod(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  <option value="Cash">Cash Handover</option>
+                  <option value="UPI">UPI Transfer</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Handover Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={returnNotes}
+                  onChange={e => setReturnNotes(e.target.value)}
+                  placeholder="e.g. Handed to manager at reception"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReturnModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingReturn}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {submittingReturn && <LoadingSpinner size="sm" />}
+                  <span>Submit Return</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

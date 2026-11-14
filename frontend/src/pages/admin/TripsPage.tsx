@@ -888,7 +888,7 @@ const TripsPage: React.FC = () => {
                               <div>
                                 <span className="font-bold text-text-primary text-xs">{trip.driver.full_name}</span>
                                 <p className="text-[11px] text-text-secondary font-mono">{trip.driver.phone || ''}</p>
-                                {trip.driver.employment_type === 'Outside Driver' && (
+                                {(trip.driver.employment_type as string) === 'Outside Driver' && (
                                   <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800">
                                     Outside Driver
                                   </span>

@@ -343,6 +343,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      const driverEmail = authUser?.email || emailsToTry[0] || `${cleanUsername}@villalemon.pickup`;
+
       // Extract metadata from payment_arrangement_notes or driver record
       const notesStr = driverData?.payment_arrangement_notes || '';
       const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_]+)/i);

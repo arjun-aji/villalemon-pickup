@@ -31,9 +31,10 @@ import KPICard from '../../components/ui/KPICard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { tripService } from '../../services/tripService';
+import { driverLedgerService } from '../../services/adminOperationsService';
 import { excelExportService } from '../../services/excelExportService';
 import { formatINR, formatDate, formatTime } from '../../utils/formatters';
-import { Trip, DashboardStats } from '../../types';
+import { Trip, DashboardStats, DriverLedgerEntry } from '../../types';
 
 // Helper to sort trips: Upcoming first (with latest upcoming trip first), and Completed after upcoming
 const sortDashboardTrips = (trips: Trip[]): Trip[] => {
@@ -78,6 +79,8 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
+  const [pendingReturns, setPendingReturns] = useState<DriverLedgerEntry[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
@@ -88,11 +91,13 @@ const AdminDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, allTrips] = await Promise.all([
+      const [statsData, allTrips, pendingLedger] = await Promise.all([
         tripService.getDashboardStats(),
         tripService.getAll(),
+        driverLedgerService.getPendingReturns(),
       ]);
       setStats(statsData);
+      setPendingReturns(pendingLedger);
 
       // Order trips: Latest upcoming trip first, completed after upcoming
       const sorted = sortDashboardTrips(allTrips);
@@ -101,6 +106,18 @@ const AdminDashboard: React.FC = () => {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmReturn = async (entryId: string) => {
+    try {
+      setConfirmingId(entryId);
+      await driverLedgerService.confirmEntry(entryId);
+      await loadDashboardData();
+    } catch (err: any) {
+      alert(err.message || 'Error confirming cash receipt');
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -159,6 +176,57 @@ const AdminDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Pending Driver Cash Return Confirmation Banner */}
+      {pendingReturns.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-300 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
+              <CircleDollarSign className="w-4 h-4 text-amber-600" />
+              <span>Pending Driver Cash Returns to Confirm ({pendingReturns.length})</span>
+            </div>
+            <Link
+              to="/admin/driver-ledger"
+              className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1 underline underline-offset-2"
+            >
+              <span>View All in Ledger</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingReturns.map(ent => (
+              <div
+                key={ent.id}
+                className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-xs flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                    <span className="truncate">{ent.driver?.full_name || 'Driver'}</span>
+                    <span className="text-amber-700 font-mono font-black">{formatINR(ent.amount)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[200px] mt-0.5">
+                    {ent.notes?.replace(/\[Pending Admin Confirmation\]/gi, '').trim() || ent.entry_type}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleConfirmReturn(ent.id)}
+                  disabled={confirmingId === ent.id}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs flex items-center gap-1.5 shrink-0 transition-all active:scale-95 disabled:opacity-50"
+                  title="Confirm receipt of returned cash"
+                >
+                  {confirmingId === ent.id ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>Confirm Received</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Critical Operational Alerts Banner */}
       {((stats?.vehicle_alerts_count ?? 0) > 0 || (stats?.over_limit_count ?? 0) > 0 || (stats?.pending_approval_trips ?? 0) > 0) && (

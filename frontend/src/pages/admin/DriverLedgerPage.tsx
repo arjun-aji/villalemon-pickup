@@ -50,6 +50,8 @@ const DriverLedgerPage: React.FC = () => {
     notes: '',
   });
 
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
   useEffect(() => {
     loadData();
   }, [selectedDriverId]);
@@ -73,6 +75,18 @@ const DriverLedgerPage: React.FC = () => {
       console.error('Error loading driver ledger:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirm = async (entryId: string) => {
+    try {
+      setConfirmingId(entryId);
+      await driverLedgerService.confirmEntry(entryId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error confirming cash return');
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -111,11 +125,13 @@ const DriverLedgerPage: React.FC = () => {
   };
 
   // Find balances for active selected driver or aggregate
-  const currentDriverBalance = balances.find(b => b.id === selectedDriverId);
+  const currentDriverBalance = balances.find(b => (b.driver_id || b.id) === selectedDriverId);
 
   const totalPayableAll = balances.reduce((sum, b) => sum + (b.balance_payable_to_driver || 0), 0);
   const totalCashHeldAll = balances.reduce((sum, b) => sum + (b.cash_owed_to_office || 0), 0);
   const netSettlementAll = totalPayableAll - totalCashHeldAll;
+
+  const pendingConfirmations = entries.filter(e => e.notes?.includes('[Pending Admin Confirmation]'));
 
   return (
     <div className="space-y-6">
@@ -211,6 +227,48 @@ const DriverLedgerPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Pending Cash Returns Alert Banner */}
+      {pendingConfirmations.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span>Pending Cash Returns Awaiting Confirmation ({pendingConfirmations.length})</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {pendingConfirmations.map(ent => (
+              <div
+                key={ent.id}
+                className="bg-white p-3 rounded-lg border border-amber-200/80 shadow-xs flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                    <span>{ent.driver?.full_name || 'Driver'}</span>
+                    <span className="text-amber-700 font-mono font-black">{formatINR(ent.amount)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[180px]">
+                    {ent.notes?.replace(/\[Pending Admin Confirmation\]/gi, '').trim() || ent.entry_type}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleConfirm(ent.id)}
+                  disabled={confirmingId === ent.id}
+                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs flex items-center gap-1 shrink-0 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {confirmingId === ent.id ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>Confirm</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Ledger Entries Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -240,6 +298,7 @@ const DriverLedgerPage: React.FC = () => {
                   <th className="py-3 px-4 text-center">Ledger 1 (Pay)</th>
                   <th className="py-3 px-4 text-center">Ledger 2 (Cash)</th>
                   <th className="py-3 px-4 text-right">Amount</th>
+                  <th className="py-3 px-4 text-center">Status / Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -288,6 +347,32 @@ const DriverLedgerPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
                         {formatINR(ent.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {ent.notes?.includes('[Pending Admin Confirmation]') ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                              Pending
+                            </span>
+                            <button
+                              onClick={() => handleConfirm(ent.id)}
+                              disabled={confirmingId === ent.id}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[10px] shadow-xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                              title="Confirm cash received from driver"
+                            >
+                              {confirmingId === ent.id ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-3 h-3" />}
+                              <span>Confirm</span>
+                            </button>
+                          </div>
+                        ) : ent.notes?.includes('[Confirmed by Admin') ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            Confirmed
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">Logged</span>
+                        )}
                       </td>
                     </tr>
                   );

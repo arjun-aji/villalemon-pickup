@@ -12,6 +12,8 @@ export interface SubmitDriverReportInput {
   workshop_expense: number;
   workshop_details?: string;
   receipt_photo_url?: string;
+  cash_returned_to_office?: number;
+  cash_return_method?: string;
 }
 
 export const driverReportService = {
@@ -63,6 +65,25 @@ export const driverReportService = {
           updated_at: new Date().toISOString(),
         })
         .eq('id', input.trip_id);
+
+      // 3. If driver returned cash to office, log it in driver_ledger with Pending Admin Confirmation
+      if (input.cash_returned_to_office && Number(input.cash_returned_to_office) > 0) {
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('trip_number')
+          .eq('id', input.trip_id)
+          .maybeSingle();
+
+        const tripNum = tripData?.trip_number || 'trip';
+        await supabase.from('driver_ledger').insert({
+          entry_date: new Date().toISOString().split('T')[0],
+          driver_id: input.driver_id,
+          trip_id: input.trip_id,
+          entry_type: 'Cash handed to office',
+          amount: Number(input.cash_returned_to_office),
+          notes: `[Pending Admin Confirmation] Returned from ${tripNum} (${input.cash_return_method || 'Cash'})`,
+        });
+      }
 
       return data as DriverReport;
     }

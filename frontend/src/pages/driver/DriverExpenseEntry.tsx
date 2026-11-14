@@ -44,6 +44,12 @@ const DriverExpenseEntry: React.FC = () => {
   const [receiptPhotoUrl, setReceiptPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // Cash Handover / Return Section
+  const [hasReturnedCash, setHasReturnedCash] = useState(true);
+  const [returnedAmount, setReturnedAmount] = useState<number>(0);
+  const [returnPaymentMethod, setReturnPaymentMethod] = useState<'Cash' | 'UPI'>('Cash');
+  const [isAmountManuallyEdited, setIsAmountManuallyEdited] = useState(false);
+
   useEffect(() => {
     if (tripId) {
       loadTripAndReport(tripId);
@@ -102,6 +108,12 @@ const DriverExpenseEntry: React.FC = () => {
   const totalDriverExpenses = Number(dieselExpense) + Number(tollParkingExpense) + Number(workshopExpense);
   const netCashToHandOver = amountCollected - totalDriverExpenses;
 
+  useEffect(() => {
+    if (!isAmountManuallyEdited) {
+      setReturnedAmount(Math.max(0, netCashToHandOver));
+    }
+  }, [netCashToHandOver, isAmountManuallyEdited]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trip) return;
@@ -119,6 +131,8 @@ const DriverExpenseEntry: React.FC = () => {
         workshop_expense: Number(workshopExpense) || 0,
         workshop_details: workshopDetails || undefined,
         receipt_photo_url: receiptPhotoUrl || undefined,
+        cash_returned_to_office: hasReturnedCash ? Number(returnedAmount) : 0,
+        cash_return_method: returnPaymentMethod,
       });
 
       setSavedSuccess(true);
@@ -361,19 +375,87 @@ const DriverExpenseEntry: React.FC = () => {
             Trip Cash Reconciliation
           </p>
           <div className="flex justify-between">
-            <span className="text-slate-300">Amount Collected:</span>
+            <span className="text-slate-300">Amount Collected from Guest:</span>
             <span className="font-bold font-mono">{formatINR(amountCollected)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-300">Total Driver Expenses:</span>
+            <span className="text-slate-300">Total Driver Expenses (Fuel/Tolls):</span>
             <span className="font-bold text-amber-300 font-mono">− {formatINR(totalDriverExpenses)}</span>
           </div>
           <div className="pt-2 border-t border-slate-700 flex justify-between items-center text-sm font-bold">
-            <span>Net Cash Handover to Office:</span>
+            <div>
+              <span className="block">Amount to Return to Office:</span>
+              <span className="text-[10px] font-normal text-slate-300">Automatically calculated</span>
+            </div>
             <span className="text-emerald-400 font-black font-mono text-base">
               {formatINR(netCashToHandOver)}
             </span>
           </div>
+        </div>
+
+        {/* Section 4: Cash Returned by Driver */}
+        <div className="card p-4 bg-white border border-slate-200 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Cash Handover to Office</span>
+            </h2>
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={hasReturnedCash}
+                onChange={e => setHasReturnedCash(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+              />
+              <span>I have handed over money</span>
+            </label>
+          </div>
+
+          {hasReturnedCash && (
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Amount Handed Over (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={returnedAmount || ''}
+                    onChange={e => {
+                      setIsAmountManuallyEdited(true);
+                      setReturnedAmount(parseFloat(e.target.value) || 0);
+                    }}
+                    placeholder="0"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-sm bg-emerald-50/50 text-emerald-900 border-emerald-200 focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Editable if partial amount returned</p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Return Mode
+                  </label>
+                  <select
+                    value={returnPaymentMethod}
+                    onChange={e => setReturnPaymentMethod(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  >
+                    <option value="Cash">Cash Handover</option>
+                    <option value="UPI">UPI Transfer</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2 text-[11px] text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  This returned fund will be submitted with <strong>Pending Admin Confirmation</strong>. Once admin verifies, it updates your ledger balance.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Button */}

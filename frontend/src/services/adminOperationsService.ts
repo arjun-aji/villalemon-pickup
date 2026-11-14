@@ -203,6 +203,44 @@ export const driverLedgerService = {
     throw new Error('Supabase not configured');
   },
 
+  async getPendingReturns(): Promise<DriverLedgerEntry[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('driver_ledger')
+        .select(`
+          *,
+          driver:drivers(id, full_name, phone),
+          trip:trips(id, trip_number, guest_names)
+        `)
+        .ilike('notes', '%Pending Admin Confirmation%')
+        .order('entry_date', { ascending: false });
+      if (error) throw error;
+      return (data as DriverLedgerEntry[]) || [];
+    }
+    return [];
+  },
+
+  async confirmEntry(entryId: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: current } = await supabase
+        .from('driver_ledger')
+        .select('notes')
+        .eq('id', entryId)
+        .single();
+
+      const rawNotes = current?.notes || '';
+      const cleanNotes = rawNotes.replace(/\[Pending Admin Confirmation\]/gi, '').trim();
+      const updatedNotes = `[Confirmed by Admin ${new Date().toLocaleDateString('en-IN')}] ${cleanNotes}`.trim();
+
+      const { error } = await supabase
+        .from('driver_ledger')
+        .update({ notes: updatedNotes })
+        .eq('id', entryId);
+
+      if (error) throw error;
+    }
+  },
+
   async getDriverBalances(): Promise<any[]> {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
