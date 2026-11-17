@@ -120,7 +120,8 @@ const DriverExpenseEntry: React.FC = () => {
 
   const expectedCollection = Number(trip?.amount_driver_must_collect || trip?.amount_to_collect || 0);
   const collectionDifference = amountCollected - expectedCollection;
-  const totalDriverExpenses = Number(dieselExpense) + Number(tollParkingExpense) + Number(workshopExpense);
+  const otherExpenses = Number(tollParkingExpense) + Number(workshopExpense);
+  const totalDriverExpenses = Number(dieselExpense) + otherExpenses;
   const driverPay = Number(
     trip?.driver_trip_pay_override ??
     trip?.driver_charge ??
@@ -128,13 +129,22 @@ const DriverExpenseEntry: React.FC = () => {
     (driver?.employment_type === 'Per-trip payment' ? (driver?.per_trip_payment || 500) : 0) ??
     0
   );
-  const netCashToHandOver = Math.max(0, amountCollected - totalDriverExpenses - driverPay);
+
+  // Exact unified formula requested:
+  // Return = (Amount Collected + Prior Cash Held in Ledger) - Petrol - Driver Pay - Other Expenses
+  const netReturnBalance = (Number(amountCollected) + Number(priorCashHeld)) - Number(dieselExpense) - driverPay - otherExpenses;
 
   useEffect(() => {
     if (!isAmountManuallyEdited) {
-      setReturnedAmount(Math.max(0, netCashToHandOver));
+      if (netReturnBalance > 0) {
+        setReturnedAmount(netReturnBalance);
+        setHasReturnedCash(true);
+      } else {
+        setReturnedAmount(0);
+        setHasReturnedCash(false);
+      }
     }
-  }, [netCashToHandOver, isAmountManuallyEdited]);
+  }, [netReturnBalance, isAmountManuallyEdited]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,6 +152,9 @@ const DriverExpenseEntry: React.FC = () => {
 
     try {
       setSaving(true);
+      const availableCashForSalary = Math.max(0, (Number(amountCollected) + Number(priorCashHeld)) - totalDriverExpenses);
+      const cashSalaryRetained = Math.max(0, Math.min(driverPay, availableCashForSalary));
+
       await driverReportService.submitReport({
         trip_id: trip.id,
         driver_id: trip.assigned_driver_id || driver?.id || '',
@@ -153,9 +166,9 @@ const DriverExpenseEntry: React.FC = () => {
         workshop_expense: Number(workshopExpense) || 0,
         workshop_details: workshopDetails || undefined,
         receipt_photo_url: receiptPhotoUrl || undefined,
-        cash_returned_to_office: hasReturnedCash ? Number(returnedAmount) : 0,
+        cash_returned_to_office: (hasReturnedCash && Number(returnedAmount) > 0) ? Number(returnedAmount) : 0,
         cash_return_method: returnPaymentMethod,
-        driver_salary_deducted: driverPay > 0 ? driverPay : undefined,
+        driver_salary_deducted: cashSalaryRetained > 0 ? cashSalaryRetained : undefined,
       });
 
       setSavedSuccess(true);
@@ -392,59 +405,73 @@ const DriverExpenseEntry: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 3: Live Cash Reconciliation Summary */}
-        <div className="card p-4 bg-gradient-to-br from-[#0F1E36] to-[#1E3A8A] text-white shadow-md space-y-2 text-xs">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
-            Trip Cash Reconciliation & Driver Cash Held
-          </p>
-          <div className="flex justify-between">
-            <span className="text-slate-300">Amount Collected from Guest:</span>
-            <span className="font-bold font-mono">{formatINR(amountCollected)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-300">Total Driver Expenses (Fuel/Tolls):</span>
-            <span className="font-bold text-amber-300 font-mono">− {formatINR(totalDriverExpenses)}</span>
-          </div>
-          {driverPay > 0 && (
-            <div className="flex justify-between items-center text-emerald-300">
-              <span className="text-slate-300">Driver Salary / Trip Pay (Retained by you):</span>
-              <span className="font-bold font-mono">− {formatINR(driverPay)}</span>
-            </div>
-          )}
-          <div className="pt-2 border-t border-slate-700/80 flex justify-between items-center">
-            <div>
-              <span className="text-slate-300 block">Net to Return from This Trip:</span>
-              <span className="text-[10px] text-slate-400">
-                {driverPay > 0 ? `₹${amountCollected} collected − ₹${totalDriverExpenses} exp − ₹${driverPay} salary` : 'Collected − Expenses'}
-              </span>
-            </div>
-            <span className="text-emerald-400 font-black font-mono text-sm">
-              {formatINR(netCashToHandOver)}
+        {/* Section 3: Live Cash Reconciliation Summary (Formula Breakdown) */}
+        <div className="card p-4 bg-gradient-to-br from-[#0F1E36] to-[#1E3A8A] text-white shadow-md space-y-2.5 text-xs">
+          <div className="flex items-center justify-between pb-1 border-b border-white/10">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
+              Trip Cash Reconciliation & Return Formula
+            </p>
+            <span className="text-[10px] text-slate-300 font-mono">
+              Return = (Collected + Held) − Petrol − Pay − Other
             </span>
           </div>
 
-          {/* Prior Cash Held in Driver's Ledger */}
-          <div className="pt-2 border-t border-slate-700/80 flex justify-between items-center">
-            <div>
-              <span className="text-amber-200 font-semibold block">Prior Cash Held in Ledger:</span>
-              <span className="text-[10px] text-slate-400">Past unhanded guest collections & cash advances</span>
+          <div className="space-y-1.5 pt-1">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-300">1. Amount Collected from Guest:</span>
+              <span className="font-bold font-mono text-sm text-white">{formatINR(amountCollected)}</span>
             </div>
-            <span className="text-amber-300 font-bold font-mono text-sm">
-              +{formatINR(priorCashHeld)}
+            <div className="flex justify-between items-center text-amber-200">
+              <span className="text-slate-300">2. Prior Cash Held in Ledger:</span>
+              <span className="font-bold font-mono text-sm">+{formatINR(priorCashHeld)}</span>
+            </div>
+            <div className="flex justify-between items-center text-amber-300">
+              <span className="text-slate-300">3. Petrol / Diesel Filled:</span>
+              <span className="font-bold font-mono text-sm">− {formatINR(dieselExpense)}</span>
+            </div>
+            {driverPay > 0 && (
+              <div className="flex justify-between items-center text-emerald-300">
+                <span className="text-slate-300">4. Driver Salary / Pay (Retained by you):</span>
+                <span className="font-bold font-mono text-sm">− {formatINR(driverPay)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center text-amber-300">
+              <span className="text-slate-300">5. Other Expenses (Toll, Food, Workshop):</span>
+              <span className="font-bold font-mono text-sm">− {formatINR(otherExpenses)}</span>
+            </div>
+          </div>
+
+          {/* Formula line */}
+          <div className="pt-2 border-t border-white/10 text-[11px] font-mono text-slate-300 flex flex-wrap items-center justify-between gap-1">
+            <span>Calculation:</span>
+            <span>
+              ₹{amountCollected} + ₹{priorCashHeld} − ₹{dieselExpense} − ₹{driverPay} − ₹{otherExpenses}
             </span>
           </div>
 
-          {/* Total Cash in Driver's Hands */}
-          <div className="pt-2 border-t border-amber-400/30 flex justify-between items-center text-sm font-bold bg-white/5 p-2 rounded-xl">
-            <div>
-              <span className="text-white block font-black">TOTAL CASH CURRENTLY HELD:</span>
-              <span className="text-[10px] font-normal text-amber-300">
-                Prior ledger cash ({formatINR(priorCashHeld)}) + this trip net ({formatINR(netCashToHandOver)})
+          {/* Final Return Balance Banner */}
+          <div className={`p-3 rounded-xl border mt-2 ${
+            netReturnBalance >= 0
+              ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+              : 'bg-rose-500/15 border-rose-400/40 text-rose-200'
+          }`}>
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="block font-bold text-xs uppercase tracking-wider text-white">
+                  {netReturnBalance >= 0 ? 'Amount to Return to Office:' : 'Office Must Pay Driver:'}
+                </span>
+                <span className="text-[10px] text-slate-300">
+                  {netReturnBalance >= 0
+                    ? 'Total cash to be handed back to office'
+                    : 'You spent more than held + collected (Reimbursement due to you)'}
+                </span>
+              </div>
+              <span className={`font-black font-mono text-xl ${
+                netReturnBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {netReturnBalance >= 0 ? formatINR(netReturnBalance) : `-₹${Math.abs(netReturnBalance).toLocaleString('en-IN')}`}
               </span>
             </div>
-            <span className="text-amber-400 font-black font-mono text-lg">
-              {formatINR(priorCashHeld + netCashToHandOver)}
-            </span>
           </div>
         </div>
 
@@ -455,18 +482,30 @@ const DriverExpenseEntry: React.FC = () => {
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Cash Handover to Office</span>
             </h2>
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={hasReturnedCash}
-                onChange={e => setHasReturnedCash(e.target.checked)}
-                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-              />
-              <span>I am handing over money now</span>
-            </label>
+            {netReturnBalance > 0 && (
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={hasReturnedCash}
+                  onChange={e => setHasReturnedCash(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>I am handing over money now</span>
+              </label>
+            )}
           </div>
 
-          {hasReturnedCash && (
+          {netReturnBalance <= 0 ? (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1 text-xs text-blue-900">
+              <p className="font-bold flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>No Cash Handover Required</span>
+              </p>
+              <p className="text-[11px] text-blue-700">
+                Expenses and pay exceeded your cash in hand. The office owes you <strong>{formatINR(Math.abs(netReturnBalance))}</strong> as direct reimbursement.
+              </p>
+            </div>
+          ) : hasReturnedCash ? (
             <div className="space-y-3 pt-2 border-t border-slate-100">
               {/* Quick Preset Buttons */}
               <div className="flex flex-wrap gap-2 text-xs">
@@ -474,22 +513,24 @@ const DriverExpenseEntry: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsAmountManuallyEdited(true);
-                    setReturnedAmount(priorCashHeld + netCashToHandOver);
+                    setReturnedAmount(netReturnBalance);
                   }}
                   className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-100 transition-colors"
                 >
-                  Return Total Pending ({formatINR(priorCashHeld + netCashToHandOver)})
+                  Return Full Due ({formatINR(netReturnBalance)})
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAmountManuallyEdited(true);
-                    setReturnedAmount(netCashToHandOver);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-300 text-blue-800 font-bold hover:bg-blue-100 transition-colors"
-                >
-                  Return This Trip Only ({formatINR(netCashToHandOver)})
-                </button>
+                {Math.max(0, amountCollected - totalDriverExpenses - driverPay) > 0 && Math.max(0, amountCollected - totalDriverExpenses - driverPay) !== netReturnBalance && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAmountManuallyEdited(true);
+                      setReturnedAmount(Math.max(0, amountCollected - totalDriverExpenses - driverPay));
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-300 text-blue-800 font-bold hover:bg-blue-100 transition-colors"
+                  >
+                    Return This Duty Only ({formatINR(Math.max(0, amountCollected - totalDriverExpenses - driverPay))})
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
@@ -527,17 +568,30 @@ const DriverExpenseEntry: React.FC = () => {
               </div>
 
               {/* Remaining Cash Held Status */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-semibold text-slate-700 block">Remaining Cash Stays With You:</span>
-                  <span className="text-[10px] text-slate-500">Tracked in your ledger balance</span>
-                </div>
-                <span className={`font-mono font-black text-sm ${
-                  Math.max(0, priorCashHeld + netCashToHandOver - returnedAmount) > 0 ? 'text-amber-700' : 'text-emerald-700'
-                }`}>
-                  {formatINR(Math.max(0, priorCashHeld + netCashToHandOver - returnedAmount))}
-                </span>
-              </div>
+              {(() => {
+                const remainingHeld = Math.max(0, netReturnBalance - returnedAmount);
+                return (
+                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                    remainingHeld > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
+                  }`}>
+                    <div>
+                      <span className="font-semibold text-slate-800 block">
+                        {remainingHeld > 0 ? 'Remaining Cash Stays With You:' : 'Ledger Held Balance After Confirmation:'}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {remainingHeld > 0
+                          ? 'This ₹' + remainingHeld.toLocaleString('en-IN') + ' will appear as Prior Cash Held on your next ride'
+                          : 'Your held cash balance will become ₹0'}
+                      </span>
+                    </div>
+                    <span className={`font-mono font-black text-sm ${
+                      remainingHeld > 0 ? 'text-amber-800' : 'text-emerald-700'
+                    }`}>
+                      {formatINR(remainingHeld)}
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2 text-[11px] text-amber-800">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -545,6 +599,10 @@ const DriverExpenseEntry: React.FC = () => {
                   This returned fund will be submitted with <strong>Pending Admin Confirmation</strong>. Once admin verifies, it updates your ledger balance.
                 </span>
               </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+              <p>You have chosen to retain this cash for now. The entire <strong>{formatINR(netReturnBalance)}</strong> will remain recorded as cash held in your ledger for upcoming duties.</p>
             </div>
           )}
         </div>

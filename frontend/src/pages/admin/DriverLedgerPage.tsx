@@ -169,6 +169,15 @@ const DriverLedgerPage: React.FC = () => {
             ))}
           </select>
         </div>
+
+        {selectedDriverId !== 'all' && (
+          <button
+            onClick={() => setSelectedDriverId('all')}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            ← View All Drivers Overview
+          </button>
+        )}
       </div>
 
       {/* Dual Balances Highlights Banner */}
@@ -177,7 +186,7 @@ const DriverLedgerPage: React.FC = () => {
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
-              1. Balance Payable to Driver
+              1. Balance Payable to {selectedDriverId === 'all' ? 'All Drivers' : 'Driver'}
             </span>
             <Wallet className="w-4 h-4 text-blue-600" />
           </div>
@@ -193,7 +202,7 @@ const DriverLedgerPage: React.FC = () => {
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
-              2. Cash Held by Driver
+              2. Cash Held by {selectedDriverId === 'all' ? 'All Drivers' : 'Driver'}
             </span>
             <DollarSign className="w-4 h-4 text-amber-600" />
           </div>
@@ -208,7 +217,7 @@ const DriverLedgerPage: React.FC = () => {
         {/* Final Net Settlement */}
         <div className="bg-gradient-to-br from-[#0F1E36] to-[#1E3A8A] text-white p-5 rounded-xl shadow-md">
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 block mb-1">
-            Net Settlement Position
+            Net Settlement Position {selectedDriverId === 'all' ? '(Combined)' : ''}
           </span>
           {(() => {
             const net = selectedDriverId === 'all' ? netSettlementAll : (currentDriverBalance?.net_settlement_amount || 0);
@@ -219,11 +228,92 @@ const DriverLedgerPage: React.FC = () => {
                   {formatINR(Math.abs(net))}
                 </p>
                 <p className="text-xs text-blue-200 mt-1">
-                  {officeOwes ? 'Office must pay driver' : 'Driver must hand over cash to office'}
+                  {officeOwes ? 'Office must pay driver(s)' : 'Driver(s) must hand over cash to office'}
                 </p>
               </div>
             );
           })()}
+        </div>
+      </div>
+
+      {/* Driver Ledger Roster Breakdown Table */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Individual Drivers Balances Roster</h2>
+            <p className="text-[11px] text-slate-500">Live dual-ledger status for each driver registered in the fleet</p>
+          </div>
+          <span className="text-xs font-bold text-slate-600">{drivers.length} Drivers</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase text-[10px] tracking-wider">
+                <th className="py-2.5 px-4">Driver Name & Phone</th>
+                <th className="py-2.5 px-4">Pay Type</th>
+                <th className="py-2.5 px-4 text-right">1. Pay Payable (₹)</th>
+                <th className="py-2.5 px-4 text-right">2. Cash Held by Driver (₹)</th>
+                <th className="py-2.5 px-4 text-right">Net Settlement Position</th>
+                <th className="py-2.5 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {drivers.map(drv => {
+                const b = balances.find(bal => bal.driver_id === drv.id || bal.id === drv.id);
+                const pay = b?.balance_payable_to_driver || 0;
+                const held = b?.cash_owed_to_office || 0;
+                const net = pay - held;
+                const isSelected = selectedDriverId === drv.id;
+
+                return (
+                  <tr
+                    key={drv.id}
+                    className={`transition-colors ${
+                      isSelected ? 'bg-blue-50/80 font-semibold' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900">{drv.full_name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">{drv.phone}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                        drv.employment_type === 'Salaried (monthly)'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {drv.employment_type || 'Per-trip'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                      {formatINR(pay)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-amber-700">
+                      {formatINR(held)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-black">
+                      <span className={net >= 0 ? 'text-emerald-700' : 'text-amber-800'}>
+                        {net >= 0 ? `Office owes: ${formatINR(net)}` : `Driver owes: ${formatINR(Math.abs(net))}`}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => setSelectedDriverId(drv.id)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200'
+                        }`}
+                      >
+                        {isSelected ? 'Active Filter' : 'View Ledger'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
