@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Copy,
   ExternalLink,
+  Edit2,
 } from 'lucide-react';
 import { driverService } from '../../services/driverService';
 import { DriverEmployee } from '../../types';
@@ -35,6 +36,56 @@ const DriversPage: React.FC = () => {
   const [formPassword, setFormPassword] = useState('');
   const [sendWhatsAppOnCreate, setSendWhatsAppOnCreate] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit Driver Modal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<DriverEmployee | null>(null);
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    phone: '',
+    username: '',
+    driving_licence_no: '',
+    licence_expiry: '',
+    employment_type: 'Per-trip payment' as 'Per-trip payment' | 'Salaried (monthly)',
+    per_trip_payment: 500,
+    monthly_salary: 0,
+    vehicle_number: '',
+    address: '',
+    status: 'Active' as 'Active' | 'Inactive',
+  });
+
+  const handleOpenEdit = (d: DriverEmployee) => {
+    setEditingDriver(d);
+    setEditForm({
+      full_name: d.full_name || '',
+      phone: d.phone || '',
+      username: d.username || d.phone || '',
+      driving_licence_no: d.driving_licence_no || '',
+      licence_expiry: d.licence_expiry || '',
+      employment_type: (d.employment_type as any) || 'Per-trip payment',
+      per_trip_payment: Number(d.per_trip_payment) || 500,
+      monthly_salary: Number(d.monthly_salary) || 0,
+      vehicle_number: d.vehicle_number || '',
+      address: d.address || '',
+      status: (d.status as any) || 'Active',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDriver) return;
+    try {
+      setSubmitting(true);
+      await driverService.updateDriver(editingDriver.id, editForm);
+      setIsEditModalOpen(false);
+      loadDrivers();
+    } catch (err: any) {
+      alert(err.message || 'Error updating driver');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Success credential alert with full driver details for WhatsApp
   const [createdInfo, setCreatedInfo] = useState<{
@@ -319,6 +370,15 @@ Thank you,
                     </td>
                     <td className="table-cell text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(d)}
+                          className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Edit Driver Profile"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+
                         <a
                           href={formatWhatsAppUrl(
                             d.phone,
@@ -468,6 +528,160 @@ Thank you,
               className="btn-primary text-xs"
             >
               {submitting ? 'Creating...' : 'Create Driver Account'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Driver Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={`Edit Driver Profile: ${editingDriver?.full_name}`}
+        size="md"
+      >
+        <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Full Name *</label>
+              <input
+                type="text"
+                required
+                value={editForm.full_name}
+                onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="label">Phone Number *</label>
+              <input
+                type="tel"
+                required
+                value={editForm.phone}
+                onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                className="input-field font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Username</label>
+              <input
+                type="text"
+                value={editForm.username}
+                onChange={e => setEditForm({ ...editForm, username: e.target.value })}
+                className="input-field font-mono"
+              />
+            </div>
+            <div>
+              <label className="label">Vehicle Number</label>
+              <input
+                type="text"
+                value={editForm.vehicle_number}
+                onChange={e => setEditForm({ ...editForm, vehicle_number: e.target.value })}
+                placeholder="KL 16 Q 7965"
+                className="input-field font-mono uppercase"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Driving Licence No</label>
+              <input
+                type="text"
+                value={editForm.driving_licence_no}
+                onChange={e => setEditForm({ ...editForm, driving_licence_no: e.target.value })}
+                placeholder="KL-01-2020-0001234"
+                className="input-field font-mono uppercase"
+              />
+            </div>
+            <div>
+              <label className="label">Licence Expiry</label>
+              <input
+                type="date"
+                value={editForm.licence_expiry}
+                onChange={e => setEditForm({ ...editForm, licence_expiry: e.target.value })}
+                className="input-field font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Employment Type *</label>
+              <select
+                value={editForm.employment_type}
+                onChange={e => setEditForm({ ...editForm, employment_type: e.target.value as any })}
+                className="input-field"
+              >
+                <option value="Per-trip payment">Per-trip payment</option>
+                <option value="Salaried (monthly)">Salaried (monthly)</option>
+              </select>
+            </div>
+            <div>
+              {editForm.employment_type === 'Per-trip payment' ? (
+                <div>
+                  <label className="label">Per-Trip Pay Rate (₹)</label>
+                  <input
+                    type="number"
+                    value={editForm.per_trip_payment}
+                    onChange={e => setEditForm({ ...editForm, per_trip_payment: Number(e.target.value) || 0 })}
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Monthly Salary (₹)</label>
+                  <input
+                    type="number"
+                    value={editForm.monthly_salary}
+                    onChange={e => setEditForm({ ...editForm, monthly_salary: Number(e.target.value) || 0 })}
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Address (Optional)</label>
+            <input
+              type="text"
+              value={editForm.address}
+              onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+              placeholder="Varkala, Trivandrum"
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <label className="label">Account Status</label>
+            <select
+              value={editForm.status}
+              onChange={e => setEditForm({ ...editForm, status: e.target.value as any })}
+              className="input-field"
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsEditModalOpen(false)}
+              className="btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary text-xs"
+            >
+              {submitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

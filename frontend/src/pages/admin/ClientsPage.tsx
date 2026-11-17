@@ -12,8 +12,12 @@ import {
   Edit2,
   X,
   CreditCard,
+  Trash2,
+  MessageSquare,
+  Share2,
 } from 'lucide-react';
 import { organizationService } from '../../services/adminOperationsService';
+import { supabase } from '../../lib/supabase';
 import { Organization, OrganizationType, PaymentTerms } from '../../types';
 import { formatINR } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -120,6 +124,61 @@ const ClientsPage: React.FC = () => {
       loadOrganizations();
     } catch (err: any) {
       alert(err.message || 'Error saving organization');
+    }
+  };
+
+  const handleDelete = async (org: Organization) => {
+    if (!confirm(`Are you sure you want to delete organization "${org.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await organizationService.delete(org.id);
+      loadOrganizations();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting organization');
+    }
+  };
+
+  const handleShareStatement = async (org: Organization) => {
+    try {
+      const { data: orgTrips } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('organization_id', org.id)
+        .order('trip_date', { ascending: false });
+
+      const trips = orgTrips || [];
+      const totalCost = trips.reduce((s, t) => s + (Number(t.trip_selling_price) || 0), 0);
+      const paid = Number(org.total_paid || 0);
+      const outstanding = Number(org.outstanding_balance ?? (totalCost - paid));
+
+      const lines = trips.slice(0, 15).map(t => {
+        const cost = Number(t.trip_selling_price || 0);
+        return `• *${t.trip_number || 'Trip'}* (${t.trip_date || ''}) | Guest: ${t.guest_names || 'Guest'} | ${t.pickup_location || ''} → ${t.dropoff_location || ''} | Cost: ₹${cost.toLocaleString('en-IN')}`;
+      });
+
+      const message = `🏨 *VillaLemon Pickup — Account Statement*\n` +
+        `*Client:* ${org.name} (${org.contact_person || ''})\n` +
+        `*Date:* ${new Date().toLocaleDateString('en-IN')}\n\n` +
+        `📊 *Summary:*\n` +
+        `• Total Trips: ${trips.length}\n` +
+        `• Total Trip Amount: ₹${totalCost.toLocaleString('en-IN')}\n` +
+        `• Total Amount Paid: ₹${paid.toLocaleString('en-IN')}\n` +
+        `• *PENDING BALANCE TO PAY: ₹${outstanding.toLocaleString('en-IN')}*\n\n` +
+        `📋 *Trip Breakdown (Recent):*\n` +
+        (lines.length > 0 ? lines.join('\n') : '• No recorded trips yet') +
+        `\n\n_Payment via UPI / Bank transfer. Please share screenshot after transfer._`;
+
+      const phone = (org.whatsapp || org.phone || '').replace(/[^0-9]/g, '');
+      const waPhone = phone.length === 10 ? `91${phone}` : phone;
+      if (waPhone) {
+        window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`, '_blank');
+      } else {
+        await navigator.clipboard.writeText(message);
+        alert('Statement copied to clipboard!\n\n' + message);
+      }
+    } catch (err: any) {
+      alert('Error generating statement: ' + (err.message || ''));
     }
   };
 
@@ -293,13 +352,31 @@ const ClientsPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => handleOpenEdit(org)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                          title="Edit Profile"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(org)}
+                            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors inline-flex items-center gap-1 font-semibold text-[11px]"
+                            title="Edit Client Profile"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleShareStatement(org)}
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors inline-flex items-center gap-1 font-semibold text-[11px]"
+                            title="Share Pending Statement on WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Statement</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(org)}
+                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
+                            title="Delete Organization"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -404,12 +481,12 @@ const ClientsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">GST Number</label>
+                  <label className="block font-semibold text-slate-700 mb-1">GST Number (Optional)</label>
                   <input
                     type="text"
                     value={formData.gst_number}
                     onChange={e => setFormData({ ...formData, gst_number: e.target.value })}
-                    placeholder="32AAAAA0000A1Z5"
+                    placeholder="32AAAAA0000A1Z5 (Optional)"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
                   />
                 </div>

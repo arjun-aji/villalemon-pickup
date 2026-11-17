@@ -234,25 +234,8 @@ const DriverDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Action Navigation Cards (Matches Reference Phone Screen) */}
+      {/* Main Action Navigation Cards */}
       <div className="space-y-2.5">
-        {/* Available Trips */}
-        <div
-          onClick={() => navigate('/driver/available-trips')}
-          className="card p-4.5 flex items-center justify-between cursor-pointer hover:border-green-primary/40 hover:shadow-md transition-all active:scale-[0.99] group"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-green-light flex items-center justify-center text-green-primary group-hover:scale-105 transition-transform">
-              <MapPin className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-text-primary">Available Trips</p>
-              <p className="text-xs text-text-secondary">{availableCount} trips open for enrollment</p>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-green-primary transition-all" />
-        </div>
-
         {/* My Upcoming Trips */}
         <div
           onClick={() => navigate('/driver/upcoming-trips')}
@@ -268,23 +251,6 @@ const DriverDashboard: React.FC = () => {
             </div>
           </div>
           <ChevronRight className="h-5 w-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-blue-600 transition-all" />
-        </div>
-
-        {/* My Enrolled Trips */}
-        <div
-          onClick={() => navigate('/driver/enrolled-trips')}
-          className="card p-4.5 flex items-center justify-between cursor-pointer hover:border-amber-400/40 hover:shadow-md transition-all active:scale-[0.99] group"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-warning group-hover:scale-105 transition-transform">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-text-primary">My Enrolled Trips</p>
-              <p className="text-xs text-text-secondary">{enrolledCount} trips (awaiting approval)</p>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-warning transition-all" />
         </div>
 
         {/* Completed Trips */}
@@ -314,7 +280,7 @@ const DriverDashboard: React.FC = () => {
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-bold text-text-primary">My Settlements</p>
+              <p className="text-sm font-bold text-text-primary">My Settlements & Cash Held</p>
               <p className="text-xs text-text-secondary font-medium">
                 {pendingSettlementAmount > 0 ? `Pending (${formatINR(pendingSettlementAmount)})` : 'All cleared'}
               </p>

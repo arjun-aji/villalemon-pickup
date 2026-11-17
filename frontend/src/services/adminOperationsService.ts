@@ -77,6 +77,18 @@ export const organizationService = {
     }
     throw new Error('Supabase not configured');
   },
+
+  async delete(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('organizations')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error('Supabase not configured');
+  },
 };
 
 export const vehicleService = {

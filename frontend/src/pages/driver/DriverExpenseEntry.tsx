@@ -19,6 +19,7 @@ import {
 import { tripService } from '../../services/tripService';
 import { driverReportService } from '../../services/driverReportService';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { Trip, DriverReport } from '../../types';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { formatINR, formatDate, formatTime } from '../../utils/formatters';
@@ -49,6 +50,7 @@ const DriverExpenseEntry: React.FC = () => {
   const [returnedAmount, setReturnedAmount] = useState<number>(0);
   const [returnPaymentMethod, setReturnPaymentMethod] = useState<'Cash' | 'UPI'>('Cash');
   const [isAmountManuallyEdited, setIsAmountManuallyEdited] = useState(false);
+  const [priorCashHeld, setPriorCashHeld] = useState<number>(0);
 
   useEffect(() => {
     if (tripId) {
@@ -77,6 +79,19 @@ const DriverExpenseEntry: React.FC = () => {
       } else if (tripData) {
         const expected = Number(tripData.amount_driver_must_collect || tripData.amount_to_collect || 0);
         setAmountCollected(expected);
+      }
+
+      // Fetch driver's prior cash held from ledger
+      const effectiveDriverId = tripData?.assigned_driver_id || driver?.id;
+      if (effectiveDriverId) {
+        const { data: bal } = await supabase
+          .from('v_driver_balances')
+          .select('cash_owed_to_office')
+          .eq('driver_id', effectiveDriverId)
+          .maybeSingle();
+        if (bal) {
+          setPriorCashHeld(Math.max(0, Number(bal.cash_owed_to_office) || 0));
+        }
       }
     } catch (e) {
       console.error(e);
@@ -380,7 +395,7 @@ const DriverExpenseEntry: React.FC = () => {
         {/* Section 3: Live Cash Reconciliation Summary */}
         <div className="card p-4 bg-gradient-to-br from-[#0F1E36] to-[#1E3A8A] text-white shadow-md space-y-2 text-xs">
           <p className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
-            Trip Cash Reconciliation
+            Trip Cash Reconciliation & Driver Cash Held
           </p>
           <div className="flex justify-between">
             <span className="text-slate-300">Amount Collected from Guest:</span>
@@ -396,15 +411,39 @@ const DriverExpenseEntry: React.FC = () => {
               <span className="font-bold font-mono">− {formatINR(driverPay)}</span>
             </div>
           )}
-          <div className="pt-2 border-t border-slate-700 flex justify-between items-center text-sm font-bold">
+          <div className="pt-2 border-t border-slate-700/80 flex justify-between items-center">
             <div>
-              <span className="block">Amount to Return to Office:</span>
-              <span className="text-[10px] font-normal text-slate-300">
-                {driverPay > 0 ? `Collected ₹${amountCollected} − Expenses ₹${totalDriverExpenses} − Salary ₹${driverPay}` : 'Automatically calculated'}
+              <span className="text-slate-300 block">Net to Return from This Trip:</span>
+              <span className="text-[10px] text-slate-400">
+                {driverPay > 0 ? `₹${amountCollected} collected − ₹${totalDriverExpenses} exp − ₹${driverPay} salary` : 'Collected − Expenses'}
               </span>
             </div>
-            <span className="text-emerald-400 font-black font-mono text-base">
+            <span className="text-emerald-400 font-black font-mono text-sm">
               {formatINR(netCashToHandOver)}
+            </span>
+          </div>
+
+          {/* Prior Cash Held in Driver's Ledger */}
+          <div className="pt-2 border-t border-slate-700/80 flex justify-between items-center">
+            <div>
+              <span className="text-amber-200 font-semibold block">Prior Cash Held in Ledger:</span>
+              <span className="text-[10px] text-slate-400">Past unhanded guest collections & cash advances</span>
+            </div>
+            <span className="text-amber-300 font-bold font-mono text-sm">
+              +{formatINR(priorCashHeld)}
+            </span>
+          </div>
+
+          {/* Total Cash in Driver's Hands */}
+          <div className="pt-2 border-t border-amber-400/30 flex justify-between items-center text-sm font-bold bg-white/5 p-2 rounded-xl">
+            <div>
+              <span className="text-white block font-black">TOTAL CASH CURRENTLY HELD:</span>
+              <span className="text-[10px] font-normal text-amber-300">
+                Prior ledger cash ({formatINR(priorCashHeld)}) + this trip net ({formatINR(netCashToHandOver)})
+              </span>
+            </div>
+            <span className="text-amber-400 font-black font-mono text-lg">
+              {formatINR(priorCashHeld + netCashToHandOver)}
             </span>
           </div>
         </div>
@@ -423,16 +462,40 @@ const DriverExpenseEntry: React.FC = () => {
                 onChange={e => setHasReturnedCash(e.target.checked)}
                 className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
               />
-              <span>I have handed over money</span>
+              <span>I am handing over money now</span>
             </label>
           </div>
 
           {hasReturnedCash && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAmountManuallyEdited(true);
+                    setReturnedAmount(priorCashHeld + netCashToHandOver);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-100 transition-colors"
+                >
+                  Return Total Pending ({formatINR(priorCashHeld + netCashToHandOver)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAmountManuallyEdited(true);
+                    setReturnedAmount(netCashToHandOver);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-300 text-blue-800 font-bold hover:bg-blue-100 transition-colors"
+                >
+                  Return This Trip Only ({formatINR(netCashToHandOver)})
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Amount Handed Over (₹)
+                    Amount Handed Over (₹) *
                   </label>
                   <input
                     type="number"
@@ -446,11 +509,6 @@ const DriverExpenseEntry: React.FC = () => {
                     placeholder="0"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-sm bg-emerald-50/50 text-emerald-900 border-emerald-200 focus:ring-2 focus:ring-emerald-500"
                   />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {driverPay > 0
-                      ? `After minusing ₹${driverPay} salary & ₹${totalDriverExpenses} expenses`
-                      : 'Editable if partial amount returned'}
-                  </p>
                 </div>
 
                 <div>
@@ -466,6 +524,19 @@ const DriverExpenseEntry: React.FC = () => {
                     <option value="UPI">UPI Transfer</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Remaining Cash Held Status */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-semibold text-slate-700 block">Remaining Cash Stays With You:</span>
+                  <span className="text-[10px] text-slate-500">Tracked in your ledger balance</span>
+                </div>
+                <span className={`font-mono font-black text-sm ${
+                  Math.max(0, priorCashHeld + netCashToHandOver - returnedAmount) > 0 ? 'text-amber-700' : 'text-emerald-700'
+                }`}>
+                  {formatINR(Math.max(0, priorCashHeld + netCashToHandOver - returnedAmount))}
+                </span>
               </div>
 
               <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2 text-[11px] text-amber-800">

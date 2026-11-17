@@ -28,6 +28,8 @@ import {
   Fuel,
   TrendingUp,
   Wallet,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
@@ -73,6 +75,137 @@ const TripsPage: React.FC = () => {
   const [tripSheetTrip, setTripSheetTrip] = useState<Trip | null>(null);
   const [copiedPlacard, setCopiedPlacard] = useState(false);
   const [copiedDispatch, setCopiedDispatch] = useState(false);
+
+  // Edit Trip Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [savingTrip, setSavingTrip] = useState(false);
+  const [editForm, setEditForm] = useState({
+    trip_date: '',
+    pickup_time: '',
+    trip_category: 'Airport Pick-up' as string,
+    guest_names: '',
+    guest_contact_number: '',
+    total_people: 1,
+    pickup_location: '',
+    dropoff_location: '',
+    final_dropoff: '',
+    airport_terminal: 'Terminal 2' as string,
+    flight_number_and_time: '',
+    required_cab_type: 'Sedan' as string,
+    special_instructions: '',
+    assigned_driver_id: '',
+    trip_selling_price: 0,
+    amount_driver_must_collect: 0,
+    collection_rule: 'Collect from guest' as string,
+    driver_trip_pay_override: 0,
+    trip_status: 'Confirmed' as string,
+  });
+
+  const renderCategoryBadge = (category?: string) => {
+    const cat = (category || 'Others').trim();
+    const catLower = cat.toLowerCase();
+    if (catLower.includes('pick-up') || catLower.includes('pickup')) {
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-sky-100 text-sky-800 border border-sky-300">
+          ✈️ {cat}
+        </span>
+      );
+    }
+    if (catLower.includes('drop')) {
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300">
+          🛫 {cat}
+        </span>
+      );
+    }
+    if (catLower.includes('sightseeing') || catLower.includes('tour')) {
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+          🏖️ {cat}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
+        🚗 {cat}
+      </span>
+    );
+  };
+
+  const handleOpenEditTrip = (t: Trip) => {
+    setEditingTrip(t);
+    setEditForm({
+      trip_date: t.trip_date || t.pickup_date || '',
+      pickup_time: t.pickup_time || '10:00',
+      trip_category: t.trip_category || 'Airport Pick-up',
+      guest_names: t.guest_names || t.customer_name || '',
+      guest_contact_number: t.guest_contact_number || t.customer_phone || '',
+      total_people: t.total_people || t.num_passengers || 1,
+      pickup_location: t.pickup_location || '',
+      dropoff_location: t.dropoff_location || t.destination || '',
+      final_dropoff: t.final_dropoff || '',
+      airport_terminal: (t.airport_terminal as string) || 'Terminal 2',
+      flight_number_and_time: t.flight_number_and_time || t.flight_number || '',
+      required_cab_type: (t.required_cab_type as string) || (t.vehicle?.vehicle_type as string) || 'Sedan',
+      special_instructions: t.special_instructions || t.trip_notes || '',
+      assigned_driver_id: t.assigned_driver_id || '',
+      trip_selling_price: Number(t.trip_selling_price || t.amount_to_collect || 0),
+      amount_driver_must_collect: Number(t.amount_driver_must_collect || t.amount_to_collect || 0),
+      collection_rule: (t.collection_rule as string) || (Number(t.amount_driver_must_collect) > 0 ? 'Collect from guest' : 'Do not collect'),
+      driver_trip_pay_override: Number(t.driver_trip_pay_override || t.driver_charge || 0),
+      trip_status: (t.trip_status as string) || 'Confirmed',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveTripEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTrip) return;
+    try {
+      setSavingTrip(true);
+      await tripService.updateTrip(editingTrip.id, {
+        trip_date: editForm.trip_date,
+        pickup_time: editForm.pickup_time,
+        trip_category: editForm.trip_category as any,
+        guest_names: editForm.guest_names,
+        guest_contact_number: editForm.guest_contact_number || undefined,
+        total_people: Number(editForm.total_people) || 1,
+        pickup_location: editForm.pickup_location,
+        dropoff_location: editForm.dropoff_location,
+        final_dropoff: editForm.final_dropoff || undefined,
+        airport_terminal: editForm.airport_terminal as any,
+        flight_number_and_time: editForm.flight_number_and_time || undefined,
+        required_cab_type: editForm.required_cab_type as any,
+        special_instructions: editForm.special_instructions || undefined,
+        assigned_driver_id: editForm.assigned_driver_id || undefined,
+        trip_selling_price: Number(editForm.trip_selling_price) || 0,
+        amount_driver_must_collect: editForm.collection_rule === 'Do not collect' ? 0 : (Number(editForm.amount_driver_must_collect) || 0),
+        collection_rule: editForm.collection_rule as any,
+        driver_trip_pay_override: Number(editForm.driver_trip_pay_override) || 0,
+        trip_status: editForm.trip_status as any,
+      });
+      setIsEditModalOpen(false);
+      setEditingTrip(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error updating trip');
+    } finally {
+      setSavingTrip(false);
+    }
+  };
+
+  const handleDeleteTrip = async (t: Trip) => {
+    if (!confirm(`Are you sure you want to delete trip ${t.trip_number || ''} for ${t.guest_names || t.customer_name || 'Guest'}? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await tripService.deleteTrip(t.id);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting trip');
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -526,14 +659,14 @@ const TripsPage: React.FC = () => {
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[170px]">
                         Trip ID / Category
                       </th>
-                      <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[190px]">
-                        Guest / Passengers / Contact
-                      </th>
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[180px]">
                         Pickup (terminal)
                       </th>
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[240px]">
                         Drop-off / places to visit
+                      </th>
+                      <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[190px]">
+                        Guest / Passengers / Contact
                       </th>
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[150px]">
                         Vehicle
@@ -544,7 +677,7 @@ const TripsPage: React.FC = () => {
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[200px]">
                         Note
                       </th>
-                      <th className="py-3 px-3 font-bold text-center w-[110px]">
+                      <th className="py-3 px-3 font-bold text-center w-[125px]">
                         Actions
                       </th>
                     </tr>
@@ -578,22 +711,17 @@ const TripsPage: React.FC = () => {
                           {/* Col 2: Trip ID / Category / Flight */}
                           <td className="p-3 border-r border-slate-200 leading-snug">
                             <div className="font-mono font-bold text-navy-primary">{trip.trip_number}</div>
-                            <div className="text-slate-700 font-medium">{category}</div>
+                            <div className="mt-1">
+                              {renderCategoryBadge(category)}
+                            </div>
                             {flightInfo && (
-                              <div className="text-blue-700 text-[11px] font-semibold">
+                              <div className="text-blue-700 text-[11px] font-semibold mt-1">
                                 Flight: {flightInfo}
                               </div>
                             )}
                           </td>
 
-                          {/* Col 3: Guest / Passengers / Contact */}
-                          <td className="p-3 border-r border-slate-200 leading-snug">
-                            <div className="font-bold text-slate-900">{guest}</div>
-                            <div className="text-slate-600 text-[11px]">Passengers: {pax}</div>
-                            <div className="text-slate-500 text-[11px]">Contact: {contact}</div>
-                          </td>
-
-                          {/* Col 4: Pickup (terminal) */}
+                          {/* Col 3: Pickup (terminal) - MOVED BEFORE GUEST */}
                           <td className="p-3 border-r border-slate-200 leading-snug">
                             <div className="font-medium text-slate-900">{pickup}</div>
                             {terminal && (
@@ -603,7 +731,7 @@ const TripsPage: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Col 5: Drop-off / places to visit */}
+                          {/* Col 4: Drop-off / places to visit - MOVED BEFORE GUEST */}
                           <td className="p-3 border-r border-slate-200 leading-snug">
                             {category.toLowerCase().includes('sightseeing') ? (
                               <div>
@@ -619,6 +747,13 @@ const TripsPage: React.FC = () => {
                                 Drop-off: <strong>{dropoff}</strong>
                               </div>
                             )}
+                          </td>
+
+                          {/* Col 5: Guest / Passengers / Contact - PLACED AFTER PICKUP & DROPOFF */}
+                          <td className="p-3 border-r border-slate-200 leading-snug">
+                            <div className="font-bold text-slate-900">{guest}</div>
+                            <div className="text-slate-600 text-[11px]">Passengers: {pax}</div>
+                            <div className="text-slate-500 text-[11px]">Contact: {contact}</div>
                           </td>
 
                           {/* Col 6: Vehicle */}
@@ -652,10 +787,17 @@ const TripsPage: React.FC = () => {
 
                           {/* Col 9: Actions */}
                           <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditTrip(trip)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                title="Edit Trip Details"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
                               <button
                                 onClick={() => setTripSheetTrip(trip)}
-                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
                                 title="Print Duty Slip / Trip Sheet"
                               >
                                 <Printer className="h-3.5 w-3.5" />
@@ -673,6 +815,13 @@ const TripsPage: React.FC = () => {
                                 title="View Details"
                               >
                                 <Eye className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTrip(trip)}
+                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                                title="Delete Trip"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                             <div className="mt-1 flex justify-center">
@@ -853,9 +1002,9 @@ const TripsPage: React.FC = () => {
                         <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
                           <td className="table-cell">
                             <span className="font-mono font-bold text-navy-primary block">{trip.trip_number}</span>
-                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">
-                              {trip.trip_category || 'Duty'}
-                            </span>
+                            <div className="mt-1">
+                              {renderCategoryBadge(trip.trip_category)}
+                            </div>
                           </td>
                           <td className="table-cell">
                             <div>
@@ -990,7 +1139,7 @@ const TripsPage: React.FC = () => {
                             <StatusBadge status={trip.trip_status} />
                           </td>
                           <td className="table-cell text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
                               {trip.trip_status === 'Pending Approval' && (
                                 <button
                                   onClick={() => handleApproveTrip(trip.id)}
@@ -1002,6 +1151,13 @@ const TripsPage: React.FC = () => {
                                 </button>
                               )}
                               <button
+                                onClick={() => handleOpenEditTrip(trip)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                title="Edit Trip Details"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
                                 onClick={() => setDispatchTrip(trip)}
                                 className="p-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors"
                                 title="Generate WhatsApp Driver Dispatch"
@@ -1010,7 +1166,7 @@ const TripsPage: React.FC = () => {
                               </button>
                               <button
                                 onClick={() => setTripSheetTrip(trip)}
-                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
                                 title="Print Duty Trip Sheet"
                               >
                                 <Printer className="h-3.5 w-3.5" />
@@ -1023,27 +1179,23 @@ const TripsPage: React.FC = () => {
                                 <Eye className="h-3.5 w-3.5" />
                               </button>
                               {!trip.assigned_driver_id && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setAssignModalTrip(trip);
-                                      setSelectedAssignDriverId('');
-                                    }}
-                                    className="px-2.5 py-1 text-xs bg-navy-primary hover:bg-navy-light text-white font-semibold rounded-lg transition-colors"
-                                  >
-                                    Assign
-                                  </button>
-                                  {!trip.is_published_for_enrollment && (
-                                    <button
-                                      onClick={() => handlePublishForEnrollment(trip.id)}
-                                      className="px-2.5 py-1 text-xs bg-green-light hover:bg-green-100 text-green-primary font-semibold rounded-lg transition-colors"
-                                      title="Publish for driver enrollment"
-                                    >
-                                      Publish
-                                    </button>
-                                  )}
-                                </>
+                                <button
+                                  onClick={() => {
+                                    setAssignModalTrip(trip);
+                                    setSelectedAssignDriverId('');
+                                  }}
+                                  className="px-2.5 py-1 text-xs bg-navy-primary hover:bg-navy-light text-white font-semibold rounded-lg transition-colors"
+                                >
+                                  Assign
+                                </button>
                               )}
+                              <button
+                                onClick={() => handleDeleteTrip(trip)}
+                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                                title="Delete Trip"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1349,6 +1501,15 @@ const TripsPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Route & Duty Details - PLACED FIRST */}
+              <div className="border rounded-lg p-3 space-y-1 bg-slate-50/50">
+                <p className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">Route & Duty Details</p>
+                <p className="text-slate-700">Pickup: <strong>{tripSheetTrip.pickup_location}</strong> at {formatTime(tripSheetTrip.pickup_time || '')}</p>
+                <p className="text-slate-700">Drop-off: <strong>{tripSheetTrip.dropoff_location || tripSheetTrip.destination}</strong></p>
+                <p className="text-slate-700">Collection: <strong>{tripSheetTrip.collection_rule === 'Do not collect' ? 'Do not collect (Office)' : `Collect ${formatINR(tripSheetTrip.amount_driver_must_collect || tripSheetTrip.amount_to_collect || 0)}`}</strong></p>
+              </div>
+
+              {/* Guest & Driver Information - PLACED AFTER PICKUP AND DROPOFF */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 bg-slate-50 rounded-lg">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Guest Information</p>
@@ -1363,13 +1524,6 @@ const TripsPage: React.FC = () => {
                   <p className="text-slate-600">Vehicle: {tripSheetTrip.vehicle?.registration_number || tripSheetTrip.required_cab_type}</p>
                   <p className="text-slate-600">Driver Phone: {tripSheetTrip.driver?.phone || '-'}</p>
                 </div>
-              </div>
-
-              <div className="border rounded-lg p-3 space-y-1">
-                <p className="font-bold text-slate-800">Route & Duty Details</p>
-                <p className="text-slate-700">Pickup: <strong>{tripSheetTrip.pickup_location}</strong> at {formatTime(tripSheetTrip.pickup_time || '')}</p>
-                <p className="text-slate-700">Drop-off: <strong>{tripSheetTrip.dropoff_location || tripSheetTrip.destination}</strong></p>
-                <p className="text-slate-700">Collection: <strong>{tripSheetTrip.collection_rule === 'Do not collect' ? 'Do not collect (Office)' : `Collect ${formatINR(tripSheetTrip.amount_driver_must_collect || tripSheetTrip.amount_to_collect || 0)}`}</strong></p>
               </div>
 
               {/* Odometer & Signature Blocks */}
@@ -1417,6 +1571,275 @@ const TripsPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+      {/* Edit Trip Modal */}
+      {isEditModalOpen && editingTrip && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title={`Edit Trip: ${editingTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleSaveTripEdit} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="label">Trip Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={editForm.trip_date}
+                  onChange={e => setEditForm({ ...editForm, trip_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">Pickup Time *</label>
+                <input
+                  type="time"
+                  required
+                  value={editForm.pickup_time}
+                  onChange={e => setEditForm({ ...editForm, pickup_time: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">Trip Category *</label>
+                <select
+                  value={editForm.trip_category}
+                  onChange={e => setEditForm({ ...editForm, trip_category: e.target.value })}
+                  className="input-field font-semibold"
+                >
+                  <option value="Airport Pick-up">Airport Pick-up</option>
+                  <option value="Airport Drop">Airport Drop</option>
+                  <option value="Sightseeing">Sightseeing</option>
+                  <option value="Others">Others</option>
+                  <option value="Drop Only at Location">Drop Only at Location</option>
+                  <option value="Pick-up from Location">Pick-up from Location</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Guest details */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="label">Guest Name(s) *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.guest_names}
+                  onChange={e => setEditForm({ ...editForm, guest_names: e.target.value })}
+                  className="input-field font-semibold"
+                />
+              </div>
+              <div>
+                <label className="label">Guest Phone / WhatsApp</label>
+                <input
+                  type="tel"
+                  value={editForm.guest_contact_number}
+                  onChange={e => setEditForm({ ...editForm, guest_contact_number: e.target.value })}
+                  placeholder="+91..."
+                  className="input-field font-mono"
+                />
+              </div>
+              <div>
+                <label className="label">Number of Passengers</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editForm.total_people}
+                  onChange={e => setEditForm({ ...editForm, total_people: Number(e.target.value) || 1 })}
+                  className="input-field font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Route Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Pickup Location *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.pickup_location}
+                  onChange={e => setEditForm({ ...editForm, pickup_location: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">Drop-off / Places to Visit *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.dropoff_location}
+                  onChange={e => setEditForm({ ...editForm, dropoff_location: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Airport Terminal & Flight (if airport) */}
+            {editForm.trip_category.toLowerCase().includes('airport') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sky-50 rounded-xl border border-sky-200">
+                <div>
+                  <label className="label text-sky-900">Airport Terminal</label>
+                  <select
+                    value={editForm.airport_terminal}
+                    onChange={e => setEditForm({ ...editForm, airport_terminal: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="Terminal 1">Terminal 1 (Domestic)</option>
+                    <option value="Terminal 2">Terminal 2 (International)</option>
+                    <option value="NOT SET">NOT SET</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label text-sky-900">Flight Number & Time</label>
+                  <input
+                    type="text"
+                    value={editForm.flight_number_and_time}
+                    onChange={e => setEditForm({ ...editForm, flight_number_and_time: e.target.value })}
+                    placeholder="e.g. 6E 521 at 18:30"
+                    className="input-field uppercase font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Driver & Cab Assignment */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver</label>
+                <select
+                  value={editForm.assigned_driver_id}
+                  onChange={e => {
+                    const drvId = e.target.value;
+                    const drv = drivers.find(d => d.id === drvId);
+                    setEditForm({
+                      ...editForm,
+                      assigned_driver_id: drvId,
+                      driver_trip_pay_override: drv?.per_trip_payment ? drv.per_trip_payment : editForm.driver_trip_pay_override,
+                    });
+                  }}
+                  className="input-field"
+                >
+                  <option value="">-- Unassigned --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) • {d.vehicle_number || 'Fleet'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Required Cab Type</label>
+                <select
+                  value={editForm.required_cab_type}
+                  onChange={e => setEditForm({ ...editForm, required_cab_type: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="Sedan">Sedan</option>
+                  <option value="SUV">SUV</option>
+                  <option value="Innova">Innova</option>
+                  <option value="Ertiga">Ertiga</option>
+                  <option value="Tempo Traveller 17-seater">Tempo Traveller 17-seater</option>
+                  <option value="Tempo Traveller 26-seater">Tempo Traveller 26-seater</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Financials & Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div>
+                <label className="label">Trip Selling Price (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.trip_selling_price}
+                  onChange={e => setEditForm({ ...editForm, trip_selling_price: Number(e.target.value) || 0 })}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="label">Collection Rule</label>
+                <select
+                  value={editForm.collection_rule}
+                  onChange={e => setEditForm({ ...editForm, collection_rule: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="Collect from guest">Collect from guest</option>
+                  <option value="Do not collect">Do not collect</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Driver Collects (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  disabled={editForm.collection_rule === 'Do not collect'}
+                  value={editForm.collection_rule === 'Do not collect' ? 0 : editForm.amount_driver_must_collect}
+                  onChange={e => setEditForm({ ...editForm, amount_driver_must_collect: Number(e.target.value) || 0 })}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="label">Driver Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.driver_trip_pay_override}
+                  onChange={e => setEditForm({ ...editForm, driver_trip_pay_override: Number(e.target.value) || 0 })}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Trip Status</label>
+                <select
+                  value={editForm.trip_status}
+                  onChange={e => setEditForm({ ...editForm, trip_status: e.target.value })}
+                  className="input-field font-semibold"
+                >
+                  <option value="Confirmed">Confirmed / Upcoming</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Pending Approval">Pending Approval</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Special Instructions / Notes</label>
+                <input
+                  type="text"
+                  value={editForm.special_instructions}
+                  onChange={e => setEditForm({ ...editForm, special_instructions: e.target.value })}
+                  placeholder="e.g. Flight arrival delayed, 2 large luggage"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingTrip}
+                className="btn-primary text-xs"
+              >
+                {savingTrip ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

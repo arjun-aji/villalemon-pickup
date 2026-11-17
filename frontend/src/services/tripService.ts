@@ -578,6 +578,67 @@ export const tripService = {
     return updated.find(t => t.id === tripId)!;
   },
 
+  async updateTrip(id: string, updates: Partial<Trip>): Promise<Trip> {
+    if (isSupabaseConfigured) {
+      const dbUpdates: any = {
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.trip_date !== undefined) dbUpdates.trip_date = updates.trip_date;
+      if (updates.pickup_time !== undefined) dbUpdates.pickup_time = updates.pickup_time;
+      if (updates.trip_category !== undefined) dbUpdates.trip_category = updates.trip_category;
+      if (updates.guest_names !== undefined) dbUpdates.guest_names = updates.guest_names;
+      if (updates.guest_contact_number !== undefined) dbUpdates.guest_contact_number = updates.guest_contact_number;
+      if (updates.total_people !== undefined) dbUpdates.total_people = updates.total_people;
+      if (updates.pickup_location !== undefined) dbUpdates.pickup_location = updates.pickup_location;
+      if (updates.dropoff_location !== undefined) dbUpdates.dropoff_location = updates.dropoff_location;
+      if (updates.final_dropoff !== undefined) dbUpdates.final_dropoff = updates.final_dropoff;
+      if (updates.flight_number_and_time !== undefined) dbUpdates.flight_number_and_time = updates.flight_number_and_time;
+      if (updates.airport_terminal !== undefined) dbUpdates.airport_terminal = updates.airport_terminal;
+      if (updates.required_cab_type !== undefined) dbUpdates.required_cab_type = updates.required_cab_type;
+      if (updates.special_instructions !== undefined) dbUpdates.special_instructions = updates.special_instructions;
+      if (updates.assigned_driver_id !== undefined) dbUpdates.assigned_driver_id = updates.assigned_driver_id;
+      if (updates.assigned_vehicle_id !== undefined) dbUpdates.assigned_vehicle_id = updates.assigned_vehicle_id;
+      if (updates.trip_selling_price !== undefined) dbUpdates.trip_selling_price = updates.trip_selling_price;
+      if (updates.amount_driver_must_collect !== undefined) dbUpdates.amount_driver_must_collect = updates.amount_driver_must_collect;
+      if (updates.collection_rule !== undefined) dbUpdates.collection_rule = updates.collection_rule;
+      if (updates.driver_trip_pay_override !== undefined) dbUpdates.driver_trip_pay_override = updates.driver_trip_pay_override;
+      if (updates.trip_status !== undefined) dbUpdates.trip_status = updates.trip_status;
+
+      const { data, error } = await supabase
+        .from('trips')
+        .update(dbUpdates)
+        .eq('id', id)
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      return data as Trip;
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => (t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t));
+    setStored('trips', updated);
+    return updated.find(t => t.id === id)!;
+  },
+
+  async deleteTrip(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      await supabase.from('driver_reports').delete().eq('trip_id', id);
+      await supabase.from('trip_enrollments').delete().eq('trip_id', id);
+      const { error } = await supabase.from('trips').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    setStored('trips', trips.filter(t => t.id !== id));
+  },
+
   async assignOutsideDriver(tripId: string, name: string, vehicleReg: string, phone?: string): Promise<Trip> {
     const outsideTag = `[Outside Driver: ${name.trim()}${phone ? ` | Phone: ${phone.trim()}` : ''}${vehicleReg ? ` | Vehicle: ${vehicleReg.trim()}` : ''}]`;
     

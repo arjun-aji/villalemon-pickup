@@ -60,6 +60,8 @@ const OrganizationSubmitTrip: React.FC = () => {
   const [airportTerminal, setAirportTerminal] = useState<AirportTerminal>('Terminal 2');
   const [requiredCabType, setRequiredCabType] = useState<VehicleType>('Sedan');
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [agreedTripCost, setAgreedTripCost] = useState<number | ''>(2500);
+  const [advancePaid, setAdvancePaid] = useState<number | ''>('');
 
   const isAirportTrip = tripCategory === 'Airport Pick-up' || tripCategory === 'Airport Drop';
 
@@ -97,6 +99,10 @@ const OrganizationSubmitTrip: React.FC = () => {
             airport_terminal: isAirportTrip ? airportTerminal : null,
             required_cab_type: requiredCabType,
             special_instructions: specialInstructions.trim() || null,
+            trip_selling_price: Number(agreedTripCost) || 0,
+            amount_to_collect: 0,
+            amount_driver_must_collect: 0,
+            collection_rule: 'Do not collect',
             trip_status: 'Pending Approval',
             submitted_by_org: true,
             created_by: profile?.id,
@@ -105,6 +111,19 @@ const OrganizationSubmitTrip: React.FC = () => {
           .single();
 
         if (insertError) throw insertError;
+
+        // If advance money was paid to office, log it as pending confirmation
+        if (Number(advancePaid) > 0) {
+          await supabase.from('payments').insert({
+            organization_id: organization.id,
+            amount: Number(advancePaid),
+            amount_received: Number(advancePaid),
+            payment_date: tripDate,
+            payment_method: 'Cash',
+            receipt_number: `ADV-${Date.now().toString().slice(-6)}`,
+            reference_notes: `[Pending Admin Confirmation] Advance for trip (${data?.trip_number || 'New'}) - Guest: ${guestNames.trim()} (Agreed Cost: ₹${agreedTripCost})`,
+          });
+        }
       }
 
       setSuccess(true);
@@ -389,6 +408,60 @@ const OrganizationSubmitTrip: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Section 6: Trip Cost & Advance Money (Given to Office) */}
+          <div className="pt-4 border-t border-slate-100">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              6. Agreed Trip Cost & Advance Payment (To Office)
+            </h2>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Trip Cost You Give to Office (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={agreedTripCost}
+                    onChange={e => setAgreedTripCost(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 2500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    The agreed transport fare you will pay to VillaLemon office for this trip.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Advance Money Already Sent / Paid (₹) (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={advancePaid}
+                    onChange={e => setAdvancePaid(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 500 (or leave 0)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Any advance already transferred. Credited upon office admin confirmation.
+                  </span>
+                </div>
+              </div>
+
+              {Number(agreedTripCost) > 0 && (
+                <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                  <span className="text-slate-600 font-medium">Pending Balance on this trip:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    ₹{Math.max(0, Number(agreedTripCost) - (Number(advancePaid) || 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

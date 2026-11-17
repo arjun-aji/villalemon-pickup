@@ -9,7 +9,9 @@ import {
   DollarSign,
   Receipt,
   X,
+  CheckCircle2,
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { paymentService, organizationService, invoiceService } from '../../services/adminOperationsService';
 import { Payment, Organization, Invoice, PaymentMethod } from '../../types';
 import { formatINR, formatDate } from '../../utils/formatters';
@@ -96,6 +98,19 @@ const PaymentsPage: React.FC = () => {
       loadAll();
     } catch (err: any) {
       alert(err.message || 'Error recording payment');
+    }
+  };
+
+  const handleConfirmPayment = async (p: Payment) => {
+    try {
+      const updatedNotes = (p.reference_notes || p.notes || '').replace(/\[Pending Admin Confirmation\]\s*/g, '[Verified by Office] ');
+      await supabase
+        .from('payments')
+        .update({ reference_notes: updatedNotes })
+        .eq('id', p.id);
+      loadAll();
+    } catch (err: any) {
+      alert(err.message || 'Error confirming payment');
     }
   };
 
@@ -224,21 +239,44 @@ const PaymentsPage: React.FC = () => {
                         <span className="text-slate-400 italic">General Credit</span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate">
-                      {p.reference_notes || p.notes || '-'}
+                    <td className="py-3 px-4 text-slate-600 max-w-[200px]">
+                      {(p.reference_notes || p.notes || '').includes('[Pending Admin Confirmation]') ? (
+                        <div className="space-y-0.5">
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                            Pending Confirmation
+                          </span>
+                          <p className="text-[11px] text-slate-600 truncate">
+                            {(p.reference_notes || p.notes || '').replace('[Pending Admin Confirmation]', '')}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] truncate block">{p.reference_notes || p.notes || '-'}</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right font-black text-emerald-600 font-mono text-sm">
                       {formatINR(p.amount_received || p.amount || 0)}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => setSelectedReceipt(p)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors text-xs font-semibold"
-                        title="Print Official Payment Receipt"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Receipt</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        {(p.reference_notes || p.notes || '').includes('[Pending Admin Confirmation]') && (
+                          <button
+                            onClick={() => handleConfirmPayment(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors text-xs font-bold shadow-xs"
+                            title="Confirm Payment Received from Organization"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Confirm</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedReceipt(p)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors text-xs font-semibold"
+                          title="Print Official Payment Receipt"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Receipt</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

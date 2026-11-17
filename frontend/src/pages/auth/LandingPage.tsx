@@ -239,17 +239,30 @@ const LandingPage: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={e => {
-                  e.stopPropagation();
-                  navigate('/org/login');
-                }}
-                className="w-full bg-[#1E3A8A] hover:bg-[#172554] active:bg-[#0F172A] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#1E3A8A]/25 transition-all"
-              >
-                <span>LOGIN AS PARTNER</span>
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    navigate('/org/login');
+                  }}
+                  className="w-full bg-[#1E3A8A] hover:bg-[#172554] active:bg-[#0F172A] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#1E3A8A]/25 transition-all"
+                >
+                  <span>LOGIN AS PARTNER</span>
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    navigate('/org/login?mode=signup');
+                  }}
+                  className="w-full py-1 text-xs font-bold text-[#1E3A8A] hover:underline transition-colors block text-center"
+                >
+                  New Partner? Register / Sign Up
+                </button>
+              </div>
             </div>
           </div>
         </div>

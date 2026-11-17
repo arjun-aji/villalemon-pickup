@@ -125,8 +125,8 @@ const AddTripPage: React.FC = () => {
   const [airportTerminal, setAirportTerminal] = useState<AirportTerminal>('Terminal 2');
   const [requiredCabType, setRequiredCabType] = useState<VehicleType>('Sedan');
 
-  // Crew & Fleet Assignment Mode: 'registered' | 'outside' | 'enroll' | 'unassigned'
-  const [assignmentMode, setAssignmentMode] = useState<'registered' | 'outside' | 'enroll' | 'unassigned'>('registered');
+  // Crew & Fleet Assignment Mode: 'registered' | 'outside'
+  const [assignmentMode, setAssignmentMode] = useState<'registered' | 'outside'>('registered');
   const [assignedDriverId, setAssignedDriverId] = useState('');
   const [assignedVehicleId, setAssignedVehicleId] = useState('');
 
@@ -305,7 +305,7 @@ const AddTripPage: React.FC = () => {
           collection_rule: collectionRule,
           amount_driver_must_collect: Number(amountDriverMustCollect) || 0,
           driver_trip_pay_override: driverTripPay ? Number(driverTripPay) : undefined,
-          is_published_for_enrollment: assignmentMode === 'enroll',
+          is_published_for_enrollment: false,
           trip_status: (assignmentMode === 'registered' || assignmentMode === 'outside') ? 'Assigned' : 'Confirmed',
           // Backward compatibility
           customer_name: guestNames,
@@ -685,7 +685,7 @@ const AddTripPage: React.FC = () => {
             </div>
 
             {/* Assignment Mode Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
               <button
                 type="button"
                 onClick={() => setAssignmentMode('registered')}
@@ -710,19 +710,6 @@ const AddTripPage: React.FC = () => {
               >
                 <Truck className="w-3.5 h-3.5" />
                 <span>Outside / External Driver</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAssignmentMode('enroll')}
-                className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                  assignmentMode === 'enroll'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Open for Enrollment</span>
               </button>
             </div>
 

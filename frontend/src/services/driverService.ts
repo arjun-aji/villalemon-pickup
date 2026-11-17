@@ -213,6 +213,46 @@ export const driverService = {
     return updated.find((d: DriverEmployee) => d.id === id)!;
   },
 
+  async updateDriver(id: string, updates: Partial<DriverEmployee>): Promise<DriverEmployee> {
+    if (isSupabaseConfigured) {
+      const dbUpdates: any = {
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.full_name !== undefined) dbUpdates.full_name = updates.full_name;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.driving_licence_no !== undefined) dbUpdates.driving_licence_no = updates.driving_licence_no;
+      if (updates.licence_expiry !== undefined) dbUpdates.licence_expiry = updates.licence_expiry || null;
+      if (updates.employment_type !== undefined) dbUpdates.employment_type = updates.employment_type;
+      if (updates.monthly_salary !== undefined) dbUpdates.monthly_salary = Number(updates.monthly_salary) || 0;
+      if (updates.per_trip_payment !== undefined) dbUpdates.per_trip_payment = Number(updates.per_trip_payment) || 0;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+
+      // Update metadata in payment_arrangement_notes if any of these were provided
+      const metaParts: string[] = [];
+      if (updates.username) metaParts.push(`Username: ${updates.username}`);
+      if (updates.address) metaParts.push(`Address: ${updates.address}`);
+      if (updates.vehicle_number) metaParts.push(`Vehicle: ${updates.vehicle_number}`);
+      if (metaParts.length > 0) {
+        dbUpdates.payment_arrangement_notes = metaParts.join(' | ');
+      }
+
+      const { data, error } = await supabase
+        .from('drivers')
+        .update(dbUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as DriverEmployee;
+    }
+
+    const drivers = getStored('drivers', initialDrivers);
+    const updated = drivers.map((d: DriverEmployee) => (d.id === id ? { ...d, ...updates, updated_at: new Date().toISOString() } : d));
+    setStored('drivers', updated);
+    return updated.find((d: DriverEmployee) => d.id === id)!;
+  },
+
   async resetPassword(_id: string): Promise<{ success: boolean; tempPassword?: string }> {
     return { success: true, tempPassword: `lemon${Math.floor(1000 + Math.random() * 9000)}` };
   },

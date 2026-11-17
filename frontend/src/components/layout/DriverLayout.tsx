@@ -17,8 +17,8 @@ import VillaLemonLogo from '../ui/VillaLemonLogo';
 // Bottom Navigation items for mobile
 const mobileBottomNavItems = [
   { to: '/driver/dashboard', icon: LayoutDashboard, label: 'Home' },
-  { to: '/driver/available-trips', icon: MapPin, label: 'Available' },
   { to: '/driver/upcoming-trips', icon: Calendar, label: 'My Trips' },
+  { to: '/driver/completed-trips', icon: CheckCircle2, label: 'Completed' },
   { to: '/driver/settlements', icon: Wallet, label: 'Settlement' },
   { to: '/driver/profile', icon: User, label: 'Profile' },
 ];
@@ -26,9 +26,7 @@ const mobileBottomNavItems = [
 // Desktop sidebar items
 const desktopDriverNav = [
   { to: '/driver/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/driver/available-trips', icon: MapPin, label: 'Available Trips' },
   { to: '/driver/upcoming-trips', icon: Calendar, label: 'My Upcoming Trips' },
-  { to: '/driver/enrolled-trips', icon: Clock, label: 'My Enrolled Trips' },
   { to: '/driver/completed-trips', icon: CheckCircle2, label: 'Completed Trips' },
   { to: '/driver/settlements', icon: Wallet, label: 'My Settlements' },
   { to: '/driver/profile', icon: User, label: 'My Profile' },
