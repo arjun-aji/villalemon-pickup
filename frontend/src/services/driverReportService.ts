@@ -14,6 +14,7 @@ export interface SubmitDriverReportInput {
   receipt_photo_url?: string;
   cash_returned_to_office?: number;
   cash_return_method?: string;
+  driver_salary_deducted?: number;
 }
 
 export const driverReportService = {
@@ -66,15 +67,16 @@ export const driverReportService = {
         })
         .eq('id', input.trip_id);
 
-      // 3. If driver returned cash to office, log it in driver_ledger with Pending Admin Confirmation
-      if (input.cash_returned_to_office && Number(input.cash_returned_to_office) > 0) {
-        const { data: tripData } = await supabase
-          .from('trips')
-          .select('trip_number')
-          .eq('id', input.trip_id)
-          .maybeSingle();
+      // 3. If driver returned cash to office or retained salary, log in driver_ledger with Pending Admin Confirmation
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('trip_number')
+        .eq('id', input.trip_id)
+        .maybeSingle();
 
-        const tripNum = tripData?.trip_number || 'trip';
+      const tripNum = tripData?.trip_number || 'trip';
+
+      if (input.cash_returned_to_office && Number(input.cash_returned_to_office) > 0) {
         await supabase.from('driver_ledger').insert({
           entry_date: new Date().toISOString().split('T')[0],
           driver_id: input.driver_id,
@@ -83,6 +85,29 @@ export const driverReportService = {
           amount: Number(input.cash_returned_to_office),
           notes: `[Pending Admin Confirmation] Returned from ${tripNum} (${input.cash_return_method || 'Cash'})`,
         });
+      }
+
+      // If driver retained their trip salary from cash collection, record the salary offset in both ledgers
+      if (input.driver_salary_deducted && Number(input.driver_salary_deducted) > 0) {
+        const salaryAmt = Number(input.driver_salary_deducted);
+        await supabase.from('driver_ledger').insert([
+          {
+            entry_date: new Date().toISOString().split('T')[0],
+            driver_id: input.driver_id,
+            trip_id: input.trip_id,
+            entry_type: 'Payment made',
+            amount: salaryAmt,
+            notes: `[Pending Admin Confirmation] Driver retained salary from ${tripNum} collection`,
+          },
+          {
+            entry_date: new Date().toISOString().split('T')[0],
+            driver_id: input.driver_id,
+            trip_id: input.trip_id,
+            entry_type: 'Cash handed to office',
+            amount: salaryAmt,
+            notes: `[Pending Admin Confirmation] Salary offset against cash collected on ${tripNum}`,
+          },
+        ]);
       }
 
       return data as DriverReport;

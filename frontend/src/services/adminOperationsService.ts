@@ -224,7 +224,7 @@ export const driverLedgerService = {
     if (isSupabaseConfigured) {
       const { data: current } = await supabase
         .from('driver_ledger')
-        .select('notes')
+        .select('*')
         .eq('id', entryId)
         .single();
 
@@ -238,6 +238,25 @@ export const driverLedgerService = {
         .eq('id', entryId);
 
       if (error) throw error;
+
+      // If linked to a trip, also confirm any paired entries for that trip
+      if (current?.trip_id) {
+        const { data: paired } = await supabase
+          .from('driver_ledger')
+          .select('id, notes')
+          .eq('trip_id', current.trip_id)
+          .ilike('notes', '%Pending Admin Confirmation%');
+
+        if (paired && paired.length > 0) {
+          for (const p of paired) {
+            const pClean = (p.notes || '').replace(/\[Pending Admin Confirmation\]/gi, '').trim();
+            await supabase
+              .from('driver_ledger')
+              .update({ notes: `[Confirmed by Admin ${new Date().toLocaleDateString('en-IN')}] ${pClean}`.trim() })
+              .eq('id', p.id);
+          }
+        }
+      }
     }
   },
 

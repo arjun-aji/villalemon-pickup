@@ -285,7 +285,7 @@ const TripsPage: React.FC = () => {
       const isDone = normSt === 'completed' || Boolean(rep);
       const isPrepaid = trip.collection_rule === 'Do not collect';
       const driverColl = Number(rep?.amount_collected ?? (isPrepaid ? 0 : (trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)));
-      const returned = isDone ? driverColl - totalExp : 0;
+      const returned = isDone ? Math.max(0, driverColl - totalExp - driverPay) : 0;
 
       acc.totalCollect += collect;
       acc.totalPetrol += petrol;
@@ -847,7 +847,7 @@ const TripsPage: React.FC = () => {
                       const isDone = normSt === 'completed' || Boolean(rep);
                       const isPrepaid = trip.collection_rule === 'Do not collect';
                       const driverCollectedAmt = Number(rep?.amount_collected ?? (isPrepaid ? 0 : (trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)));
-                      const returnedFund = driverCollectedAmt - totalExp;
+                      const returnedFund = driverCollectedAmt - totalExp - driverChg;
 
                       return (
                         <tr key={trip.id} className="hover:bg-slate-50 transition-colors">

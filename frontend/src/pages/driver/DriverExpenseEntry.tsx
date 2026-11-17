@@ -106,7 +106,14 @@ const DriverExpenseEntry: React.FC = () => {
   const expectedCollection = Number(trip?.amount_driver_must_collect || trip?.amount_to_collect || 0);
   const collectionDifference = amountCollected - expectedCollection;
   const totalDriverExpenses = Number(dieselExpense) + Number(tollParkingExpense) + Number(workshopExpense);
-  const netCashToHandOver = amountCollected - totalDriverExpenses;
+  const driverPay = Number(
+    trip?.driver_trip_pay_override ??
+    trip?.driver_charge ??
+    (trip?.driver?.employment_type === 'Per-trip payment' ? (trip?.driver?.per_trip_payment || 500) : 0) ??
+    (driver?.employment_type === 'Per-trip payment' ? (driver?.per_trip_payment || 500) : 0) ??
+    0
+  );
+  const netCashToHandOver = Math.max(0, amountCollected - totalDriverExpenses - driverPay);
 
   useEffect(() => {
     if (!isAmountManuallyEdited) {
@@ -133,6 +140,7 @@ const DriverExpenseEntry: React.FC = () => {
         receipt_photo_url: receiptPhotoUrl || undefined,
         cash_returned_to_office: hasReturnedCash ? Number(returnedAmount) : 0,
         cash_return_method: returnPaymentMethod,
+        driver_salary_deducted: driverPay > 0 ? driverPay : undefined,
       });
 
       setSavedSuccess(true);
@@ -382,10 +390,18 @@ const DriverExpenseEntry: React.FC = () => {
             <span className="text-slate-300">Total Driver Expenses (Fuel/Tolls):</span>
             <span className="font-bold text-amber-300 font-mono">− {formatINR(totalDriverExpenses)}</span>
           </div>
+          {driverPay > 0 && (
+            <div className="flex justify-between items-center text-emerald-300">
+              <span className="text-slate-300">Driver Salary / Trip Pay (Retained by you):</span>
+              <span className="font-bold font-mono">− {formatINR(driverPay)}</span>
+            </div>
+          )}
           <div className="pt-2 border-t border-slate-700 flex justify-between items-center text-sm font-bold">
             <div>
               <span className="block">Amount to Return to Office:</span>
-              <span className="text-[10px] font-normal text-slate-300">Automatically calculated</span>
+              <span className="text-[10px] font-normal text-slate-300">
+                {driverPay > 0 ? `Collected ₹${amountCollected} − Expenses ₹${totalDriverExpenses} − Salary ₹${driverPay}` : 'Automatically calculated'}
+              </span>
             </div>
             <span className="text-emerald-400 font-black font-mono text-base">
               {formatINR(netCashToHandOver)}
@@ -430,7 +446,11 @@ const DriverExpenseEntry: React.FC = () => {
                     placeholder="0"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-sm bg-emerald-50/50 text-emerald-900 border-emerald-200 focus:ring-2 focus:ring-emerald-500"
                   />
-                  <p className="text-[10px] text-slate-400 mt-0.5">Editable if partial amount returned</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {driverPay > 0
+                      ? `After minusing ₹${driverPay} salary & ₹${totalDriverExpenses} expenses`
+                      : 'Editable if partial amount returned'}
+                  </p>
                 </div>
 
                 <div>
