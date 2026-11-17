@@ -323,7 +323,7 @@ const DriverExpenseEntry: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Toll, Parking, Food (₹)</label>
+              <label className="block font-semibold text-slate-700 mb-1">Toll, Parking, other (₹)</label>
               <input
                 type="number"
                 min="0"
@@ -337,12 +337,12 @@ const DriverExpenseEntry: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Toll / Parking / Food Details</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Toll / Parking / other expense Details</label>
             <input
               type="text"
               value={otherDetails}
               onChange={e => setOtherDetails(e.target.value)}
-              placeholder="e.g. Airport Parking ₹120, Highway Toll ₹80"
+              placeholder="e.g. Airport Parking ₹120, Highway Toll ₹80, Permit ₹150"
               className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
             />
           </div>
@@ -382,7 +382,7 @@ const DriverExpenseEntry: React.FC = () => {
           {/* Receipt Photo Upload */}
           <div className="pt-2 border-t border-slate-100">
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Upload Diesel / Toll Receipt Photo
+              Upload Diesel / Toll / Expense Receipt Photo
             </label>
             <div className="flex items-center gap-2">
               <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 cursor-pointer text-xs font-semibold text-slate-600 transition-colors bg-slate-50">
@@ -436,7 +436,7 @@ const DriverExpenseEntry: React.FC = () => {
               </div>
             )}
             <div className="flex justify-between items-center text-amber-300">
-              <span className="text-slate-300">5. Other Expenses (Toll, Food, Workshop):</span>
+              <span className="text-slate-300">5. Other Expenses (Toll, Parking, Other, Workshop):</span>
               <span className="font-bold font-mono text-sm">− {formatINR(otherExpenses)}</span>
             </div>
           </div>

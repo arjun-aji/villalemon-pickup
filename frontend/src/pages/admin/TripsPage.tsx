@@ -1417,7 +1417,7 @@ const TripsPage: React.FC = () => {
                   )}
                   {dFoodToll > 0 && (
                     <div className="flex justify-between text-expense">
-                      <span>Food / Toll / Parking Expense:</span>
+                      <span>Toll / Parking / Other Expense:</span>
                       <span className="font-medium">-{formatINR(dFoodToll)}</span>
                     </div>
                   )}
@@ -1541,7 +1541,7 @@ const TripsPage: React.FC = () => {
                         <span>Ending KM: __________</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Tolls/Food/Parking: <strong>{sheetToll ? formatINR(sheetToll) : '₹_______'}</strong></span>
+                        <span>Tolls/Parking/Other: <strong>{sheetToll ? formatINR(sheetToll) : '₹_______'}</strong></span>
                         <span>Diesel/Petrol: <strong>{sheetDiesel ? formatINR(sheetDiesel) : '₹_______'}</strong></span>
                       </div>
                     </div>
