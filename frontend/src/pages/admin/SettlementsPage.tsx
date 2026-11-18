@@ -175,7 +175,7 @@ const SettlementsPage: React.FC = () => {
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Pending Check
+            Pending Check ({reports.filter(r => r.check_status !== 'Verified OK' && r.check_status !== 'Difference Flagged').length})
           </button>
           <button
             onClick={() => setStatusFilter('verified')}
@@ -185,7 +185,7 @@ const SettlementsPage: React.FC = () => {
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Verified OK
+            Verified OK ({reports.filter(r => r.check_status === 'Verified OK').length})
           </button>
           <button
             onClick={() => setStatusFilter('flagged')}
@@ -195,7 +195,7 @@ const SettlementsPage: React.FC = () => {
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Flagged
+            Flagged ({reports.filter(r => r.check_status === 'Difference Flagged').length})
           </button>
         </div>
       </div>
