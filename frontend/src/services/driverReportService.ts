@@ -169,12 +169,16 @@ export const driverReportService = {
 
   async verifyReport(id: string, status: 'Verified OK' | 'Difference Flagged', _notes?: string): Promise<void> {
     if (isSupabaseConfigured) {
+      const updatePayload: any = {
+        check_status: status,
+        verified_at: new Date().toISOString(),
+      };
+      if (_notes) {
+        updatePayload.admin_verification_note = _notes;
+      }
       const { error } = await supabase
         .from('driver_reports')
-        .update({
-          check_status: status,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', id);
 
       if (error) throw error;
