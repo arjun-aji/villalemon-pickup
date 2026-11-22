@@ -734,6 +734,12 @@ const TripsPage: React.FC = () => {
                                 Flight: {flightInfo}
                               </div>
                             )}
+                            {(category.toLowerCase().includes('airport') || pickup.toLowerCase().includes('airport') || dropoff.toLowerCase().includes('airport')) && (
+                              <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1 shadow-2xs">
+                                <span>⚠️</span>
+                                <span>Verify terminal with customer</span>
+                              </div>
+                            )}
                           </td>
 
                           {/* Col 3: Pickup (terminal) - MOVED BEFORE GUEST */}
@@ -1056,6 +1062,15 @@ const TripsPage: React.FC = () => {
                             <div className="mt-1">
                               {renderCategoryBadge(trip.trip_category)}
                             </div>
+                            {((trip.trip_category || '').toLowerCase().includes('airport') ||
+                              (trip.pickup_location || '').toLowerCase().includes('airport') ||
+                              (trip.dropoff_location || '').toLowerCase().includes('airport') ||
+                              (trip.destination || '').toLowerCase().includes('airport')) && (
+                              <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1">
+                                <span>⚠️</span>
+                                <span>Verify terminal with customer</span>
+                              </div>
+                            )}
                           </td>
                           <td className="table-cell">
                             <div>
@@ -1422,6 +1437,29 @@ const TripsPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Highlighted Driver Notice for Airport Trips */}
+            {Boolean(
+              (viewTrip.trip_category || '').toLowerCase().includes('airport') ||
+              (viewTrip.pickup_location || '').toLowerCase().includes('airport') ||
+              (viewTrip.dropoff_location || '').toLowerCase().includes('airport') ||
+              (viewTrip.destination || '').toLowerCase().includes('airport')
+            ) && (
+              <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-950 flex items-center gap-3 shadow-xs">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <p className="font-extrabold text-[11px] uppercase tracking-wide text-amber-800">
+                    Airport Duty Note for Driver:
+                  </p>
+                  <p className="font-black text-xs text-amber-950">
+                    Verify the terminal with customer!
+                  </p>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    Driver must confirm whether Domestic (Terminal 1) or International (Terminal 2) with customer before trip.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Placard Preview */}
             <div>
               <div className="flex items-center justify-between mb-1.5 text-xs">
@@ -1559,6 +1597,23 @@ const TripsPage: React.FC = () => {
                 <p className="text-slate-700">Drop-off: <strong>{tripSheetTrip.dropoff_location || tripSheetTrip.destination}</strong></p>
                 <p className="text-slate-700">Collection: <strong>{tripSheetTrip.collection_rule === 'Do not collect' ? 'Do not collect (Office)' : `Collect ${formatINR(tripSheetTrip.amount_driver_must_collect || tripSheetTrip.amount_to_collect || 0)}`}</strong></p>
               </div>
+
+              {/* Highlighted Driver Instruction for Airport Trips */}
+              {Boolean(
+                (tripSheetTrip.trip_category || '').toLowerCase().includes('airport') ||
+                (tripSheetTrip.pickup_location || '').toLowerCase().includes('airport') ||
+                (tripSheetTrip.dropoff_location || '').toLowerCase().includes('airport') ||
+                (tripSheetTrip.destination || '').toLowerCase().includes('airport')
+              ) && (
+                <div className="p-2.5 bg-amber-50 border-2 border-amber-300 rounded-lg text-amber-950 flex items-center gap-2">
+                  <span className="text-base">⚠️</span>
+                  <div className="text-xs">
+                    <span className="font-bold text-amber-900 uppercase">Driver Instruction: </span>
+                    <strong className="text-amber-950 font-black">Verify the terminal with customer!</strong>
+                    <span className="text-amber-800 text-[11px] block mt-0.5">Please confirm Domestic (Terminal 1) vs International (Terminal 2) with passenger before trip.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Guest & Driver Information - PLACED AFTER PICKUP AND DROPOFF */}
               <div className="grid grid-cols-2 gap-3">

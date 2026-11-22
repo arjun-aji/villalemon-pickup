@@ -272,6 +272,15 @@ const DriverUpcomingTrips: React.FC = () => {
                         <div className="text-slate-500 text-[11px] truncate" title={trip.dropoff_location || trip.destination}>
                           → {trip.dropoff_location || trip.destination}
                         </div>
+                        {((trip.trip_category || '').toLowerCase().includes('airport') ||
+                          (trip.pickup_location || '').toLowerCase().includes('airport') ||
+                          (trip.dropoff_location || '').toLowerCase().includes('airport') ||
+                          (trip.destination || '').toLowerCase().includes('airport')) && (
+                          <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1">
+                            <span>⚠️</span>
+                            <span>Verify terminal with customer</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3 font-mono">
                         {collectAmt > 0 ? (
@@ -393,6 +402,15 @@ const DriverUpcomingTrips: React.FC = () => {
                     <span className="font-bold text-slate-900">{formatDate(tripDate)}</span>
                     <span className="font-semibold text-text-primary">{formatTime(trip.pickup_time || '')}</span>
                   </div>
+                  {((trip.trip_category || '').toLowerCase().includes('airport') ||
+                    (trip.pickup_location || '').toLowerCase().includes('airport') ||
+                    (trip.dropoff_location || '').toLowerCase().includes('airport') ||
+                    (trip.destination || '').toLowerCase().includes('airport')) && (
+                    <div className="mt-1 p-2 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 flex items-center gap-1.5 text-[11px]">
+                      <span className="text-sm">⚠️</span>
+                      <span className="font-extrabold">Verify the terminal with customer!</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Placard Box (Only for Airport trips or when placard text is set) */}

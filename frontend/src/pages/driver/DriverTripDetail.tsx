@@ -141,6 +141,27 @@ const DriverTripDetail: React.FC = () => {
           )}
         </div>
 
+        {/* Highlighted Terminal Verification Notice for Airport Trips */}
+        {((trip.trip_category || '').toLowerCase().includes('airport') ||
+          (trip.pickup_location || '').toLowerCase().includes('airport') ||
+          (trip.dropoff_location || '').toLowerCase().includes('airport') ||
+          (trip.destination || '').toLowerCase().includes('airport')) && (
+          <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center gap-3 text-amber-950 shadow-xs">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <p className="font-extrabold text-[11px] uppercase tracking-wider text-amber-800">
+                Driver Action Required:
+              </p>
+              <p className="font-black text-sm text-amber-950">
+                Verify the terminal with customer!
+              </p>
+              <p className="text-[11px] text-amber-700 font-medium mt-0.5">
+                Confirm whether Domestic (Terminal 1) or International (Terminal 2) with customer before heading to the airport.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Route Points */}
         <div className="space-y-2 pb-4 border-b border-border text-xs">
           <div className="flex items-start justify-between">

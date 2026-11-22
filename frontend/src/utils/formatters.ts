@@ -255,6 +255,7 @@ export const generateDriverDispatchMessage = (data: DriverDispatchMessageData): 
     if (data.placardText) {
       msg += `\n🪧 *Airport Placard / Name Board:*\n👉 *${data.placardText.toUpperCase()}*\n`;
     }
+    msg += `\n⚠️ *DRIVER NOTE: Verify the terminal with customer!*\n`;
   }
 
   const cabLabel = data.vehicleReg ? `${data.vehicleReg} (${data.requiredCabType || 'Cab'})` : (data.requiredCabType || 'Sedan');
