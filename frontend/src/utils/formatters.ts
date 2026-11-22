@@ -192,14 +192,18 @@ export interface DriverDispatchMessageData {
   finalDropoff?: string;
   guestNames?: string;
   guestContact?: string;
+  guestList?: Array<{ name: string; phone?: string }>;
   totalPeople?: number;
   flightNumberAndTime?: string;
+  flightList?: Array<{ flightNoAndTime: string; terminal?: string }>;
   airportTerminal?: string;
   placardText?: string;
   requiredCabType?: string;
   vehicleReg?: string;
   driverName?: string;
   specialInstructions?: string;
+  amountToCollect?: number;
+  convoyBadge?: string;
 }
 
 /**
@@ -215,15 +219,23 @@ export const generateDriverDispatchMessage = (data: DriverDispatchMessageData): 
 
   let msg = `🚖 *VARKALA HOLIDAYS — TRIP DISPATCH*\n`;
   msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `🆔 *Trip ID:* ${data.tripNumber || 'New Trip'}\n`;
+  msg += `🆔 *Trip ID:* ${data.tripNumber || 'New Trip'}${data.convoyBadge ? ` (${data.convoyBadge})` : ''}\n`;
   msg += `🏷️ *Service:* ${data.tripCategory || 'Transport'}\n`;
   msg += `📅 *Date & Time:* ${formatDate(data.tripDate)}, ${formatTime(data.pickupTime)}\n\n`;
 
-  msg += `👤 *Guest Name:* ${data.guestNames || 'Guest'}\n`;
-  if (data.guestContact) {
-    msg += `📞 *Guest Contact:* ${data.guestContact}\n`;
+  if (data.guestList && data.guestList.length > 1) {
+    msg += `👥 *Guests & Contacts (${data.totalPeople || data.guestList.length} Pax):*\n`;
+    data.guestList.forEach((g, idx) => {
+      msg += `  ${idx + 1}. *${g.name || 'Guest'}*${g.phone ? ` — 📞 ${g.phone}` : ''}\n`;
+    });
+    msg += `\n`;
+  } else {
+    msg += `👤 *Guest Name:* ${data.guestNames || 'Guest'}\n`;
+    if (data.guestContact) {
+      msg += `📞 *Guest Contact:* ${data.guestContact}\n`;
+    }
+    msg += `👥 *Passengers:* ${data.totalPeople || 1} Pax\n\n`;
   }
-  msg += `👥 *Passengers:* ${data.totalPeople || 1} Pax\n\n`;
 
   msg += `📍 *Pickup Point:* ${data.pickupLocation || 'Pickup'}\n`;
   msg += `🏁 *Drop-off Point:* ${data.dropoffLocation || 'Destination'}\n`;
@@ -232,16 +244,31 @@ export const generateDriverDispatchMessage = (data: DriverDispatchMessageData): 
   }
 
   if (isAirport) {
-    if (data.flightNumberAndTime) {
+    if (data.flightList && data.flightList.length > 1) {
+      msg += `\n✈️ *Flight / Arrival Details:*\n`;
+      data.flightList.forEach((f, idx) => {
+        msg += `  ${idx + 1}. ${f.flightNoAndTime}${f.terminal ? ` (${f.terminal})` : ''}\n`;
+      });
+    } else if (data.flightNumberAndTime) {
       msg += `✈️ *Flight/Train:* ${data.flightNumberAndTime}${data.airportTerminal ? ` (${data.airportTerminal})` : ''}\n`;
     }
     if (data.placardText) {
-      msg += `🪧 *Airport Placard / Name Board:*\n👉 *${data.placardText.toUpperCase()}*\n`;
+      msg += `\n🪧 *Airport Placard / Name Board:*\n👉 *${data.placardText.toUpperCase()}*\n`;
     }
   }
 
-  msg += `\n🚗 *Vehicle:* ${data.vehicleReg ? `${data.vehicleReg} (${data.requiredCabType || 'Cab'})` : (data.requiredCabType || 'Sedan')}\n`;
+  const cabLabel = data.vehicleReg ? `${data.vehicleReg} (${data.requiredCabType || 'Cab'})` : (data.requiredCabType || 'Sedan');
+  msg += `\n🚗 *Vehicle:* ${cabLabel}${data.convoyBadge ? ` [${data.convoyBadge}]` : ''}\n`;
   msg += `👨‍✈️ *Assigned Driver:* ${data.driverName || 'Driver'}\n`;
+
+  // Explicit collection instruction for the driver
+  if (data.amountToCollect !== undefined) {
+    if (data.amountToCollect > 0) {
+      msg += `💵 *CASH TO COLLECT FROM GUEST:* Rs. ${data.amountToCollect.toLocaleString('en-IN')}\n`;
+    } else {
+      msg += `💵 *COLLECTION:* Do NOT collect money from guest (Office Billed / Prepaid)\n`;
+    }
+  }
 
   if (cleanNotes) {
     msg += `\n📝 *Driver Notes:*\n${cleanNotes}\n`;

@@ -26,10 +26,16 @@ import {
   CheckCircle2,
   PlusCircle,
   FileText,
+  Plus,
+  Trash2,
+  Layers,
+  Split,
+  AlertCircle,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
 import { organizationService, vehicleService } from '../../services/adminOperationsService';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import {
   Driver,
@@ -51,6 +57,42 @@ import {
 } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Modal from '../../components/ui/Modal';
+
+export interface GuestItem {
+  id: string;
+  name: string;
+  phone: string;
+}
+
+export interface FlightItem {
+  id: string;
+  flightNoAndTime: string;
+  terminal: AirportTerminal;
+}
+
+export interface MultiCabItem {
+  id: string;
+  cabLabel: string;
+  vehicleType: VehicleType;
+  assignedVehicleId: string;
+  assignmentMode: 'registered' | 'outside';
+  assignedDriverId: string;
+  driverTripPay: number | '';
+  amountToCollect: number | '';
+  sellingPriceShare: number | '';
+  outsideDriverName: string;
+  outsideDriverPhone: string;
+  outsideVehicleReg: string;
+  outsideVehicleType: VehicleType;
+}
+
+export interface CreatedTripResultItem {
+  trip: Trip;
+  cabLabel: string;
+  dispatchMessage: string;
+  driverPhone?: string;
+  driverName?: string;
+}
 
 interface CategoryOption {
   id: TripCategory;
@@ -117,6 +159,12 @@ const AddTripPage: React.FC = () => {
   const [totalPeople, setTotalPeople] = useState(2);
   const [specialInstructions, setSpecialInstructions] = useState('');
 
+  // Multiple Guests State
+  const [isMultiGuest, setIsMultiGuest] = useState(false);
+  const [guestList, setGuestList] = useState<GuestItem[]>([
+    { id: 'g-1', name: '', phone: '' },
+  ]);
+
   // Routing
   const [pickupLocation, setPickupLocation] = useState('Trivandrum Airport (TRV)');
   const [dropoffLocation, setDropoffLocation] = useState('VillaLemon Homestay, Varkala');
@@ -124,6 +172,48 @@ const AddTripPage: React.FC = () => {
   const [flightNumberAndTime, setFlightNumberAndTime] = useState('');
   const [airportTerminal, setAirportTerminal] = useState<AirportTerminal>('Terminal 2');
   const [requiredCabType, setRequiredCabType] = useState<VehicleType>('Sedan');
+
+  // Multiple Flights State
+  const [isMultiFlight, setIsMultiFlight] = useState(false);
+  const [flightList, setFlightList] = useState<FlightItem[]>([
+    { id: 'f-1', flightNoAndTime: '', terminal: 'Terminal 2' },
+  ]);
+
+  // Fleet Mode: 'single' | 'multi' (Convoy)
+  const [fleetMode, setFleetMode] = useState<'single' | 'multi'>('single');
+  const [multiCabs, setMultiCabs] = useState<MultiCabItem[]>([
+    {
+      id: 'c-1',
+      cabLabel: 'Cab 1 (Lead Vehicle)',
+      vehicleType: 'Sedan',
+      assignedVehicleId: '',
+      assignmentMode: 'registered',
+      assignedDriverId: '',
+      driverTripPay: 500,
+      amountToCollect: 2500,
+      sellingPriceShare: 1500,
+      outsideDriverName: '',
+      outsideDriverPhone: '',
+      outsideVehicleReg: '',
+      outsideVehicleType: 'Sedan',
+    },
+    {
+      id: 'c-2',
+      cabLabel: 'Cab 2 (Second Vehicle)',
+      vehicleType: 'Ertiga',
+      assignedVehicleId: '',
+      assignmentMode: 'registered',
+      assignedDriverId: '',
+      driverTripPay: 500,
+      amountToCollect: 0,
+      sellingPriceShare: 1500,
+      outsideDriverName: '',
+      outsideDriverPhone: '',
+      outsideVehicleReg: '',
+      outsideVehicleType: 'Ertiga',
+    },
+  ]);
+  const [multiCabPriceSplit, setMultiCabPriceSplit] = useState<'equal' | 'lead_only'>('equal');
 
   // Crew & Fleet Assignment Mode: 'registered' | 'outside'
   const [assignmentMode, setAssignmentMode] = useState<'registered' | 'outside'>('registered');
@@ -146,17 +236,15 @@ const AddTripPage: React.FC = () => {
   const [placardText, setPlacardText] = useState('VARKALA HOLIDAYS - GUEST');
   const [isPlacardCustomized, setIsPlacardCustomized] = useState(false);
 
-  // Success Dispatch Modal State
-  const [createdTripResult, setCreatedTripResult] = useState<{
-    trip: Trip;
-    dispatchMessage: string;
-    driverPhone?: string;
-    driverName?: string;
-  } | null>(null);
+  // Success Dispatch Modal State (Single or Multi-Cab)
+  const [createdTripResult, setCreatedTripResult] = useState<CreatedTripResultItem | null>(null);
+  const [createdTripResults, setCreatedTripResults] = useState<CreatedTripResultItem[]>([]);
+  const [activeDispatchTab, setActiveDispatchTab] = useState(0);
   const [copiedDispatch, setCopiedDispatch] = useState(false);
 
   const isAirportPickup = tripCategory === 'Airport Pick-up';
   const isAirport = tripCategory === 'Airport Pick-up' || tripCategory === 'Airport Drop';
+  const isRoundTrip = tripCategory === 'Sightseeing';
 
   useEffect(() => {
     Promise.all([
@@ -174,11 +262,22 @@ const AddTripPage: React.FC = () => {
         if (activeDrivers[0].per_trip_payment) {
           setDriverTripPay(activeDrivers[0].per_trip_payment);
         }
+        setMultiCabs(prev => prev.map((c, idx) => ({
+          ...c,
+          assignedDriverId: activeDrivers[Math.min(idx, activeDrivers.length - 1)].id,
+          driverTripPay: activeDrivers[Math.min(idx, activeDrivers.length - 1)].per_trip_payment || 500,
+        })));
       }
 
       const activeVehicles = vehList.filter(v => v.status === 'Available');
       setVehicles(activeVehicles);
-      if (activeVehicles.length > 0) setAssignedVehicleId(activeVehicles[0].id);
+      if (activeVehicles.length > 0) {
+        setAssignedVehicleId(activeVehicles[0].id);
+        setMultiCabs(prev => prev.map((c, idx) => ({
+          ...c,
+          assignedVehicleId: activeVehicles[Math.min(idx, activeVehicles.length - 1)].id,
+        })));
+      }
     });
   }, []);
 
@@ -225,11 +324,92 @@ const AddTripPage: React.FC = () => {
     setTimeout(() => setCopiedPlacard(false), 2000);
   };
 
-  const handleCopyDispatch = () => {
-    if (!createdTripResult) return;
-    navigator.clipboard.writeText(createdTripResult.dispatchMessage);
+  const handleCopyDispatch = (textToCopy?: string) => {
+    const text = textToCopy || createdTripResults[activeDispatchTab]?.dispatchMessage;
+    if (!text) return;
+    navigator.clipboard.writeText(text);
     setCopiedDispatch(true);
     setTimeout(() => setCopiedDispatch(false), 2500);
+  };
+
+  const handleAddGuest = () => {
+    setGuestList(prev => [...prev, { id: `g-${Date.now()}`, name: '', phone: '' }]);
+  };
+
+  const handleRemoveGuest = (id: string) => {
+    if (guestList.length <= 1) return;
+    const next = guestList.filter(g => g.id !== id);
+    setGuestList(next);
+    const validNames = next.map(g => g.name.trim()).filter(Boolean);
+    const validContacts = next.map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.phone.trim()}`).filter(g => g.replace(/:\s*$/, '').trim());
+    setGuestNames(validNames.join(', '));
+    setGuestContact(validContacts.join(' | '));
+    setTotalPeople(Math.max(1, next.length));
+  };
+
+  const handleGuestChange = (id: string, field: 'name' | 'phone', val: string) => {
+    setGuestList(prev => {
+      const next = prev.map(g => (g.id === id ? { ...g, [field]: val } : g));
+      const validNames = next.map(g => g.name.trim()).filter(Boolean);
+      const validContacts = next.map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.phone.trim()}`).filter(g => g.replace(/:\s*$/, '').trim());
+      setGuestNames(validNames.join(', '));
+      setGuestContact(validContacts.join(' | '));
+      setTotalPeople(Math.max(1, next.length));
+      return next;
+    });
+  };
+
+  const handleAddFlight = () => {
+    setFlightList(prev => [...prev, { id: `f-${Date.now()}`, flightNoAndTime: '', terminal: 'Terminal 2' }]);
+  };
+
+  const handleRemoveFlight = (id: string) => {
+    if (flightList.length <= 1) return;
+    const next = flightList.filter(f => f.id !== id);
+    setFlightList(next);
+    const validFlights = next.map(f => `${f.flightNoAndTime.trim()}${f.terminal ? ` (${f.terminal})` : ''}`).filter(Boolean);
+    setFlightNumberAndTime(validFlights.join(' / '));
+  };
+
+  const handleFlightChange = (id: string, field: 'flightNoAndTime' | 'terminal', val: string) => {
+    setFlightList(prev => {
+      const next = prev.map(f => (f.id === id ? { ...f, [field]: val } : f));
+      const validFlights = next.map(f => `${f.flightNoAndTime.trim()}${f.terminal ? ` (${f.terminal})` : ''}`).filter(Boolean);
+      setFlightNumberAndTime(validFlights.join(' / '));
+      return next;
+    });
+  };
+
+  const handleAddCab = () => {
+    const nextIdx = multiCabs.length + 1;
+    const newCab: MultiCabItem = {
+      id: `c-${Date.now()}`,
+      cabLabel: `Cab ${nextIdx}`,
+      vehicleType: 'Sedan',
+      assignedVehicleId: vehicles[0]?.id || '',
+      assignmentMode: 'registered',
+      assignedDriverId: drivers[0]?.id || '',
+      driverTripPay: drivers[0]?.per_trip_payment || 500,
+      amountToCollect: 0,
+      sellingPriceShare: 1500,
+      outsideDriverName: '',
+      outsideDriverPhone: '',
+      outsideVehicleReg: '',
+      outsideVehicleType: 'Sedan',
+    };
+    setMultiCabs(prev => [...prev, newCab]);
+  };
+
+  const handleRemoveCab = (id: string) => {
+    if (multiCabs.length <= 2) {
+      alert('A convoy booking requires at least 2 vehicles. Otherwise, switch back to Single Vehicle mode.');
+      return;
+    }
+    setMultiCabs(prev => prev.filter(c => c.id !== id));
+  };
+
+  const handleCabUpdate = (id: string, updates: Partial<MultiCabItem>) => {
+    setMultiCabs(prev => prev.map(c => (c.id === id ? { ...c, ...updates } : c)));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -239,6 +419,169 @@ const AddTripPage: React.FC = () => {
       return;
     }
 
+    const effectiveOrgId = organizationId || (organizations.length > 0 ? organizations[0].id : '');
+
+    // ─────────────────────────────────────────────────────────────
+    // MULTI-CAB / CONVOY CREATION MODE
+    // ─────────────────────────────────────────────────────────────
+    if (fleetMode === 'multi') {
+      for (let i = 0; i < multiCabs.length; i++) {
+        const c = multiCabs[i];
+        if (c.assignmentMode === 'outside') {
+          if (!c.outsideDriverName.trim()) {
+            alert(`Please enter outside driver name for ${c.cabLabel}`);
+            return;
+          }
+          if (!c.outsideVehicleReg.trim()) {
+            alert(`Please enter vehicle registration number for ${c.cabLabel}`);
+            return;
+          }
+        }
+      }
+
+      setLoading(true);
+      try {
+        const results: CreatedTripResultItem[] = [];
+
+        // 1. Calculate base trip number (e.g. VH-0010)
+        let baseNum = 'VH-0001';
+        try {
+          const { data: latestTrips } = await supabase
+            .from('trips')
+            .select('trip_number')
+            .order('trip_number', { ascending: false })
+            .limit(100);
+
+          let maxNum = 0;
+          if (latestTrips && latestTrips.length > 0) {
+            for (const t of latestTrips) {
+              const m = (t.trip_number || '').match(/(\d+)/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > maxNum) maxNum = n;
+              }
+            }
+          }
+          baseNum = `VH-${String(maxNum + 1).padStart(4, '0')}`;
+        } catch (err) {
+          console.warn('Trip number detection error:', err);
+        }
+
+        const totalClientPrice = Number(tripSellingPrice) || 0;
+
+        for (let i = 0; i < multiCabs.length; i++) {
+          const c = multiCabs[i];
+          const suffix = String.fromCharCode(65 + i); // 'A', 'B', 'C'
+          const tripNumber = `${baseNum}-${suffix}`;
+
+          const selectedDriver = drivers.find(d => d.id === c.assignedDriverId);
+          const selectedVehicle = vehicles.find(v => v.id === c.assignedVehicleId);
+
+          const effectiveDriverName = c.assignmentMode === 'outside'
+            ? c.outsideDriverName.trim()
+            : (selectedDriver?.full_name || 'Driver');
+
+          const effectiveDriverPhone = c.assignmentMode === 'outside'
+            ? c.outsideDriverPhone.trim()
+            : selectedDriver?.phone;
+
+          const effectiveVehicleReg = c.assignmentMode === 'outside'
+            ? c.outsideVehicleReg.trim()
+            : selectedVehicle?.registration_number;
+
+          const cabSellingPrice = multiCabPriceSplit === 'equal'
+            ? Math.round(totalClientPrice / multiCabs.length)
+            : (i === 0 ? totalClientPrice : 0);
+
+          const convoyTag = `[Convoy: Cab ${i + 1} of ${multiCabs.length} (${c.vehicleType})]`;
+          const combinedInstructions = [convoyTag, specialInstructions].filter(Boolean).join(' ');
+
+          const createdTrip = await tripService.create(
+            {
+              trip_number: tripNumber,
+              organization_id: effectiveOrgId,
+              ordered_by: orderedBy,
+              trip_category: tripCategory,
+              trip_date: tripDate,
+              pickup_time: pickupTime,
+              guest_names: guestNames,
+              guest_contact_number: guestContact,
+              total_people: Number(totalPeople),
+              pickup_location: pickupLocation,
+              dropoff_location: dropoffLocation,
+              final_dropoff: finalDropoff || undefined,
+              flight_number_and_time: flightNumberAndTime || undefined,
+              airport_terminal: isAirport ? airportTerminal : undefined,
+              required_cab_type: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
+              special_instructions: combinedInstructions,
+              placard_text: isAirportPickup ? placardText : undefined,
+              assigned_driver_id: c.assignmentMode === 'registered' ? c.assignedDriverId : undefined,
+              assigned_vehicle_id: c.assignmentMode === 'registered' ? c.assignedVehicleId : undefined,
+              outside_driver_name: c.assignmentMode === 'outside' ? c.outsideDriverName.trim() : undefined,
+              outside_driver_phone: c.assignmentMode === 'outside' ? c.outsideDriverPhone.trim() : undefined,
+              outside_vehicle_reg: c.assignmentMode === 'outside' ? c.outsideVehicleReg.trim() : undefined,
+              outside_vehicle_type: c.assignmentMode === 'outside' ? c.outsideVehicleType : undefined,
+              trip_selling_price: cabSellingPrice,
+              collection_rule: Number(c.amountToCollect) > 0 ? 'Collect' : 'Do not collect',
+              amount_driver_must_collect: Number(c.amountToCollect) || 0,
+              driver_trip_pay_override: c.driverTripPay ? Number(c.driverTripPay) : undefined,
+              is_published_for_enrollment: false,
+              trip_status: 'Assigned',
+              customer_name: guestNames,
+              customer_phone: guestContact,
+              amount_to_collect: Number(c.amountToCollect) || 0,
+              driver_charge: Number(c.driverTripPay) || 0,
+            },
+            user?.id || profile?.id
+          );
+
+          const dispatchMsg = generateDriverDispatchMessage({
+            tripNumber: tripNumber,
+            tripCategory: tripCategory,
+            tripDate: tripDate,
+            pickupTime: pickupTime,
+            pickupLocation: pickupLocation,
+            dropoffLocation: dropoffLocation,
+            finalDropoff: finalDropoff,
+            guestNames: guestNames,
+            guestContact: guestContact,
+            guestList: isMultiGuest ? guestList.filter(g => g.name.trim()) : undefined,
+            totalPeople: Number(totalPeople),
+            flightNumberAndTime: flightNumberAndTime,
+            flightList: isMultiFlight ? flightList.filter(f => f.flightNoAndTime.trim()) : undefined,
+            airportTerminal: isAirport ? airportTerminal : undefined,
+            placardText: isAirportPickup ? placardText : undefined,
+            requiredCabType: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
+            vehicleReg: effectiveVehicleReg,
+            driverName: effectiveDriverName,
+            specialInstructions: combinedInstructions,
+            amountToCollect: Number(c.amountToCollect) || 0,
+            convoyBadge: `Convoy: Cab ${i + 1} of ${multiCabs.length}`,
+          });
+
+          results.push({
+            trip: createdTrip,
+            cabLabel: `Cab ${i + 1}: ${c.vehicleType} (${effectiveDriverName})`,
+            dispatchMessage: dispatchMsg,
+            driverPhone: effectiveDriverPhone,
+            driverName: effectiveDriverName,
+          });
+        }
+
+        setCreatedTripResults(results);
+        setActiveDispatchTab(0);
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || 'Failed to create convoy trips');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SINGLE CAB CREATION MODE
+    // ─────────────────────────────────────────────────────────────
     if (assignmentMode === 'outside') {
       if (!outsideDriverName.trim()) {
         alert('Please enter outside driver name');
@@ -252,7 +595,6 @@ const AddTripPage: React.FC = () => {
 
     setLoading(true);
 
-    const effectiveOrgId = organizationId || (organizations.length > 0 ? organizations[0].id : '');
     const selectedDriver = drivers.find(d => d.id === assignedDriverId);
     const selectedVehicle = vehicles.find(v => v.id === assignedVehicleId);
 
@@ -327,23 +669,28 @@ const AddTripPage: React.FC = () => {
         finalDropoff: finalDropoff,
         guestNames: guestNames,
         guestContact: guestContact,
+        guestList: isMultiGuest ? guestList.filter(g => g.name.trim()) : undefined,
         totalPeople: Number(totalPeople),
         flightNumberAndTime: flightNumberAndTime,
+        flightList: isMultiFlight ? flightList.filter(f => f.flightNoAndTime.trim()) : undefined,
         airportTerminal: isAirport ? airportTerminal : undefined,
         placardText: isAirportPickup ? placardText : undefined,
         requiredCabType: assignmentMode === 'outside' ? outsideVehicleType : requiredCabType,
         vehicleReg: effectiveVehicleReg,
         driverName: effectiveDriverName,
         specialInstructions: specialInstructions,
+        amountToCollect: Number(amountDriverMustCollect) || 0,
       });
 
       // Show the Success Dispatch Modal with Copy/WhatsApp buttons
-      setCreatedTripResult({
+      setCreatedTripResults([{
         trip: createdTrip,
+        cabLabel: `Cab: ${requiredCabType} (${effectiveDriverName || 'Driver'})`,
         dispatchMessage: dispatchMsg,
         driverPhone: effectiveDriverPhone,
         driverName: effectiveDriverName,
-      });
+      }]);
+      setActiveDispatchTab(0);
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'Failed to create trip');
@@ -486,52 +833,141 @@ const AddTripPage: React.FC = () => {
 
           {/* Section 2: Guest Details */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
-            <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-              2. Guest & Passenger Information
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Guest Name(s) *</label>
-                <input
-                  type="text"
-                  value={guestNames}
-                  onChange={e => setGuestNames(e.target.value)}
-                  required
-                  placeholder="e.g. Alexander Ivanov, Elena"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Guest WhatsApp / Phone</label>
-                <input
-                  type="tel"
-                  value={guestContact}
-                  onChange={e => setGuestContact(e.target.value)}
-                  placeholder="+91 / International number"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Number of Passengers *</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={totalPeople}
-                  onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                  required
-                />
-              </div>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px] flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-navy-primary" />
+                <span>2. Guest & Passenger Information</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isMultiGuest;
+                  setIsMultiGuest(next);
+                  if (next && guestList.length === 1 && !guestList[0].name) {
+                    setGuestList([{ id: 'g-1', name: guestNames, phone: guestContact }]);
+                  }
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+              >
+                {isMultiGuest ? '← Switch to Single Guest Form' : '+ Add Multiple Passenger Contacts'}
+              </button>
             </div>
+
+            {!isMultiGuest ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Guest Name(s) *</label>
+                  <input
+                    type="text"
+                    value={guestNames}
+                    onChange={e => setGuestNames(e.target.value)}
+                    required
+                    placeholder="e.g. Alexander Ivanov, Elena"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Guest WhatsApp / Phone</label>
+                  <input
+                    type="tel"
+                    value={guestContact}
+                    onChange={e => setGuestContact(e.target.value)}
+                    placeholder="+91 / International number"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Number of Passengers *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={totalPeople}
+                    onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                    required
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800">
+                    Passenger Roster & Individual Contact Numbers
+                  </span>
+                  <span className="text-slate-500 text-[11px]">
+                    All contacts will be formatted into dispatch and driver view
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {guestList.map((g, idx) => (
+                    <div key={g.id} className="flex items-center gap-2">
+                      <span className="w-5 text-center font-bold text-slate-500 text-xs">
+                        #{idx + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={g.name}
+                        onChange={e => handleGuestChange(g.id, 'name', e.target.value)}
+                        placeholder={`Passenger ${idx + 1} Name`}
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-navy-primary/20"
+                        required
+                      />
+                      <input
+                        type="tel"
+                        value={g.phone}
+                        onChange={e => handleGuestChange(g.id, 'phone', e.target.value)}
+                        placeholder="WhatsApp / Phone"
+                        className="w-48 px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-navy-primary/20"
+                      />
+                      {guestList.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGuest(g.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                          title="Remove Passenger"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddGuest}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-blue-300 text-blue-700 font-bold hover:bg-blue-50 transition-colors shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Another Passenger</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">Total Pax Count:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={totalPeople}
+                      onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Routing & Flight */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
-            <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-              3. Route & Schedule Details
+            <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px] flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-navy-primary" />
+              <span>3. Route & Schedule Details</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -561,7 +997,7 @@ const AddTripPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Required Cab Type *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Primary Cab Type *</label>
                 <select
                   value={requiredCabType}
                   onChange={e => setRequiredCabType(e.target.value as VehicleType)}
@@ -573,44 +1009,108 @@ const AddTripPage: React.FC = () => {
                 </select>
               </div>
 
+              <div className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">
+                    {isAirport ? 'Flight Number(s) & Arrival Details' : 'Train / Reference Info'}
+                  </label>
+                  {isAirport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isMultiFlight;
+                        setIsMultiFlight(next);
+                        if (next && flightList.length === 1 && !flightList[0].flightNoAndTime) {
+                          setFlightList([{ id: 'f-1', flightNoAndTime: flightNumberAndTime, terminal: airportTerminal }]);
+                        }
+                      }}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                    >
+                      {isMultiFlight ? '← Single Flight' : '+ Add Multiple Flights'}
+                    </button>
+                  )}
+                </div>
+
+                {!isMultiFlight ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={flightNumberAndTime}
+                      onChange={e => setFlightNumberAndTime(e.target.value)}
+                      placeholder={isAirport ? 'e.g. AI-506 at 09:45' : 'e.g. Train 16346 / Local note'}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                    />
+                    {isAirport && (
+                      <select
+                        value={airportTerminal}
+                        onChange={e => setAirportTerminal(e.target.value as AirportTerminal)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                      >
+                        <option value="Terminal 1">Terminal 1 (Domestic / Shankhumukham)</option>
+                        <option value="Terminal 2">Terminal 2 (International / Chakai)</option>
+                      </select>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 p-3 bg-sky-50/60 rounded-xl border border-sky-200">
+                    {flightList.map((f, fIdx) => (
+                      <div key={f.id} className="flex items-center gap-2">
+                        <span className="w-5 text-center font-bold text-sky-800 text-xs">
+                          ✈️
+                        </span>
+                        <input
+                          type="text"
+                          value={f.flightNoAndTime}
+                          onChange={e => handleFlightChange(f.id, 'flightNoAndTime', e.target.value)}
+                          placeholder={`Flight ${fIdx + 1} No & Time (e.g. EK 522 at 03:00)`}
+                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-sky-400"
+                        />
+                        <select
+                          value={f.terminal}
+                          onChange={e => handleFlightChange(f.id, 'terminal', e.target.value as AirportTerminal)}
+                          className="w-36 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-sky-400"
+                        >
+                          <option value="Terminal 1">Terminal 1 (Dom)</option>
+                          <option value="Terminal 2">Terminal 2 (Intl)</option>
+                        </select>
+                        {flightList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFlight(f.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                            title="Remove Flight"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleAddFlight}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-sky-300 text-sky-700 font-semibold text-[11px] hover:bg-sky-50"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Another Flight</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* If Round Trip or Day Trip, show final dropoff */}
+            {isRoundTrip && (
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {isAirport ? 'Flight Number & Time' : 'Train / Reference Info'}
-                </label>
+                <label className="block font-semibold text-slate-700 mb-1">Final Drop-off / Return</label>
                 <input
                   type="text"
-                  value={flightNumberAndTime}
-                  onChange={e => setFlightNumberAndTime(e.target.value)}
-                  placeholder={isAirport ? 'e.g. AI-506 (09:45 AM)' : 'e.g. Train 16346 / Local note'}
+                  value={finalDropoff}
+                  onChange={e => setFinalDropoff(e.target.value)}
+                  placeholder="e.g. Return to VillaLemon at evening"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
                 />
               </div>
-
-              {isAirport ? (
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Airport Terminal</label>
-                  <select
-                    value={airportTerminal}
-                    onChange={e => setAirportTerminal(e.target.value as AirportTerminal)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                  >
-                    <option value="Terminal 1">Terminal 1 (Domestic / Shankhumukham)</option>
-                    <option value="Terminal 2">Terminal 2 (International / Chakai)</option>
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Final Drop-off / Return</label>
-                  <input
-                    type="text"
-                    value={finalDropoff}
-                    onChange={e => setFinalDropoff(e.target.value)}
-                    placeholder="e.g. Return to VillaLemon at evening"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Section 4: Placard / Name Board (ONLY for Airport Pickup) */}
@@ -676,281 +1176,649 @@ const AddTripPage: React.FC = () => {
             </div>
           )}
 
-          {/* Section 5: Driver & Crew Assignment (Dropdown with Profiles OR Outside Driver) */}
-          <div className="pt-4 border-t border-slate-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-                5. Driver & Vehicle Assignment
-              </h2>
+          {/* Section 5: Fleet & Driver Assignment (Single Vehicle OR Multi-Cab Convoy) */}
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                  5. Fleet Requirement & Driver Assignment
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Choose single vehicle or multi-vehicle convoy for large groups & multiple drivers
+                </p>
+              </div>
+
+              {/* Fleet Mode Selector */}
+              <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setFleetMode('single')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    fleetMode === 'single'
+                      ? 'bg-navy-primary text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Single Vehicle & Driver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFleetMode('multi')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    fleetMode === 'multi'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Multiple Vehicles & Drivers (Convoy)
+                </button>
+              </div>
             </div>
 
-            {/* Assignment Mode Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setAssignmentMode('registered')}
-                className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                  assignmentMode === 'registered'
-                    ? 'bg-navy-primary text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Registered Fleet Driver</span>
-              </button>
+            {/* SINGLE FLEET MODE */}
+            {fleetMode === 'single' ? (
+              <div className="space-y-3">
+                {/* Assignment Mode Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentMode('registered')}
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      assignmentMode === 'registered'
+                        ? 'bg-navy-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Registered Fleet Driver</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setAssignmentMode('outside')}
-                className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                  assignmentMode === 'outside'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Truck className="w-3.5 h-3.5" />
-                <span>Outside / External Driver</span>
-              </button>
-            </div>
-
-            {/* Mode 1: Registered Driver Dropdown with Profiles */}
-            {assignmentMode === 'registered' && (
-              <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      Choose Registered Driver (With Profile) *
-                    </label>
-                    <select
-                      value={assignedDriverId}
-                      onChange={e => {
-                        setAssignedDriverId(e.target.value);
-                        const drv = drivers.find(d => d.id === e.target.value);
-                        if (drv?.per_trip_payment) {
-                          setDriverTripPay(drv.per_trip_payment);
-                        }
-                      }}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
-                      required={assignmentMode === 'registered'}
-                    >
-                      {drivers.map(d => (
-                        <option key={d.id} value={d.id}>
-                          {d.full_name} • {d.phone} • {d.employment_type} {d.vehicle_number ? `(${d.vehicle_number})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Assign Fleet Vehicle</label>
-                    <select
-                      value={assignedVehicleId}
-                      onChange={e => setAssignedVehicleId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
-                    >
-                      <option value="">-- Auto-assign or Driver's Default Cab --</option>
-                      {vehicles.map(v => (
-                        <option key={v.id} value={v.id}>
-                          {v.registration_number} • {v.vehicle_type} ({v.ownership})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentMode('outside')}
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      assignmentMode === 'outside'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>Outside / External Driver</span>
+                  </button>
                 </div>
 
-                {/* Driver Profile Summary Pill */}
-                {selectedDriverProfile && (
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold uppercase">
-                        {selectedDriverProfile.full_name.slice(0, 2)}
-                      </div>
+                {/* Mode 1: Registered Driver */}
+                {assignmentMode === 'registered' && (
+                  <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <p className="font-bold text-slate-900">{selectedDriverProfile.full_name}</p>
-                        <p className="text-[11px] text-slate-500">
-                          📞 {selectedDriverProfile.phone} • DL: {selectedDriverProfile.driving_licence_no || 'Pending'}
-                        </p>
+                        <label className="block font-semibold text-slate-700 mb-1">
+                          Choose Registered Driver (With Profile) *
+                        </label>
+                        <select
+                          value={assignedDriverId}
+                          onChange={e => {
+                            setAssignedDriverId(e.target.value);
+                            const drv = drivers.find(d => d.id === e.target.value);
+                            if (drv?.per_trip_payment) {
+                              setDriverTripPay(drv.per_trip_payment);
+                            }
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
+                          required={assignmentMode === 'registered'}
+                        >
+                          {drivers.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.full_name} • {d.phone} • {d.employment_type} {d.vehicle_number ? `(${d.vehicle_number})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">Assign Fleet Vehicle</label>
+                        <select
+                          value={assignedVehicleId}
+                          onChange={e => setAssignedVehicleId(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
+                        >
+                          <option value="">-- Auto-assign or Driver's Default Cab --</option>
+                          {vehicles.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.registration_number} • {v.vehicle_type} ({v.ownership})
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                    <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px] uppercase">
-                      Fleet Driver Active
-                    </span>
+
+                    {selectedDriverProfile && (
+                      <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold uppercase">
+                            {selectedDriverProfile.full_name.slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{selectedDriverProfile.full_name}</p>
+                            <p className="text-[11px] text-slate-500">
+                              📞 {selectedDriverProfile.phone} • DL: {selectedDriverProfile.driving_licence_no || 'Pending'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px] uppercase">
+                          Fleet Driver Active
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Mode 2: Outside Driver */}
+                {assignmentMode === 'outside' && (
+                  <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <h3 className="font-bold text-amber-900 text-xs">Outside / External Taxi Driver Details</h3>
+                      </div>
+                      <span className="text-[10px] text-amber-700 font-semibold">
+                        Manually enter driver name & vehicle number
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-800 mb-1">
+                          Outside Driver Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={outsideDriverName}
+                          onChange={e => setOutsideDriverName(e.target.value)}
+                          placeholder="e.g. Ramesh Kumar (Outside Taxi)"
+                          required={assignmentMode === 'outside'}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-800 mb-1">
+                          Driver Phone / WhatsApp (For Dispatch)
+                        </label>
+                        <input
+                          type="tel"
+                          value={outsideDriverPhone}
+                          onChange={e => setOutsideDriverPhone(e.target.value)}
+                          placeholder="e.g. 9847123456"
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-800 mb-1">
+                          Outside Vehicle Registration Number *
+                        </label>
+                        <input
+                          type="text"
+                          value={outsideVehicleReg}
+                          onChange={e => setOutsideVehicleReg(e.target.value.toUpperCase())}
+                          placeholder="e.g. KL 16 Q 7965"
+                          required={assignmentMode === 'outside'}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono font-bold text-slate-900 uppercase focus:ring-2 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-800 mb-1">
+                          Outside Vehicle Model / Type
+                        </label>
+                        <select
+                          value={outsideVehicleType}
+                          onChange={e => setOutsideVehicleType(e.target.value as VehicleType)}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
+                        >
+                          {VEHICLE_TYPES.map(vt => (
+                            <option key={vt} value={vt}>{vt}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Mode 2: Outside Driver (Manual Entry for Name and Vehicle Number) */}
-            {assignmentMode === 'outside' && (
-              <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-3">
-                <div className="flex items-center justify-between">
+            ) : (
+              /* MULTI FLEET / CONVOY MODE */
+              <div className="space-y-4">
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-900 text-xs flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <h3 className="font-bold text-amber-900 text-xs">Outside / External Taxi Driver Details</h3>
+                    <Car className="w-4 h-4 text-emerald-600" />
+                    <span>
+                      <strong>Convoy Mode Active:</strong> Creating linked sub-trips for each vehicle & driver with independent payouts and guest collection duties.
+                    </span>
                   </div>
-                  <span className="text-[10px] text-amber-700 font-semibold">
-                    Manually enter driver name & vehicle number
-                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddCab}
+                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Another Vehicle</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-800 mb-1">
-                      Outside Driver Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={outsideDriverName}
-                      onChange={e => setOutsideDriverName(e.target.value)}
-                      placeholder="e.g. Ramesh Kumar (Outside Taxi)"
-                      required={assignmentMode === 'outside'}
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
-                    />
-                  </div>
+                <div className="space-y-4">
+                  {multiCabs.map((cab, index) => {
+                    const charCode = String.fromCharCode(65 + index);
+                    return (
+                      <div
+                        key={cab.id}
+                        className="p-4 bg-white rounded-2xl border-2 border-emerald-100 shadow-xs space-y-3 relative"
+                      >
+                        {/* Cab Header */}
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-black text-xs flex items-center justify-center">
+                              {charCode}
+                            </span>
+                            <span className="font-bold text-slate-900 text-xs">
+                              Vehicle {index + 1} of {multiCabs.length} (Cab {charCode})
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border">
+                              {cab.vehicleType}
+                            </span>
+                          </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-800 mb-1">
-                      Driver Phone / WhatsApp (For Dispatch)
-                    </label>
-                    <input
-                      type="tel"
-                      value={outsideDriverPhone}
-                      onChange={e => setOutsideDriverPhone(e.target.value)}
-                      placeholder="e.g. 9847123456"
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
-                    />
-                  </div>
-                </div>
+                          <div className="flex items-center gap-2">
+                            {multiCabs.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCab(cab.id)}
+                                className="p-1 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                                title="Remove Cab"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-800 mb-1">
-                      Outside Vehicle Registration Number *
-                    </label>
-                    <input
-                      type="text"
-                      value={outsideVehicleReg}
-                      onChange={e => setOutsideVehicleReg(e.target.value.toUpperCase())}
-                      placeholder="e.g. KL 16 Q 7965"
-                      required={assignmentMode === 'outside'}
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono font-bold text-slate-900 uppercase focus:ring-2 focus:ring-amber-400"
-                    />
-                  </div>
+                        {/* Cab Type & Assignment Mode */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Cab Model / Type
+                            </label>
+                            <select
+                              value={cab.vehicleType}
+                              onChange={e => handleCabUpdate(cab.id, { vehicleType: e.target.value as VehicleType })}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
+                            >
+                              {VEHICLE_TYPES.map(vt => (
+                                <option key={vt} value={vt}>{vt}</option>
+                              ))}
+                            </select>
+                          </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-800 mb-1">
-                      Outside Vehicle Model / Type
-                    </label>
-                    <select
-                      value={outsideVehicleType}
-                      onChange={e => setOutsideVehicleType(e.target.value as VehicleType)}
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-400"
-                    >
-                      {VEHICLE_TYPES.map(vt => (
-                        <option key={vt} value={vt}>{vt}</option>
-                      ))}
-                    </select>
-                  </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Driver Assignment Mode
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCabUpdate(cab.id, { assignmentMode: 'registered' })}
+                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                  cab.assignmentMode === 'registered'
+                                    ? 'bg-navy-primary text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                Registered Fleet Driver
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCabUpdate(cab.id, { assignmentMode: 'outside' })}
+                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                  cab.assignmentMode === 'outside'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                Outside / External Driver
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Driver Selector based on Assignment Mode */}
+                        {cab.assignmentMode === 'registered' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Assigned Registered Driver *
+                              </label>
+                              <select
+                                value={cab.assignedDriverId}
+                                onChange={e => {
+                                  const did = e.target.value;
+                                  const drv = drivers.find(d => d.id === did);
+                                  handleCabUpdate(cab.id, {
+                                    assignedDriverId: did,
+                                    ...(drv?.per_trip_payment ? { driverTripPay: drv.per_trip_payment } : {}),
+                                  });
+                                }}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-900"
+                              >
+                                {drivers.map(d => (
+                                  <option key={d.id} value={d.id}>
+                                    {d.full_name} • {d.phone} • {d.employment_type} {d.vehicle_number ? `(${d.vehicle_number})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Assigned Vehicle (Optional)
+                              </label>
+                              <select
+                                value={cab.assignedVehicleId}
+                                onChange={e => handleCabUpdate(cab.id, { assignedVehicleId: e.target.value })}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-900"
+                              >
+                                <option value="">-- Driver's Default Cab --</option>
+                                {vehicles.map(v => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.registration_number} • {v.vehicle_type} ({v.ownership})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+                            <div>
+                              <label className="block text-[11px] font-bold text-amber-900 mb-1">
+                                Outside Driver Name *
+                              </label>
+                              <input
+                                type="text"
+                                value={cab.outsideDriverName}
+                                onChange={e => handleCabUpdate(cab.id, { outsideDriverName: e.target.value })}
+                                placeholder="e.g. Anand (Outside Taxi)"
+                                className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-slate-900"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-amber-900 mb-1">
+                                Phone / WhatsApp
+                              </label>
+                              <input
+                                type="tel"
+                                value={cab.outsideDriverPhone}
+                                onChange={e => handleCabUpdate(cab.id, { outsideDriverPhone: e.target.value })}
+                                placeholder="e.g. 9847123456"
+                                className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-slate-900"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-amber-900 mb-1">
+                                Vehicle Reg Number *
+                              </label>
+                              <input
+                                type="text"
+                                value={cab.outsideVehicleReg}
+                                onChange={e => handleCabUpdate(cab.id, { outsideVehicleReg: e.target.value.toUpperCase() })}
+                                placeholder="e.g. KL 01 CB 1234"
+                                className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs font-mono font-bold uppercase text-slate-900"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Financials for this specific cab */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                              Selling Price Share (₹)
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={cab.sellingPriceShare}
+                              onChange={e => handleCabUpdate(cab.id, { sellingPriceShare: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono font-bold text-slate-900 bg-white"
+                            />
+                            <span className="text-[9px] text-slate-400 block mt-0.5">Billed to client</span>
+                          </div>
+
+                          <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-200">
+                            <span className="text-[10px] uppercase font-bold text-blue-700 block mb-1">
+                              Driver Pay / Allowance (₹)
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={cab.driverTripPay}
+                              onChange={e => handleCabUpdate(cab.id, { driverTripPay: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-blue-200 text-xs font-mono font-bold text-blue-900 bg-white"
+                            />
+                            <span className="text-[9px] text-blue-500 block mt-0.5">Pay for this driver</span>
+                          </div>
+
+                          <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200">
+                            <span className="text-[10px] uppercase font-bold text-emerald-700 block mb-1">
+                              Guest Cash to Collect (₹)
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={cab.amountToCollect}
+                              onChange={e => handleCabUpdate(cab.id, { amountToCollect: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 text-xs font-mono font-bold text-emerald-900 bg-white"
+                            />
+                            <span className="text-[9px] text-emerald-600 block mt-0.5">Shown in driver dispatch</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Section 6: Financials — Trip Cost (Hidden from Driver) vs Amount to Collect (Shown to Driver) */}
+          {/* Section 6: Financials, Client Rates & Driver Collection */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
             <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
-              6. Financials, Client Rates & Driver Collection
+              6. Financials, Client Rates & Profit Calculation
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Field 1: Trip Cost / Client Selling Price (Admin Only) */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block font-bold text-slate-900 text-xs">
-                    Trip Cost / Client Price (₹) *
-                  </label>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
-                    <EyeOff className="w-2.5 h-2.5" />
-                    <span>Admin Only</span>
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={tripSellingPrice}
-                  onChange={e => setTripSellingPrice(parseFloat(e.target.value) || '')}
-                  required
-                  placeholder="2500"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono font-bold text-base text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
-                />
-                <p className="text-[10px] text-slate-500">
-                  Total charged to client. <strong>Strictly hidden</strong> from driver view & dispatch message.
-                </p>
-              </div>
-
-              {/* Field 2: Collection Rule & Amount Driver Must Collect (Shown to Driver) */}
-              <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block font-bold text-emerald-950 text-xs">
-                    Amount Driver Must Collect (₹) *
-                  </label>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <Eye className="w-2.5 h-2.5" />
-                    <span>Shown to Driver</span>
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={collectionRule}
-                    onChange={e => setCollectionRule(e.target.value as CollectionRule)}
-                    className="w-full px-2 py-2 rounded-xl border border-emerald-300 bg-white font-semibold text-[11px] text-emerald-900"
-                  >
-                    <option value="Collect">Collect from guest</option>
-                    <option value="Do not collect">Do not collect (Office bill)</option>
-                    <option value="Ask office">Ask office</option>
-                  </select>
-
+            {fleetMode === 'single' ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Field 1: Trip Cost / Client Selling Price (Admin Only) */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-slate-900 text-xs">
+                      Trip Cost / Client Price (₹) *
+                    </label>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                      <EyeOff className="w-2.5 h-2.5" />
+                      <span>Admin Only</span>
+                    </span>
+                  </div>
                   <input
                     type="number"
                     min="0"
                     step="50"
-                    value={amountDriverMustCollect}
-                    onChange={e => setAmountDriverMustCollect(parseFloat(e.target.value) || 0)}
-                    disabled={collectionRule === 'Do not collect'}
+                    value={tripSellingPrice}
+                    onChange={e => setTripSellingPrice(parseFloat(e.target.value) || '')}
+                    required
                     placeholder="2500"
-                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white font-mono font-bold text-base text-emerald-900 disabled:bg-slate-100 disabled:text-slate-400"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono font-bold text-base text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
                   />
+                  <p className="text-[10px] text-slate-500">
+                    Total charged to client. <strong>Strictly hidden</strong> from driver view & dispatch message.
+                  </p>
                 </div>
-                <p className="text-[10px] text-emerald-700">
-                  Exact cash/UPI the driver must collect from guest upon arrival.
-                </p>
-              </div>
 
-              {/* Field 3: Driver Pay / Allowance */}
-              <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block font-bold text-blue-950 text-xs">
-                    Driver Pay / Allowance (₹)
-                  </label>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300">
-                    Driver Pay
-                  </span>
+                {/* Field 2: Collection Rule & Amount Driver Must Collect (Shown to Driver) */}
+                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-emerald-950 text-xs">
+                      Amount Driver Must Collect (₹) *
+                    </label>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <Eye className="w-2.5 h-2.5" />
+                      <span>Shown to Driver</span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={collectionRule}
+                      onChange={e => setCollectionRule(e.target.value as CollectionRule)}
+                      className="w-full px-2 py-2 rounded-xl border border-emerald-300 bg-white font-semibold text-[11px] text-emerald-900"
+                    >
+                      <option value="Collect">Collect from guest</option>
+                      <option value="Do not collect">Do not collect (Office bill)</option>
+                      <option value="Ask office">Ask office</option>
+                    </select>
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      value={amountDriverMustCollect}
+                      onChange={e => setAmountDriverMustCollect(parseFloat(e.target.value) || 0)}
+                      disabled={collectionRule === 'Do not collect'}
+                      placeholder="2500"
+                      className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white font-mono font-bold text-base text-emerald-900 disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-emerald-700">
+                    Exact cash/UPI the driver must collect from guest upon arrival.
+                  </p>
                 </div>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={driverTripPay}
-                  onChange={e => setDriverTripPay(parseFloat(e.target.value) || 0)}
-                  placeholder="800"
-                  className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-mono font-bold text-base text-blue-900 focus:ring-2 focus:ring-blue-400"
-                />
-                <p className="text-[10px] text-blue-700">
-                  Agreed driver wage for this duty trip.
-                </p>
+
+                {/* Field 3: Driver Pay / Allowance */}
+                <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-blue-950 text-xs">
+                      Driver Pay / Allowance (₹)
+                    </label>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300">
+                      Driver Pay
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={driverTripPay}
+                    onChange={e => setDriverTripPay(parseFloat(e.target.value) || 0)}
+                    placeholder="800"
+                    className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-mono font-bold text-base text-blue-900 focus:ring-2 focus:ring-blue-400"
+                  />
+                  <p className="text-[10px] text-blue-700">
+                    Agreed driver wage for this duty trip.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* MULTI-CAB FINANCIAL BREAKDOWN & PROFIT CALCULATION */
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 bg-slate-900 text-white rounded-2xl shadow-sm">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Total Client Bill
+                    </span>
+                    <p className="text-xl font-black font-mono text-emerald-400">
+                      {formatINR(multiCabs.reduce((s, c) => s + (Number(c.sellingPriceShare) || 0), 0))}
+                    </p>
+                    <span className="text-[10px] text-slate-400">Sum of {multiCabs.length} cabs</span>
+                  </div>
+
+                  <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">
+                      Total Driver Payouts
+                    </span>
+                    <p className="text-xl font-black font-mono text-blue-900">
+                      {formatINR(multiCabs.reduce((s, c) => s + (Number(c.driverTripPay) || 0), 0))}
+                    </p>
+                    <span className="text-[10px] text-blue-600">{multiCabs.length} drivers total</span>
+                  </div>
+
+                  <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
+                      Guest Cash Collections
+                    </span>
+                    <p className="text-xl font-black font-mono text-emerald-900">
+                      {formatINR(multiCabs.reduce((s, c) => s + (Number(c.amountToCollect) || 0), 0))}
+                    </p>
+                    <span className="text-[10px] text-emerald-600">Collected by drivers</span>
+                  </div>
+
+                  <div className="p-3.5 bg-gradient-to-br from-[#0F1E36] to-[#1E3A8A] text-white rounded-2xl shadow-sm">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                      Estimated Net Margin
+                    </span>
+                    <p className="text-xl font-black font-mono text-amber-300">
+                      {formatINR(
+                        multiCabs.reduce((s, c) => s + (Number(c.sellingPriceShare) || 0), 0) -
+                        multiCabs.reduce((s, c) => s + (Number(c.driverTripPay) || 0), 0)
+                      )}
+                    </p>
+                    <span className="text-[10px] text-slate-300">Total Bill - Driver Pays</span>
+                  </div>
+                </div>
+
+                {/* Convoy Financial Table Summary */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400 font-bold text-[10px] uppercase">
+                        <th className="pb-1.5">Vehicle</th>
+                        <th className="pb-1.5">Driver</th>
+                        <th className="pb-1.5">Client Rate</th>
+                        <th className="pb-1.5">Driver Pay</th>
+                        <th className="pb-1.5">Guest Collect</th>
+                        <th className="pb-1.5 text-right">Net Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono text-slate-800">
+                      {multiCabs.map((c, i) => {
+                        const drvName = c.assignmentMode === 'registered'
+                          ? drivers.find(d => d.id === c.assignedDriverId)?.full_name || 'Driver'
+                          : c.outsideDriverName || 'Outside Driver';
+                        const rate = Number(c.sellingPriceShare) || 0;
+                        const pay = Number(c.driverTripPay) || 0;
+                        const collect = Number(c.amountToCollect) || 0;
+                        const margin = rate - pay;
+                        return (
+                          <tr key={c.id}>
+                            <td className="py-1.5 font-bold font-sans">
+                              Cab {String.fromCharCode(65 + i)} ({c.vehicleType})
+                            </td>
+                            <td className="py-1.5 font-sans">{drvName}</td>
+                            <td className="py-1.5">{formatINR(rate)}</td>
+                            <td className="py-1.5 text-blue-700">{formatINR(pay)}</td>
+                            <td className="py-1.5 text-emerald-700">{formatINR(collect)}</td>
+                            <td className="py-1.5 text-right font-bold text-slate-900">
+                              {margin >= 0 ? `+${formatINR(margin)}` : `-${formatINR(Math.abs(margin))}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 7: Special Instructions & Driver Notes */}
@@ -988,72 +1856,128 @@ const AddTripPage: React.FC = () => {
       </div>
 
       {/* Post-Creation Success Modal with Copy Message for Driver (NO PRICE) */}
-      {createdTripResult && (
+      {(createdTripResult || createdTripResults.length > 0) && (
         <Modal
-          isOpen={Boolean(createdTripResult)}
+          isOpen={Boolean(createdTripResult || createdTripResults.length > 0)}
           onClose={() => navigate('/admin/trips')}
-          title={`Trip Scheduled: ${createdTripResult.trip.trip_number}`}
-          size="md"
+          title={
+            createdTripResults.length > 1
+              ? `Convoy Scheduled: ${createdTripResults.length} Cabs Dispatched`
+              : `Trip Scheduled: ${createdTripResult?.trip.trip_number || createdTripResults[0]?.trip.trip_number}`
+          }
+          size="lg"
         >
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-emerald-900">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div>
-                <p className="font-bold text-sm">Trip Created & Dispatched!</p>
-                <p className="text-[11px] text-emerald-700">
-                  Assigned to: <strong>{createdTripResult.driverName || 'Driver'}</strong>
-                </p>
-              </div>
-            </div>
+          {(() => {
+            const activeResult = createdTripResults.length > 0
+              ? createdTripResults[activeDispatchTab] || createdTripResults[0]
+              : createdTripResult!;
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-slate-800">
-                  Copy Message for Driver (No Price Mentioned):
-                </span>
-                <span className="text-[10px] text-slate-500 uppercase font-semibold">
-                  WhatsApp Ready
-                </span>
-              </div>
-              <pre className="p-4 bg-slate-900 text-emerald-400 font-mono rounded-xl whitespace-pre-wrap leading-relaxed text-[11px] select-all max-h-72 overflow-y-auto border border-slate-800 shadow-inner">
-                {createdTripResult.dispatchMessage}
-              </pre>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleCopyDispatch}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-800 font-bold hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-sm transition-colors"
-              >
-                {copiedDispatch ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedDispatch ? 'Copied to Clipboard!' : 'Copy Message for Driver'}</span>
-              </button>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <a
-                  href={formatWhatsAppShareUrl(
-                    createdTripResult.driverPhone,
-                    createdTripResult.dispatchMessage
+            return (
+              <div className="space-y-4 text-xs">
+                {/* Status Alert Banner */}
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-2.5 text-emerald-900">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold text-sm">
+                        {createdTripResults.length > 1
+                          ? `Convoy of ${createdTripResults.length} Vehicles Created!`
+                          : 'Trip Created & Dispatched!'}
+                      </p>
+                      <p className="text-[11px] text-emerald-700">
+                        {createdTripResults.length > 1
+                          ? 'Each vehicle has its own trip record, driver payout & dispatch duty.'
+                          : `Assigned to: ${activeResult.driverName || 'Driver'}`}
+                      </p>
+                    </div>
+                  </div>
+                  {createdTripResults.length > 1 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-200 text-emerald-950 font-black text-xs font-mono">
+                      {createdTripResults.length} CABS
+                    </span>
                   )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5 shadow-md transition-colors"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Send on WhatsApp</span>
-                </a>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/trips')}
-                  className="px-4 py-2.5 rounded-xl bg-navy-primary hover:bg-navy-light text-white font-bold transition-colors"
-                >
-                  Done
-                </button>
+                {/* Convoy Tabs if Multiple Cabs */}
+                {createdTripResults.length > 1 && (
+                  <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto">
+                    {createdTripResults.map((r, idx) => (
+                      <button
+                        key={r.trip.id || idx}
+                        type="button"
+                        onClick={() => {
+                          setActiveDispatchTab(idx);
+                          setCopiedDispatch(false);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                          activeDispatchTab === idx
+                            ? 'bg-navy-primary text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                        }`}
+                      >
+                        <Car className="w-3.5 h-3.5" />
+                        <span>Cab {String.fromCharCode(65 + idx)}: {r.driverName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Driver Message Preview */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-800">
+                      Copy Message for Driver ({activeResult.driverName}) — No Total Selling Price:
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">
+                      WhatsApp Ready
+                    </span>
+                  </div>
+                  <pre className="p-4 bg-slate-900 text-emerald-400 font-mono rounded-xl whitespace-pre-wrap leading-relaxed text-[11px] select-all max-h-72 overflow-y-auto border border-slate-800 shadow-inner">
+                    {activeResult.dispatchMessage}
+                  </pre>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeResult.dispatchMessage);
+                      setCopiedDispatch(true);
+                      setTimeout(() => setCopiedDispatch(false), 2500);
+                    }}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-800 font-bold hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                  >
+                    {copiedDispatch ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedDispatch ? 'Copied to Clipboard!' : `Copy Message for ${activeResult.driverName}`}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <a
+                      href={formatWhatsAppShareUrl(
+                        activeResult.driverPhone,
+                        activeResult.dispatchMessage
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5 shadow-md transition-colors"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Send to {activeResult.driverName}</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('/admin/trips')}
+                      className="px-4 py-2.5 rounded-xl bg-navy-primary hover:bg-navy-light text-white font-bold transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </Modal>
       )}
     </div>

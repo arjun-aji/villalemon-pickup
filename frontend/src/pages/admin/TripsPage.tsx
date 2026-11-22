@@ -721,6 +721,11 @@ const TripsPage: React.FC = () => {
                           {/* Col 2: Trip ID / Category / Flight */}
                           <td className="p-3 border-r border-slate-200 leading-snug">
                             <div className="font-mono font-bold text-navy-primary">{trip.trip_number}</div>
+                            {Boolean(trip.trip_number?.match(/-[A-Z]$/) || trip.special_instructions?.includes('[Convoy:')) && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-black border border-purple-200">
+                                Convoy Cab {trip.trip_number?.split('-').pop()}
+                              </span>
+                            )}
                             <div className="mt-1">
                               {renderCategoryBadge(category)}
                             </div>
@@ -1043,6 +1048,11 @@ const TripsPage: React.FC = () => {
                         <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
                           <td className="table-cell">
                             <span className="font-mono font-bold text-navy-primary block">{trip.trip_number}</span>
+                            {Boolean(trip.trip_number?.match(/-[A-Z]$/) || trip.special_instructions?.includes('[Convoy:')) && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-black border border-purple-200">
+                                Convoy Cab {trip.trip_number?.split('-').pop()}
+                              </span>
+                            )}
                             <div className="mt-1">
                               {renderCategoryBadge(trip.trip_category)}
                             </div>
