@@ -19,7 +19,7 @@ import {
 import { organizationService } from '../../services/adminOperationsService';
 import { supabase } from '../../lib/supabase';
 import { Organization, OrganizationType, PaymentTerms } from '../../types';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatDate } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const ORG_TYPES: OrganizationType[] = [
@@ -154,12 +154,12 @@ const ClientsPage: React.FC = () => {
 
       const lines = trips.slice(0, 15).map(t => {
         const cost = Number(t.trip_selling_price || 0);
-        return `• *${t.trip_number || 'Trip'}* (${t.trip_date || ''}) | Guest: ${t.guest_names || 'Guest'} | ${t.pickup_location || ''} → ${t.dropoff_location || ''} | Cost: ₹${cost.toLocaleString('en-IN')}`;
+        return `• *${t.trip_number || 'Trip'}* (${formatDate(t.trip_date || t.pickup_date)}) | Guest: ${t.guest_names || 'Guest'} | ${t.pickup_location || ''} → ${t.dropoff_location || ''} | Cost: ₹${cost.toLocaleString('en-IN')}`;
       });
 
       const message = `🏨 *VillaLemon Pickup — Account Statement*\n` +
         `*Client:* ${org.name} (${org.contact_person || ''})\n` +
-        `*Date:* ${new Date().toLocaleDateString('en-IN')}\n\n` +
+        `*Date:* ${formatDate(new Date().toISOString())}\n\n` +
         `📊 *Summary:*\n` +
         `• Total Trips: ${trips.length}\n` +
         `• Total Trip Amount: ₹${totalCost.toLocaleString('en-IN')}\n` +

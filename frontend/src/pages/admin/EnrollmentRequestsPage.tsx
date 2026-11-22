@@ -13,7 +13,7 @@ import { enrollmentService } from '../../services/enrollmentService';
 import { TripEnrollment, EnrollmentStatus } from '../../types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { formatDate, formatTime } from '../../utils/formatters';
+import { formatDate, formatTime, formatDateTime } from '../../utils/formatters';
 
 const EnrollmentRequestsPage: React.FC = () => {
   const [enrollments, setEnrollments] = useState<TripEnrollment[]>([]);
@@ -167,12 +167,7 @@ const EnrollmentRequestsPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="table-cell text-xs text-text-secondary">
-                      {new Date(item.requested_at).toLocaleString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDateTime(item.requested_at)}
                     </td>
                     <td className="table-cell text-right">
                       {item.status === 'pending' ? (

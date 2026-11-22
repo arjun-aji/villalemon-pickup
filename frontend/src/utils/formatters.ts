@@ -22,38 +22,69 @@ export const formatINRCompact = (amount?: number | null): string => {
 
 export const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
-  const date = new Date(dateStr);
+  const trimmed = dateStr.trim();
+  if (!trimmed) return '-';
+
+  // Already in DD-MM-YYYY format
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Pure ISO date format: YYYY-MM-DD
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    return `${d}-${m}-${y}`;
+  }
+
+  // Full timestamp or ISO string (e.g. 2026-11-22T08:30:00Z)
+  const date = new Date(trimmed);
   if (isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}-${m}-${y}`;
 };
 
 export const formatTime = (timeStr?: string | null): string => {
   if (!timeStr) return '-';
-  if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
-  const parts = timeStr.split(':');
-  if (parts.length < 2) return timeStr;
-  const h = parseInt(parts[0], 10);
-  const m = parts[1];
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 || 12;
-  return `${hour12}:${m} ${ampm}`;
+  const trimmed = timeStr.trim();
+  if (!trimmed) return '-';
+
+  // Convert 12-hour AM/PM string (e.g. "02:30 PM", "9:15 AM") into 24-hour "HH:mm"
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = ampmMatch[2].padStart(2, '0');
+    const period = ampmMatch[3].toUpperCase();
+    if (period === 'PM' && h < 12) h += 12;
+    if (period === 'AM' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${m}`;
+  }
+
+  // Already 24-hour string (e.g. "14:30", "14:30:00", "9:15")
+  const parts = trimmed.split(':');
+  if (parts.length >= 2) {
+    const h = parseInt(parts[0], 10);
+    const m = parts[1].slice(0, 2).padStart(2, '0');
+    if (!isNaN(h)) {
+      return `${String(h).padStart(2, '0')}:${m}`;
+    }
+  }
+
+  return timeStr;
 };
 
 export const formatDateTime = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
-  return date.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${d}-${m}-${y} ${hh}:${mm}`;
 };
 
 export const getMonthName = (month: number): string => {

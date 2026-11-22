@@ -11,7 +11,7 @@ import {
 import { saveAs } from 'file-saver';
 import { tripService } from '../../services/tripService';
 import { excelExportService } from '../../services/excelExportService';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatDate } from '../../utils/formatters';
 
 interface ReportRow {
   month: string;
@@ -82,7 +82,7 @@ const MonthlyReportsPage: React.FC = () => {
         revenue: monthsMap[mKey].revenue,
         expenses: monthsMap[mKey].expenses,
         profit: monthsMap[mKey].profit,
-        generatedOn: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        generatedOn: formatDate(now.toISOString()),
       }));
 
       setReports(rows.length > 0 ? rows : [
@@ -93,7 +93,7 @@ const MonthlyReportsPage: React.FC = () => {
           revenue: stats.total_collections,
           expenses: stats.total_expenses,
           profit: stats.net_profit,
-          generatedOn: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          generatedOn: formatDate(now.toISOString()),
         }
       ]);
     } catch (e) {
