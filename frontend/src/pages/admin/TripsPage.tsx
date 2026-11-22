@@ -33,8 +33,9 @@ import {
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
+import { vehicleService } from '../../services/adminOperationsService';
 import { excelExportService } from '../../services/excelExportService';
-import { Trip, DriverEmployee, TripStatus } from '../../types';
+import { Trip, DriverEmployee, TripStatus, Vehicle } from '../../types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import SearchInput from '../../components/ui/SearchInput';
 import Modal from '../../components/ui/Modal';
@@ -45,6 +46,7 @@ const TripsPage: React.FC = () => {
   const navigate = useNavigate();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [drivers, setDrivers] = useState<DriverEmployee[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingExcel, setExportingExcel] = useState(false);
 
@@ -95,6 +97,7 @@ const TripsPage: React.FC = () => {
     required_cab_type: 'Sedan' as string,
     special_instructions: '',
     assigned_driver_id: '',
+    assigned_vehicle_id: '',
     trip_selling_price: 0,
     amount_driver_must_collect: 0,
     collection_rule: 'Collect from guest' as string,
@@ -150,6 +153,7 @@ const TripsPage: React.FC = () => {
       required_cab_type: (t.required_cab_type as string) || (t.vehicle?.vehicle_type as string) || 'Sedan',
       special_instructions: t.special_instructions || t.trip_notes || '',
       assigned_driver_id: t.assigned_driver_id || '',
+      assigned_vehicle_id: t.assigned_vehicle_id || '',
       trip_selling_price: Number(t.trip_selling_price || t.amount_to_collect || 0),
       amount_driver_must_collect: Number(t.amount_driver_must_collect || t.amount_to_collect || 0),
       collection_rule: (t.collection_rule as string) || (Number(t.amount_driver_must_collect) > 0 ? 'Collect from guest' : 'Do not collect'),
@@ -179,6 +183,7 @@ const TripsPage: React.FC = () => {
         required_cab_type: editForm.required_cab_type as any,
         special_instructions: editForm.special_instructions || undefined,
         assigned_driver_id: editForm.assigned_driver_id || undefined,
+        assigned_vehicle_id: editForm.assigned_vehicle_id || undefined,
         trip_selling_price: Number(editForm.trip_selling_price) || 0,
         amount_driver_must_collect: editForm.collection_rule === 'Do not collect' ? 0 : (Number(editForm.amount_driver_must_collect) || 0),
         collection_rule: editForm.collection_rule as any,
@@ -214,12 +219,14 @@ const TripsPage: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [allTrips, allDrivers] = await Promise.all([
+      const [allTrips, allDrivers, allVehicles] = await Promise.all([
         tripService.getAll(),
         driverService.getAll(),
+        vehicleService.getAll(),
       ]);
       setTrips(allTrips);
       setDrivers(allDrivers);
+      setVehicles(allVehicles);
     } catch (e) {
       console.error(e);
     } finally {
@@ -668,8 +675,8 @@ const TripsPage: React.FC = () => {
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[190px]">
                         Guest / Passengers / Contact
                       </th>
-                      <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[150px]">
-                        Vehicle
+                      <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[170px]">
+                        Driver & Vehicle
                       </th>
                       <th className="py-3 px-3 font-bold text-center border-r border-[#153b49] w-[140px]">
                         Collect from guest
@@ -695,7 +702,10 @@ const TripsPage: React.FC = () => {
                       const terminal = trip.airport_terminal || (trip.trip_category?.toLowerCase().includes('airport') ? 'NOT SET' : '');
                       const dropoff = trip.dropoff_location || trip.destination || '';
                       const finalDropoff = trip.final_dropoff || 'Return to pickup point';
-                      const vehicleReg = trip.vehicle?.registration_number || (trip as any).vehicle_reg || 'not assigned';
+                      const driverName = trip.driver?.full_name || '';
+                      const driverPhone = trip.driver?.phone || '';
+                      const isOutside = (trip.driver?.employment_type as string) === 'Outside Driver';
+                      const vehicleReg = trip.vehicle?.registration_number || (trip as any).vehicle_reg;
                       const cabType = trip.vehicle?.vehicle_type || trip.required_cab_type || 'Sedan';
                       const collectAmt = Number(trip.amount_driver_must_collect || trip.amount_to_collect || 0);
                       const note = trip.special_instructions || '-';
@@ -756,10 +766,41 @@ const TripsPage: React.FC = () => {
                             <div className="text-slate-500 text-[11px]">Contact: {contact}</div>
                           </td>
 
-                          {/* Col 6: Vehicle */}
+                          {/* Col 6: Driver & Vehicle */}
                           <td className="p-3 border-r border-slate-200 leading-snug">
-                            <div className="font-mono font-bold text-slate-900">{vehicleReg}</div>
-                            <div className="text-slate-500 text-[11px]">({cabType})</div>
+                            {driverName ? (
+                              <div>
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span className="text-blue-600 font-bold text-xs">👨‍✈️</span>
+                                  <span className="truncate">{driverName}</span>
+                                </div>
+                                {driverPhone && (
+                                  <div className="text-[11px] text-slate-500 font-mono">{driverPhone}</div>
+                                )}
+                                {isOutside && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200 mt-0.5">
+                                    Outside Driver
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-amber-700 font-bold text-xs flex items-center gap-1">
+                                <span className="text-amber-500">⚠️</span> Unassigned
+                              </div>
+                            )}
+
+                            <div className="mt-1.5 pt-1 border-t border-slate-100">
+                              {vehicleReg ? (
+                                <div>
+                                  <div className="font-mono font-bold text-slate-800 text-xs">{vehicleReg}</div>
+                                  <div className="text-slate-500 text-[10px]">({cabType})</div>
+                                </div>
+                              ) : (
+                                <div className="text-slate-600 text-[11px]">
+                                  Cab: <span className="font-semibold text-slate-800">{cabType}</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
 
                           {/* Col 7: Collect from guest */}
@@ -1707,7 +1748,7 @@ const TripsPage: React.FC = () => {
             )}
 
             {/* Driver & Cab Assignment */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="label">Assigned Driver</label>
                 <select
@@ -1727,6 +1768,21 @@ const TripsPage: React.FC = () => {
                   {drivers.map(d => (
                     <option key={d.id} value={d.id}>
                       {d.full_name} ({d.phone}) • {d.vehicle_number || 'Fleet'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Assigned Vehicle / Cab</label>
+                <select
+                  value={editForm.assigned_vehicle_id}
+                  onChange={e => setEditForm({ ...editForm, assigned_vehicle_id: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">-- Default / Driver's Cab --</option>
+                  {vehicles.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.registration_number} • {v.vehicle_type} ({v.ownership})
                     </option>
                   ))}
                 </select>

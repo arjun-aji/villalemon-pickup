@@ -149,7 +149,7 @@ export const excelExportService = {
       'Guest / Passengers / Contact',
       'Pickup (terminal)',
       'Drop-off / places to visit',
-      'Vehicle',
+      'Driver & Vehicle',
       'Collect from guest',
       'Note'
     ];
@@ -209,9 +209,13 @@ export const excelExportService = {
         c5.value = `Drop-off: ${dropoff}`;
       }
 
-      // Cell 6: Vehicle
+      // Cell 6: Driver & Vehicle
       const c6 = row.getCell(6);
-      c6.value = `${vehicleReg}\n(${cabType})`;
+      const driverName = t.driver?.full_name || 'Unassigned';
+      const vehicleText = t.vehicle?.registration_number
+        ? `${t.vehicle.registration_number} (${cabType})`
+        : `Cab: ${cabType}`;
+      c6.value = `${driverName}\n${vehicleText}`;
 
       // Cell 7: Collect from guest
       const c7 = row.getCell(7);
