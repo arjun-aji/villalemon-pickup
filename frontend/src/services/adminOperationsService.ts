@@ -282,6 +282,16 @@ export const driverLedgerService = {
     }
     return [];
   },
+
+  async deleteEntry(entryId: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('driver_ledger')
+        .delete()
+        .eq('id', entryId);
+      if (error) throw error;
+    }
+  },
 };
 
 export const invoiceService = {
@@ -398,6 +408,73 @@ export const backupService = {
       return data as BackupRecord;
     }
     throw new Error('Supabase not configured');
+  },
+
+  async deleteRecord(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('backup_records')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    }
+  },
+
+  async cleanupOrphanedRecords(): Promise<{ ledgerDeleted: number; expensesDeleted: number; reportsDeleted: number }> {
+    if (isSupabaseConfigured) {
+      // 1. Get all valid trip IDs and trip numbers
+      const { data: trips } = await supabase.from('trips').select('id, trip_number');
+      const validTripIds = new Set((trips || []).map(t => t.id));
+      const validTripNums = (trips || []).map(t => (t.trip_number || '').toUpperCase());
+
+      // 2. Find and delete orphaned driver_ledger records
+      const { data: allLedger } = await supabase.from('driver_ledger').select('id, trip_id, notes');
+      const orphanedLedgerIds = (allLedger || [])
+        .filter(l => {
+          if (l.trip_id && !validTripIds.has(l.trip_id)) return true;
+          if (l.notes) {
+            const vhMatch = l.notes.match(/VH-\d{4}/i);
+            if (vhMatch && !validTripNums.includes(vhMatch[0].toUpperCase())) {
+              return true;
+            }
+          }
+          return false;
+        })
+        .map(l => l.id);
+
+      let ledgerDeleted = 0;
+      if (orphanedLedgerIds.length > 0) {
+        const { error } = await supabase.from('driver_ledger').delete().in('id', orphanedLedgerIds);
+        if (!error) ledgerDeleted = orphanedLedgerIds.length;
+      }
+
+      // 3. Find and delete orphaned expenses
+      const { data: allExpenses } = await supabase.from('expenses').select('id, trip_id');
+      const orphanedExpenseIds = (allExpenses || [])
+        .filter(e => e.trip_id && !validTripIds.has(e.trip_id))
+        .map(e => e.id);
+
+      let expensesDeleted = 0;
+      if (orphanedExpenseIds.length > 0) {
+        const { error } = await supabase.from('expenses').delete().in('id', orphanedExpenseIds);
+        if (!error) expensesDeleted = orphanedExpenseIds.length;
+      }
+
+      // 4. Find and delete orphaned driver_reports
+      const { data: allReports } = await supabase.from('driver_reports').select('id, trip_id');
+      const orphanedReportIds = (allReports || [])
+        .filter(r => r.trip_id && !validTripIds.has(r.trip_id))
+        .map(r => r.id);
+
+      let reportsDeleted = 0;
+      if (orphanedReportIds.length > 0) {
+        const { error } = await supabase.from('driver_reports').delete().in('id', orphanedReportIds);
+        if (!error) reportsDeleted = orphanedReportIds.length;
+      }
+
+      return { ledgerDeleted, expensesDeleted, reportsDeleted };
+    }
+    return { ledgerDeleted: 0, expensesDeleted: 0, reportsDeleted: 0 };
   },
 };
 

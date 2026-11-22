@@ -9,6 +9,9 @@ import {
   ShieldCheck,
   AlertTriangle,
   HardDrive,
+  Trash2,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { backupService } from '../../services/adminOperationsService';
 import { excelExportService } from '../../services/excelExportService';
@@ -20,6 +23,7 @@ const BackupPage: React.FC = () => {
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,20 +83,66 @@ const BackupPage: React.FC = () => {
     }
   };
 
+  const handleDeleteBackup = async (id: string, fileName: string) => {
+    if (!confirm(`Are you sure you want to delete backup archive "${fileName}"?`)) return;
+    try {
+      await backupService.deleteRecord(id);
+      loadBackups();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting backup record');
+    }
+  };
+
+  const handleCleanupOrphanedRecords = async () => {
+    if (!confirm('This will purge all orphaned driver ledger rows, expenses, and reports from deleted trips and recalculate live dashboards. Proceed?')) return;
+    try {
+      setCleaning(true);
+      const result = await backupService.cleanupOrphanedRecords();
+      const total = result.ledgerDeleted + result.expensesDeleted + result.reportsDeleted;
+      if (total === 0) {
+        setMessage('System is completely clean! No orphaned records found.');
+      } else {
+        setMessage(`Cleaned up ${total} orphaned items (${result.ledgerDeleted} ledger entries, ${result.expensesDeleted} expenses, ${result.reportsDeleted} reports). Dashboards and ledgers synchronized!`);
+      }
+      loadBackups();
+    } catch (err: any) {
+      alert(err.message || 'Error cleaning orphaned records');
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Backup & Recovery System</h1>
-        <p className="text-xs text-slate-500">
-          Automated database snapshots, complete Excel archives, audit verification, and disaster recovery
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Backup & Recovery System</h1>
+          <p className="text-xs text-slate-500">
+            Automated database snapshots, complete Excel archives, audit verification, and disaster recovery
+          </p>
+        </div>
+
+        <button
+          onClick={handleCleanupOrphanedRecords}
+          disabled={cleaning}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+          title="Purge orphaned ledger entries or expenses from previously deleted trips"
+        >
+          {cleaning ? <LoadingSpinner size="sm" /> : <Sparkles className="w-4 h-4 text-amber-400" />}
+          <span>Clean Orphaned Records</span>
+        </button>
       </div>
 
       {message && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{message}</span>
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{message}</span>
+          </div>
+          <button onClick={() => setMessage(null)} className="text-emerald-700 hover:text-emerald-900 font-bold text-xs">
+            ✕
+          </button>
         </div>
       )}
 
@@ -181,6 +231,7 @@ const BackupPage: React.FC = () => {
                   <th className="py-3 px-4">Created Timestamp</th>
                   <th className="py-3 px-4 text-right">Size</th>
                   <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -207,6 +258,15 @@ const BackupPage: React.FC = () => {
                         <CheckCircle2 className="w-3 h-3" />
                         <span>Verified Healthy</span>
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={() => handleDeleteBackup(b.id, b.file_name)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete backup record"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}

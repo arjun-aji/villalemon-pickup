@@ -628,15 +628,56 @@ export const tripService = {
 
   async deleteTrip(id: string): Promise<void> {
     if (isSupabaseConfigured) {
+      // 1. Fetch trip details first to identify trip number and driver
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('id, trip_number, assigned_driver_id')
+        .eq('id', id)
+        .maybeSingle();
+
+      const tripNum = trip?.trip_number;
+
+      // 2. Cascade delete driver reports linked to this trip
       await supabase.from('driver_reports').delete().eq('trip_id', id);
+
+      // 3. Cascade delete driver ledger entries linked to this trip (by trip_id OR trip number in notes)
+      await supabase.from('driver_ledger').delete().eq('trip_id', id);
+      if (tripNum) {
+        await supabase.from('driver_ledger').delete().ilike('notes', `%${tripNum}%`);
+      }
+
+      // 4. Cascade delete expenses linked to this trip (by trip_id OR trip number in description)
+      await supabase.from('expenses').delete().eq('trip_id', id);
+      if (tripNum) {
+        await supabase.from('expenses').delete().ilike('description', `%${tripNum}%`);
+      }
+
+      // 5. Cascade delete trip enrollments
       await supabase.from('trip_enrollments').delete().eq('trip_id', id);
+
+      // 6. Cascade delete invoice trips mapping if any
+      await supabase.from('invoice_trips').delete().eq('trip_id', id);
+
+      // 7. Delete the trip itself
       const { error } = await supabase.from('trips').delete().eq('id', id);
       if (error) throw error;
       return;
     }
 
     const trips: Trip[] = getStored('trips', initialTrips);
+    const targetTrip = trips.find(t => t.id === id);
+    const tripNum = targetTrip?.trip_number;
+
     setStored('trips', trips.filter(t => t.id !== id));
+
+    const settlements = getStored('settlements', initialSettlements);
+    setStored('settlements', settlements.filter(s => s.trip_id !== id));
+
+    const expenses = getStored<any[]>('expenses', []);
+    setStored('expenses', expenses.filter(e => e.trip_id !== id && (!tripNum || !e.description?.includes(tripNum))));
+
+    const enrollments = getStored<any[]>('enrollments', []);
+    setStored('enrollments', enrollments.filter(e => e.trip_id !== id));
   },
 
   async assignOutsideDriver(tripId: string, name: string, vehicleReg: string, phone?: string): Promise<Trip> {
