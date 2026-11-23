@@ -95,6 +95,157 @@ export const getMonthName = (month: number): string => {
   return months[month - 1] || '';
 };
 
+/**
+ * Normalizes any date string (YYYY-MM-DD, DD-MM-YYYY, or ISO timestamp) to YYYY-MM-DD
+ */
+export const normalizeToYMD = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  const trimmed = dateStr.trim();
+  if (!trimmed) return '';
+
+  // Already YYYY-MM-DD
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
+  }
+
+  // DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+  }
+
+  const d = new Date(trimmed);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+export interface TripDayHighlight {
+  type: 'today' | 'tomorrow' | 'past' | 'future';
+  label: string;
+  isToday: boolean;
+  isTomorrow: boolean;
+  isPast: boolean;
+  rowBgClass: string;
+  badgeClass: string;
+}
+
+/**
+ * Computes duty day highlights for Today, Tomorrow, and Past trips
+ * Used for full row coloring across Admin and Driver trip sheets.
+ */
+export const getTripDayHighlight = (dateStr?: string | null): TripDayHighlight => {
+  const tripYMD = normalizeToYMD(dateStr);
+  if (!tripYMD) {
+    return {
+      type: 'future',
+      label: '',
+      isToday: false,
+      isTomorrow: false,
+      isPast: false,
+      rowBgClass: 'bg-white hover:bg-slate-50 text-slate-900 border-l-4 border-l-transparent',
+      badgeClass: '',
+    };
+  }
+
+  const now = new Date();
+  const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowYMD = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+  if (tripYMD === todayYMD) {
+    return {
+      type: 'today',
+      label: '🟢 TODAY',
+      isToday: true,
+      isTomorrow: false,
+      isPast: false,
+      rowBgClass: 'bg-emerald-100/90 hover:bg-emerald-200/80 border-l-4 border-l-emerald-600 border-y border-emerald-300 font-medium text-slate-900',
+      badgeClass: 'bg-emerald-700 text-white font-black shadow-xs',
+    };
+  }
+
+  if (tripYMD === tomorrowYMD) {
+    return {
+      type: 'tomorrow',
+      label: '🔵 TOMORROW',
+      isToday: false,
+      isTomorrow: true,
+      isPast: false,
+      rowBgClass: 'bg-sky-100/85 hover:bg-sky-200/70 border-l-4 border-l-sky-500 border-y border-sky-300 font-medium text-slate-900',
+      badgeClass: 'bg-sky-700 text-white font-black shadow-xs',
+    };
+  }
+
+  if (tripYMD < todayYMD) {
+    return {
+      type: 'past',
+      label: 'PAST',
+      isToday: false,
+      isTomorrow: false,
+      isPast: true,
+      rowBgClass: 'bg-slate-100/70 hover:bg-slate-100 text-slate-500 opacity-85 border-l-4 border-l-slate-300',
+      badgeClass: 'bg-slate-200 text-slate-600 font-bold',
+    };
+  }
+
+  return {
+    type: 'future',
+    label: '',
+    isToday: false,
+    isTomorrow: false,
+    isPast: false,
+    rowBgClass: 'bg-white hover:bg-slate-50 text-slate-900 border-l-4 border-l-transparent',
+    badgeClass: '',
+  };
+};
+
+/**
+ * Sorts trips so that Today, Tomorrow, and upcoming trips are placed at the TOP (chronological order),
+ * while expired/past dates sink to the BOTTOM.
+ */
+export const sortTripsUpcomingFirst = <T extends { trip_date?: string | null; pickup_date?: string | null; pickup_time?: string | null; trip_number?: string | null }>(
+  a: T,
+  b: T
+): number => {
+  const now = new Date();
+  const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const dateA = normalizeToYMD(a.trip_date || a.pickup_date);
+  const dateB = normalizeToYMD(b.trip_date || b.pickup_date);
+
+  const isPastA = Boolean(dateA && dateA < todayYMD);
+  const isPastB = Boolean(dateB && dateB < todayYMD);
+
+  // Group 0: Today and Future (Top of table)
+  // Group 1: Past trips (Sink to the bottom)
+  if (!isPastA && isPastB) return -1;
+  if (isPastA && !isPastB) return 1;
+
+  // Both are Upcoming / Today:
+  // Sort ascending by date (Today first, then Tomorrow, then Day 3...)
+  if (!isPastA && !isPastB) {
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    const timeA = a.pickup_time || '';
+    const timeB = b.pickup_time || '';
+    if (timeA !== timeB) return timeA.localeCompare(timeB);
+    return (a.trip_number || '').localeCompare(b.trip_number || '');
+  }
+
+  // Both are Past trips:
+  // Sort descending by date (most recent past first: yesterday, then 2 days ago...)
+  if (dateA !== dateB) return dateB.localeCompare(dateA);
+  const timeA = a.pickup_time || '';
+  const timeB = b.pickup_time || '';
+  if (timeA !== timeB) return timeB.localeCompare(timeA);
+  return (b.trip_number || '').localeCompare(a.trip_number || '');
+};
+
 export const calculateFinancials = (
   customerCollection: number,
   petrolExpense: number,

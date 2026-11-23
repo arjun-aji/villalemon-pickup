@@ -40,7 +40,14 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import SearchInput from '../../components/ui/SearchInput';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { formatINR, formatDate, formatTime, generateDriverDispatchMessage } from '../../utils/formatters';
+import {
+  formatINR,
+  formatDate,
+  formatTime,
+  generateDriverDispatchMessage,
+  getTripDayHighlight,
+  sortTripsUpcomingFirst as sortUpcomingTripsOrder,
+} from '../../utils/formatters';
 
 const TripsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -339,37 +346,9 @@ const TripsPage: React.FC = () => {
   // Status normalizer helper (e.g. 'Assigned' -> 'assigned', 'Pending Approval' -> 'pending_approval')
   const getNormStatus = (status?: string) => (status || '').toLowerCase().replace(/[\s-]+/g, '_');
 
-  // Helper to sort trips: Upcoming first (with latest upcoming trip first), and Completed after upcoming
-  const sortTripsUpcomingFirst = (tripsList: Trip[]): Trip[] => {
-    const getStatusRank = (status?: string) => {
-      const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
-      if (s === 'in_progress') return 1;
-      if (['assigned', 'confirmed', 'pending_approval', 'upcoming', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) return 2;
-      if (s === 'completed') return 3;
-      if (s === 'cancelled') return 4;
-      return 2;
-    };
-
-    return [...tripsList].sort((a, b) => {
-      const rankA = getStatusRank(a.trip_status);
-      const rankB = getStatusRank(b.trip_status);
-      if (rankA !== rankB) return rankA - rankB;
-
-      const dateA = a.trip_date || a.pickup_date || '';
-      const dateB = b.trip_date || b.pickup_date || '';
-      if (dateA !== dateB) return dateB.localeCompare(dateA);
-
-      const timeA = a.pickup_time || '';
-      const timeB = b.pickup_time || '';
-      if (timeA !== timeB) return timeB.localeCompare(timeA);
-
-      return (b.created_at || '').localeCompare(a.created_at || '');
-    });
-  };
-
-  // Filtered trips for Standard View (ordered: latest upcoming first, completed after upcoming)
-  const filteredTrips = sortTripsUpcomingFirst(
-    trips.filter(trip => {
+  // Filtered trips for Standard View (ordered: upcoming/today trips first chronologically, past trips sink to bottom)
+  const filteredTrips = trips
+    .filter(trip => {
       const s = getNormStatus(trip.trip_status);
       if (activeTab === 'upcoming' && !['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(s)) {
         return false;
@@ -401,7 +380,7 @@ const TripsPage: React.FC = () => {
 
       return true;
     })
-  );
+    .sort(sortUpcomingTripsOrder);
 
   // Summary financial calculations for Classic Table View
   const classicMetrics = filteredTrips.reduce(
@@ -469,17 +448,7 @@ const TripsPage: React.FC = () => {
 
       return true;
     })
-    .sort((a, b) => {
-      const dateA = a.trip_date || a.pickup_date || '';
-      const dateB = b.trip_date || b.pickup_date || '';
-      if (dateA !== dateB) return dateA.localeCompare(dateB);
-
-      const timeA = a.pickup_time || '';
-      const timeB = b.pickup_time || '';
-      if (timeA !== timeB) return timeA.localeCompare(timeB);
-
-      return (a.trip_number || '').localeCompare(b.trip_number || '');
-    });
+    .sort(sortUpcomingTripsOrder);
 
   // End date calculation for Trip Sheet summary banner
   const getTripSheetEndDate = () => {
@@ -691,6 +660,7 @@ const TripsPage: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {tripSheetTrips.map(trip => {
+                      const dayHighlight = getTripDayHighlight(trip.trip_date || trip.pickup_date);
                       const dateStr = formatDate(trip.trip_date || trip.pickup_date || '');
                       const timeStr = formatTime(trip.pickup_time || '');
                       const flightInfo = trip.flight_number_and_time || trip.flight_number || (trip.trip_category?.toLowerCase().includes('airport') ? 'Nil' : '');
@@ -711,11 +681,21 @@ const TripsPage: React.FC = () => {
                       const note = trip.special_instructions || '-';
 
                       return (
-                        <tr key={trip.id} className="hover:bg-slate-50 transition-colors align-top">
+                        <tr
+                          key={trip.id}
+                          className={`${dayHighlight.rowBgClass} transition-colors align-top`}
+                        >
                           {/* Col 1: Date / Time */}
-                          <td className="p-3 border-r border-slate-200 text-slate-800 leading-snug">
-                            <div className="font-bold text-slate-900">{dateStr}</div>
-                            <div className="text-slate-500 text-[11px] font-medium">{timeStr}</div>
+                          <td className="p-3 border-r border-slate-200/80 leading-snug">
+                            {dayHighlight.label && (
+                              <div className="mb-1">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] ${dayHighlight.badgeClass}`}>
+                                  {dayHighlight.label}
+                                </span>
+                              </div>
+                            )}
+                            <div className={`font-bold ${dayHighlight.isToday ? 'text-emerald-950 text-sm' : dayHighlight.isTomorrow ? 'text-sky-950' : 'text-slate-900'}`}>{dateStr}</div>
+                            <div className={`text-[11px] font-semibold ${dayHighlight.isToday ? 'text-emerald-800' : dayHighlight.isTomorrow ? 'text-sky-800' : 'text-slate-500'}`}>{timeStr}</div>
                           </td>
 
                           {/* Col 2: Trip ID / Category / Flight */}
@@ -1049,9 +1029,13 @@ const TripsPage: React.FC = () => {
                       const isPrepaid = trip.collection_rule === 'Do not collect';
                       const driverCollectedAmt = Number(rep?.amount_collected ?? (isPrepaid ? 0 : (trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0)));
                       const returnedFund = driverCollectedAmt - totalExp - driverChg;
+                      const dayHighlight = getTripDayHighlight(trip.trip_date || trip.pickup_date);
 
                       return (
-                        <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
+                        <tr
+                          key={trip.id}
+                          className={`${dayHighlight.rowBgClass} transition-colors`}
+                        >
                           <td className="table-cell">
                             <span className="font-mono font-bold text-navy-primary block">{trip.trip_number}</span>
                             {Boolean(trip.trip_number?.match(/-[A-Z]$/) || trip.special_instructions?.includes('[Convoy:')) && (
@@ -1082,8 +1066,19 @@ const TripsPage: React.FC = () => {
                             </div>
                           </td>
                           <td className="table-cell text-xs">
-                            <p className="font-semibold text-text-primary">{formatDate(trip.pickup_date || trip.trip_date || '')}</p>
-                            <p className="text-text-secondary font-mono">{formatTime(trip.pickup_time || '')}</p>
+                            {dayHighlight.label && (
+                              <div className="mb-1">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] ${dayHighlight.badgeClass}`}>
+                                  {dayHighlight.label}
+                                </span>
+                              </div>
+                            )}
+                            <p className={`font-bold ${dayHighlight.isToday ? 'text-emerald-950 font-black' : dayHighlight.isTomorrow ? 'text-sky-950 font-black' : 'text-text-primary'}`}>
+                              {formatDate(trip.pickup_date || trip.trip_date || '')}
+                            </p>
+                            <p className={`font-mono ${dayHighlight.isToday ? 'text-emerald-800 font-bold' : dayHighlight.isTomorrow ? 'text-sky-800 font-bold' : 'text-text-secondary'}`}>
+                              {formatTime(trip.pickup_time || '')}
+                            </p>
                           </td>
                           <td className="table-cell text-xs text-text-secondary">
                             <p className="font-medium text-text-primary truncate max-w-[190px]" title={`${trip.pickup_location} → ${trip.destination || trip.dropoff_location}`}>

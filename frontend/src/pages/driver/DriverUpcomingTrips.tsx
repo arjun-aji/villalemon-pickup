@@ -20,7 +20,7 @@ import { supabase } from '../../lib/supabase';
 import { Trip } from '../../types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { formatINR, formatDate, formatTime } from '../../utils/formatters';
+import { formatINR, formatDate, formatTime, getTripDayHighlight, sortTripsUpcomingFirst } from '../../utils/formatters';
 
 const DriverUpcomingTrips: React.FC = () => {
   const navigate = useNavigate();
@@ -29,35 +29,6 @@ const DriverUpcomingTrips: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-
-  const getDayHighlight = (dateStr?: string) => {
-    if (!dateStr) return null;
-    const today = new Date();
-    const todayYMD = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowYMD = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-
-    const tripYMD = dateStr.slice(0, 10);
-    if (tripYMD === todayYMD) {
-      return {
-        type: 'today',
-        label: '🟢 TODAY’S TRIP',
-        borderClass: 'border-2 border-emerald-500 bg-emerald-50/20 ring-2 ring-emerald-500/20 shadow-md',
-        badgeClass: 'bg-emerald-600 text-white font-extrabold shadow-sm',
-      };
-    }
-    if (tripYMD === tomorrowYMD) {
-      return {
-        type: 'tomorrow',
-        label: '🔵 TOMORROW’S TRIP',
-        borderClass: 'border-2 border-blue-400 bg-blue-50/20 shadow-sm',
-        badgeClass: 'bg-blue-600 text-white font-extrabold shadow-sm',
-      };
-    }
-    return null;
-  };
 
   const rawDriverId = driver?.id || '';
   const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
@@ -104,17 +75,19 @@ const DriverUpcomingTrips: React.FC = () => {
         return ['upcoming', 'assigned', 'confirmed', 'in_progress', 'pending_approval'].includes(s);
       };
 
-      const myTrips = all.filter(t => {
-        if (!isUpcomingStatus(t.trip_status)) return false;
-        if (effectiveDriverId && t.assigned_driver_id === effectiveDriverId) return true;
-        const tDrvName = (t.driver?.full_name || '').toLowerCase();
-        const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
-        if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
-        const tPhone = (t.driver?.phone || '').replace(/[^0-9]/g, '');
-        const myPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
-        if (myPhone && myPhone.length >= 6 && tPhone.includes(myPhone)) return true;
-        return false;
-      });
+      const myTrips = all
+        .filter(t => {
+          if (!isUpcomingStatus(t.trip_status)) return false;
+          if (effectiveDriverId && t.assigned_driver_id === effectiveDriverId) return true;
+          const tDrvName = (t.driver?.full_name || '').toLowerCase();
+          const myName = resolvedName.toLowerCase().replace(/[^a-z]/g, '');
+          if (tDrvName && myName && (tDrvName.includes(myName) || myName.includes(tDrvName))) return true;
+          const tPhone = (t.driver?.phone || '').replace(/[^0-9]/g, '');
+          const myPhone = (driver?.phone || profile?.phone || '').replace(/[^0-9]/g, '');
+          if (myPhone && myPhone.length >= 6 && tPhone.includes(myPhone)) return true;
+          return false;
+        })
+        .sort(sortTripsUpcomingFirst);
 
       setTrips(myTrips);
     } catch (e) {
@@ -219,24 +192,18 @@ const DriverUpcomingTrips: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {trips.map(trip => {
                   const tripDate = trip.trip_date || trip.pickup_date || '';
-                  const dayHighlight = getDayHighlight(tripDate);
+                  const dayHighlight = getTripDayHighlight(tripDate);
                   const collectAmt = Number(trip.amount_driver_must_collect ?? trip.amount_to_collect ?? 0);
                   const isInProgress = (trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_') === 'in_progress';
 
                   return (
                     <tr
                       key={trip.id}
-                      className={`hover:bg-slate-50 transition-colors ${
-                        dayHighlight?.type === 'today'
-                          ? 'bg-emerald-50/40 font-medium'
-                          : dayHighlight?.type === 'tomorrow'
-                          ? 'bg-blue-50/40'
-                          : ''
-                      }`}
+                      className={`${dayHighlight.rowBgClass} transition-colors`}
                     >
                       <td className="py-3 px-3">
-                        {dayHighlight ? (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black ${dayHighlight.badgeClass}`}>
+                        {dayHighlight.label ? (
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] ${dayHighlight.badgeClass}`}>
                             {dayHighlight.label}
                           </span>
                         ) : (
@@ -332,23 +299,33 @@ const DriverUpcomingTrips: React.FC = () => {
         <div className="max-w-md mx-auto space-y-4">
           {trips.map(trip => {
             const tripDate = trip.trip_date || trip.pickup_date || '';
-            const dayHighlight = getDayHighlight(tripDate);
+            const dayHighlight = getTripDayHighlight(tripDate);
 
             return (
               <div
                 key={trip.id}
                 className={`card p-5 border space-y-3 shadow-card transition-all ${
-                  dayHighlight?.borderClass || 'border-border'
+                  dayHighlight.isToday
+                    ? 'border-2 border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-md'
+                    : dayHighlight.isTomorrow
+                    ? 'border-2 border-sky-400 bg-sky-50/70 ring-1 ring-sky-400/20 shadow-sm'
+                    : dayHighlight.isPast
+                    ? 'border border-slate-200 bg-slate-50/60 opacity-85'
+                    : 'border-border bg-white'
                 }`}
               >
                 {/* Day Highlight Alert Ribbon */}
-                {dayHighlight && (
+                {dayHighlight.label && (
                   <div className="flex items-center justify-between pb-2 border-b border-border/60">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase ${dayHighlight.badgeClass}`}>
                       {dayHighlight.label}
                     </span>
                     <span className="text-[11px] font-bold text-slate-700">
-                      {dayHighlight.type === 'today' ? 'Duty Scheduled For Today' : 'Duty Scheduled For Tomorrow'}
+                      {dayHighlight.isToday
+                        ? 'Duty Scheduled For Today'
+                        : dayHighlight.isTomorrow
+                        ? 'Duty Scheduled For Tomorrow'
+                        : 'Past Duty'}
                     </span>
                   </div>
                 )}

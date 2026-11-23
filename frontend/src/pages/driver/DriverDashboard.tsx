@@ -23,7 +23,7 @@ import { enrollmentService } from '../../services/enrollmentService';
 import { settlementService } from '../../services/settlementService';
 import { supabase } from '../../lib/supabase';
 import { Trip } from '../../types';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, sortTripsUpcomingFirst } from '../../utils/formatters';
 import CompleteProfileModal from '../../components/driver/CompleteProfileModal';
 
 const DriverDashboard: React.FC = () => {
@@ -128,7 +128,9 @@ const DriverDashboard: React.FC = () => {
         return false;
       });
 
-      const upcoming = myAssigned.filter((t: Trip) => isUpcomingStatus(t.trip_status));
+      const upcoming = myAssigned
+        .filter((t: Trip) => isUpcomingStatus(t.trip_status))
+        .sort(sortTripsUpcomingFirst);
       const inProg = myAssigned.filter((t: Trip) => isInProgressStatus(t.trip_status));
       const completed = myAssigned.filter((t: Trip) => isCompletedStatus(t.trip_status));
 
