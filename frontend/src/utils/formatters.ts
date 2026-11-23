@@ -227,23 +227,13 @@ export const sortTripsUpcomingFirst = <T extends { trip_date?: string | null; pi
   if (!isPastA && isPastB) return -1;
   if (isPastA && !isPastB) return 1;
 
-  // Both are Upcoming / Today:
-  // Sort ascending by date (Today first, then Tomorrow, then Day 3...)
-  if (!isPastA && !isPastB) {
-    if (dateA !== dateB) return dateA.localeCompare(dateB);
-    const timeA = a.pickup_time || '';
-    const timeB = b.pickup_time || '';
-    if (timeA !== timeB) return timeA.localeCompare(timeB);
-    return (a.trip_number || '').localeCompare(b.trip_number || '');
-  }
-
-  // Both are Past trips:
-  // Sort descending by date (most recent past first: yesterday, then 2 days ago...)
-  if (dateA !== dateB) return dateB.localeCompare(dateA);
+  // Both in the same section (both Upcoming OR both Past):
+  // Keep in chronological date and time order (earliest date & time first)
+  if (dateA !== dateB) return dateA.localeCompare(dateB);
   const timeA = a.pickup_time || '';
   const timeB = b.pickup_time || '';
-  if (timeA !== timeB) return timeB.localeCompare(timeA);
-  return (b.trip_number || '').localeCompare(a.trip_number || '');
+  if (timeA !== timeB) return timeA.localeCompare(timeB);
+  return (a.trip_number || '').localeCompare(b.trip_number || '');
 };
 
 export const calculateFinancials = (
