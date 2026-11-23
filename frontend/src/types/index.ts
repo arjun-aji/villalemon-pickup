@@ -221,6 +221,8 @@ export interface Driver {
   address?: string;
   employment_status?: 'active' | 'inactive' | 'suspended';
   is_first_login?: boolean;
+  is_profile_completed?: boolean;
+  photo_url?: string;
   user_id?: string;
   driving_license_number?: string;
   pending_settlements?: number;

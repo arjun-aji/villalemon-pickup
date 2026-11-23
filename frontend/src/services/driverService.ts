@@ -23,6 +23,15 @@ export const driverService = {
 
             const userMatch = (d.payment_arrangement_notes || '').match(/Username:\s*([a-zA-Z0-9_]+)/i);
             const extractedUsername = userMatch ? userMatch[1] : d.phone;
+            const addressMatch = (d.payment_arrangement_notes || '').match(/Address:\s*([^|]+)/i);
+            const extractedAddress = addressMatch ? addressMatch[1].trim() : (d.address || '');
+            const vehicleMatch = (d.payment_arrangement_notes || '').match(/Vehicle:\s*([^|]+)/i);
+            const extractedVehicle = vehicleMatch ? vehicleMatch[1].trim() : (d.assigned_vehicle_reg || d.vehicle_number || '');
+            const photoMatch = (d.payment_arrangement_notes || '').match(/Photo:\s*([^|]+)/i);
+            const extractedPhoto = photoMatch ? photoMatch[1].trim() : (d.photo_url || '');
+            const isCompleted = (d.payment_arrangement_notes || '').includes('profile_completed:true') ||
+              (Boolean(d.driving_licence_no) && d.driving_licence_no !== 'N/A' && d.driving_licence_no !== 'PENDING');
+            const isFirstLogin = (d.payment_arrangement_notes || '').includes('first_login:true');
 
             return {
               id: d.id,
@@ -32,8 +41,9 @@ export const driverService = {
               username: extractedUsername,
               phone: d.phone,
               email: `${d.phone}@villalemon.pickup`,
-              vehicle_number: d.assigned_vehicle_reg || '',
-              address: '',
+              vehicle_number: extractedVehicle,
+              address: extractedAddress,
+              photo_url: extractedPhoto,
               driving_licence_no: d.driving_licence_no || '',
               licence_expiry: d.licence_expiry || '',
               employment_type: d.employment_type || 'Per-trip payment',
@@ -42,6 +52,8 @@ export const driverService = {
               payment_arrangement_notes: d.payment_arrangement_notes || '',
               status: d.status || 'Active',
               employment_status: d.status === 'Active' ? 'active' : 'inactive',
+              is_first_login: isFirstLogin,
+              is_profile_completed: isCompleted,
               balance_payable_to_driver: Number(bal?.balance_payable_to_driver) || 0,
               cash_owed_to_office: Number(bal?.cash_owed_to_office) || 0,
               net_settlement_amount: Number(bal?.net_settlement_amount) || 0,

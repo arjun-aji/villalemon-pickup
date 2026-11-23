@@ -14,6 +14,14 @@ import {
   Copy,
   ExternalLink,
   Edit2,
+  Eye,
+  CreditCard,
+  Calendar,
+  MapPin,
+  User,
+  Wallet,
+  AlertCircle,
+  Check,
 } from 'lucide-react';
 import { driverService } from '../../services/driverService';
 import { DriverEmployee } from '../../types';
@@ -21,9 +29,11 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import SearchInput from '../../components/ui/SearchInput';
+import { formatDate, formatINR } from '../../utils/formatters';
 
 const DriversPage: React.FC = () => {
   const [drivers, setDrivers] = useState<DriverEmployee[]>([]);
+  const [selectedViewDriver, setSelectedViewDriver] = useState<DriverEmployee | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -371,6 +381,15 @@ Thank you,
                     <td className="table-cell text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => setSelectedViewDriver(d)}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold shadow-xs"
+                          title="View Driver Details"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-600" />
+                          <span>View</span>
+                        </button>
+
+                        <button
                           onClick={() => handleOpenEdit(d)}
                           className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
                           title="Edit Driver Profile"
@@ -686,6 +705,282 @@ Thank you,
           </div>
         </form>
       </Modal>
+
+      {/* View Driver Details Modal */}
+      {selectedViewDriver && (
+        <Modal
+          isOpen={true}
+          onClose={() => setSelectedViewDriver(null)}
+          title="Driver Profile & Verification Details"
+          size="lg"
+        >
+          <div className="space-y-5">
+            {/* 1. Header Profile Banner */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 rounded-2xl text-white shadow-md">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-700 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-md">
+                      {selectedViewDriver.photo_url ? (
+                        <img
+                          src={selectedViewDriver.photo_url}
+                          alt={selectedViewDriver.full_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="font-black text-lg text-emerald-300 uppercase">
+                          {selectedViewDriver.full_name.substring(0, 2)}
+                        </span>
+                      )}
+                    </div>
+                    {selectedViewDriver.is_profile_completed && (
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white" title="Profile Verified">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg font-black tracking-tight text-white">
+                        {selectedViewDriver.full_name}
+                      </h3>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedViewDriver.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' : 'bg-red-500/20 text-red-300 border border-red-400/30'
+                      }`}>
+                        {selectedViewDriver.status || 'Active'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-slate-300 mt-1 flex-wrap font-mono">
+                      <span>ID: <strong>{selectedViewDriver.employee_id || selectedViewDriver.id.slice(0, 8)}</strong></span>
+                      <span>•</span>
+                      <span>Username: <strong className="text-emerald-300">@{selectedViewDriver.username || selectedViewDriver.phone}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex sm:flex-col items-end gap-1.5 self-stretch sm:self-auto justify-between sm:justify-start border-t sm:border-t-0 border-slate-700/60 pt-3 sm:pt-0">
+                  <span className="text-[11px] text-slate-400 font-medium">Employment Model</span>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-xl bg-white/10 text-emerald-300 text-xs font-bold border border-white/10">
+                    {selectedViewDriver.employment_type === 'Salaried (monthly)'
+                      ? `Salary: ${formatINR(selectedViewDriver.monthly_salary)}/mo`
+                      : `Per Trip: ${formatINR(selectedViewDriver.per_trip_payment || 500)}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Profile Setup Onboarding Status */}
+              <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between flex-wrap gap-2 text-xs">
+                {selectedViewDriver.is_profile_completed ? (
+                  <div className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Driver completed onboarding profile setup on portal</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Driver has not completed profile setup yet (temporary credentials active)</span>
+                  </div>
+                )}
+                {selectedViewDriver.created_at && (
+                  <span className="text-slate-400 text-[11px]">
+                    Joined: {formatDate(selectedViewDriver.created_at)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Box A: Credentials & Profile Details (Filled by Driver) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-emerald-600" />
+                    <span>Licence & Onboarding Info</span>
+                  </h4>
+                  <span className="text-[10px] font-semibold text-slate-400">Driver Setup</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Driving Licence Number</span>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded-lg border border-slate-200 text-xs">
+                        {selectedViewDriver.driving_licence_no || 'Not provided'}
+                      </span>
+                      {selectedViewDriver.driving_licence_no && selectedViewDriver.driving_licence_no !== 'N/A' && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedViewDriver.driving_licence_no);
+                            alert('Licence number copied to clipboard!');
+                          }}
+                          className="text-slate-400 hover:text-slate-700 p-1"
+                          title="Copy Licence"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Licence Expiry</span>
+                      <span className="font-semibold text-slate-800">
+                        {selectedViewDriver.licence_expiry ? formatDate(selectedViewDriver.licence_expiry) : 'Not specified'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Assigned / Own Vehicle</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {selectedViewDriver.vehicle_number || 'Not assigned'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Residential Address</span>
+                    <p className="text-slate-800 font-medium text-xs mt-0.5">
+                      {selectedViewDriver.address || <span className="text-slate-400 italic">No address entered</span>}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Contact & WhatsApp</span>
+                    <div className="flex items-center justify-between mt-1 gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-slate-900">{selectedViewDriver.phone}</span>
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={`tel:${selectedViewDriver.phone}`}
+                          className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold inline-flex items-center gap-1"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>Call</span>
+                        </a>
+                        <a
+                          href={formatWhatsAppUrl(
+                            selectedViewDriver.phone,
+                            `Hello ${selectedViewDriver.full_name}, this is VillaLemon Pickup Operations.`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-semibold inline-flex items-center gap-1"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <span>WhatsApp</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Box B: Financial Balances & Trip Stats */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <Wallet className="w-4 h-4 text-blue-600" />
+                      <span>Ledger & Trip Performance</span>
+                    </h4>
+                    <span className="text-[10px] font-semibold text-slate-400">Live Balances</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">Payable to Driver</span>
+                      <span className="text-sm font-black text-emerald-600 font-mono mt-0.5 block">
+                        {formatINR(selectedViewDriver.balance_payable_to_driver || 0)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">Cash Held / Owed</span>
+                      <span className="text-sm font-black text-amber-600 font-mono mt-0.5 block">
+                        {formatINR(selectedViewDriver.cash_owed_to_office || 0)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">Net Settlement</span>
+                      <span className="text-sm font-black text-slate-900 font-mono mt-0.5 block">
+                        {formatINR(selectedViewDriver.net_settlement_amount || 0)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">Completed Trips</span>
+                      <span className="text-sm font-black text-blue-600 font-mono mt-0.5 block">
+                        {selectedViewDriver.completed_trips || 0} / {selectedViewDriver.total_trips || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Driver Photo expansion (if available) */}
+                {selectedViewDriver.photo_url && (
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs mt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                        <img src={selectedViewDriver.photo_url} alt="Profile" className="w-full h-full object-cover" />
+                      </div>
+                      <span className="font-semibold text-slate-700 text-[11px]">Driver Photo Uploaded</span>
+                    </div>
+                    <a
+                      href={selectedViewDriver.photo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-[11px] font-bold inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>View Full Image</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 gap-2 flex-wrap">
+              <a
+                href={formatWhatsAppUrl(
+                  selectedViewDriver.phone,
+                  `🚖 *VillaLemon Pickup — Driver Account Details*\n\nHello *${selectedViewDriver.full_name}*,\nHere are your account details:\n👤 Username: ${selectedViewDriver.username || selectedViewDriver.phone}\n🌐 Driver Portal: ${window.location.origin}/driver/login\n\n*VillaLemon Pickup Operations*`
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5 fill-white" />
+                <span>Send Portal Link</span>
+              </a>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = selectedViewDriver;
+                    setSelectedViewDriver(null);
+                    handleOpenEdit(d);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Driver</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedViewDriver(null)}
+                  className="btn-secondary text-xs px-3.5 py-1.5"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
