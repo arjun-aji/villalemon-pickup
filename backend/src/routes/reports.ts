@@ -32,12 +32,12 @@ router.get('/generate', authenticate, requireAdmin, async (req: AuthRequest, res
       .order('pickup_date', { ascending: true });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'VillaLemon Pickup';
+    workbook.creator = 'Varkala Holidays';
     workbook.created = new Date();
 
     // Sheet 1: Monthly Summary
     const summarySheet = workbook.addWorksheet('Monthly Summary');
-    summarySheet.addRow(['VillaLemon Pickup - Official Monthly Report']);
+    summarySheet.addRow(['Varkala Holidays - Official Monthly Report']);
     summarySheet.addRow([`${MONTHS[m - 1]} ${y}`]);
     summarySheet.addRow([]);
 

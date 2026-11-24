@@ -113,10 +113,10 @@ const DriversPage: React.FC = () => {
 
   const generateDriverLoginMessage = (name: string, username: string, pass: string, phone: string) => {
     const origin = window.location.origin;
-    return `🚖 *VillaLemon Pickup — Driver Account Created*
+    return `🚖 *Varkala Holidays — Driver Account Created*
 
 Hello *${name}*,
-Welcome to the VillaLemon Pickup team!
+Welcome to the Varkala Holidays team!
 
 Here are your login credentials to access the Driver Portal:
 🌐 *Driver Portal:* ${origin}/driver/login
@@ -130,7 +130,7 @@ Please log in now to complete your driver profile:
 3. Enter your Driving Licence number and details
 
 Thank you,
-*VillaLemon Pickup Operations*`;
+*Varkala Holidays Operations*`;
   };
 
   useEffect(() => {
@@ -401,7 +401,7 @@ Thank you,
                         <a
                           href={formatWhatsAppUrl(
                             d.phone,
-                            `🚖 *VillaLemon Pickup — Driver Portal*\n\nHello *${d.full_name}*,\n\nYou can access your Driver Portal here:\n🌐 ${window.location.origin}/driver/login\n👤 Username / Phone: ${d.username || d.phone}\n\n*VillaLemon Pickup Operations*`
+                            `🚖 *Varkala Holidays — Driver Portal*\n\nHello *${d.full_name}*,\n\nYou can access your Driver Portal here:\n🌐 ${window.location.origin}/driver/login\n👤 Username / Phone: ${d.username || d.phone}\n\n*Varkala Holidays Operations*`
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -861,7 +861,7 @@ Thank you,
                         <a
                           href={formatWhatsAppUrl(
                             selectedViewDriver.phone,
-                            `Hello ${selectedViewDriver.full_name}, this is VillaLemon Pickup Operations.`
+                            `Hello ${selectedViewDriver.full_name}, this is Varkala Holidays Operations.`
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -946,7 +946,7 @@ Thank you,
               <a
                 href={formatWhatsAppUrl(
                   selectedViewDriver.phone,
-                  `🚖 *VillaLemon Pickup — Driver Account Details*\n\nHello *${selectedViewDriver.full_name}*,\nHere are your account details:\n👤 Username: ${selectedViewDriver.username || selectedViewDriver.phone}\n🌐 Driver Portal: ${window.location.origin}/driver/login\n\n*VillaLemon Pickup Operations*`
+                  `🚖 *Varkala Holidays — Driver Account Details*\n\nHello *${selectedViewDriver.full_name}*,\nHere are your account details:\n👤 Username: ${selectedViewDriver.username || selectedViewDriver.phone}\n🌐 Driver Portal: ${window.location.origin}/driver/login\n\n*Varkala Holidays Operations*`
                 )}
                 target="_blank"
                 rel="noopener noreferrer"

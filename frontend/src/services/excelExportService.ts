@@ -5,7 +5,7 @@ import { formatDate, formatTime } from '../utils/formatters';
 export const excelExportService = {
   async exportFullWorkbook(): Promise<Blob> {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'VillaLemon Pickup Transport Engine';
+    workbook.creator = 'Varkala Holidays Transport Engine';
     workbook.created = new Date();
 
     // 1. Fetch live data from Supabase

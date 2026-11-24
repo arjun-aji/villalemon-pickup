@@ -1,4 +1,4 @@
-// VillaLemon Pickup - Complete Domain TypeScript Types (Matching Varkala Holidays Schema)
+// Varkala Holidays - Complete Domain TypeScript Types (Matching Varkala Holidays Schema)
 
 export type UserRole = 'super_admin' | 'admin' | 'driver' | 'organization';
 

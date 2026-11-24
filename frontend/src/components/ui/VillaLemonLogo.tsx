@@ -90,8 +90,8 @@ export const VillaLemonLogo: React.FC<VillaLemonLogoProps> = ({
       {/* Brand Name & Subtitle */}
       <div className="leading-tight">
         <div className={`font-black tracking-tight ${titleSizes[size]}`}>
-          <span className={isLight ? 'text-white' : 'text-[#10243A]'}>VillaLemon </span>
-          <span className="text-[#00875A]">Pickup</span>
+          <span className={isLight ? 'text-white' : 'text-[#10243A]'}>Varkala </span>
+          <span className="text-[#00875A]">Holidays</span>
         </div>
         {showSubtitle && (
           <p

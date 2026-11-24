@@ -128,8 +128,8 @@ const LandingPage: React.FC = () => {
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#10243A]">
-              <span>VillaLemon </span>
-              <span className="text-[#00875A]">Pickup</span>
+              <span>Varkala </span>
+              <span className="text-[#00875A]">Holidays</span>
             </h1>
           </div>
 
@@ -142,8 +142,8 @@ const LandingPage: React.FC = () => {
 
           {/* Welcome Headline */}
           <h2 className="text-2xl sm:text-3xl lg:text-[36px] font-black tracking-tight text-[#10243A] leading-tight">
-            <span>Welcome to VillaLemon </span>
-            <span className="text-[#00875A]">Pickup</span>
+            <span>Welcome to Varkala </span>
+            <span className="text-[#00875A]">Holidays</span>
           </h2>
 
           <p className="text-xs sm:text-sm font-semibold text-slate-700 mt-1 max-w-lg mx-auto">
@@ -281,7 +281,7 @@ const LandingPage: React.FC = () => {
 
             <span className="text-white/60">•</span>
 
-            <span>VillaLemon Pickup | Pickup & Driver Management</span>
+            <span>Varkala Holidays | Pickup & Driver Management</span>
 
             <span className="hidden sm:inline-block w-12 sm:w-20 h-px bg-white/60" />
           </div>

@@ -143,7 +143,7 @@ const OrganizationLayout: React.FC = () => {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>VillaLemon Pickup • Varkala Holidays Partner Portal</span>
+          <span>Varkala Holidays Partner Portal</span>
           <span className="text-[11px] text-slate-400">Operations Hotline: +91 94470 00000</span>
         </div>
       </footer>

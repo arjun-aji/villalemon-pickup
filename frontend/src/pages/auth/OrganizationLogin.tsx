@@ -259,7 +259,7 @@ const OrganizationLogin: React.FC = () => {
                   <label className="label mb-0">Password</label>
                   <button
                     type="button"
-                    onClick={() => alert('Please contact VillaLemon management to reset your organization credentials.')}
+                    onClick={() => alert('Please contact Varkala Holidays management to reset your organization credentials.')}
                     className="text-xs text-[#1E3A8A] hover:underline font-semibold"
                   >
                     Need Help?
@@ -456,7 +456,7 @@ const OrganizationLogin: React.FC = () => {
 
       {/* Footer */}
       <div className="text-center relative z-10 text-xs text-slate-400">
-        <p>VillaLemon Pickup | Partner Portal • Varkala</p>
+        <p>Varkala Holidays | Partner Portal • Varkala</p>
       </div>
     </div>
   );

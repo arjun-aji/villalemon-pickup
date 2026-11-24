@@ -520,7 +520,7 @@ const InvoicesPage: React.FC = () => {
     const orgName = org?.name || 'Client';
     const periodStr = from && to ? `${formatDate(from)} to ${formatDate(to)}` : 'Current Pending Billing';
 
-    let msg = `📄 *VILLALEMON PICKUP — CLIENT BILL*\n`;
+    let msg = `📄 *VARKALA HOLIDAYS — CLIENT BILL*\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
     msg += `🏢 *Organization:* ${orgName}\n`;
     if (invNum) msg += `🧾 *Bill / Invoice #:* ${invNum}\n`;
@@ -632,7 +632,7 @@ const InvoicesPage: React.FC = () => {
     const drvName = drv?.full_name || 'Driver';
     const periodStr = from && to ? `${formatDate(from)} to ${formatDate(to)}` : 'Periodic Settlement';
 
-    let msg = `🚕 *VILLALEMON PICKUP — DRIVER SETTLEMENT INVOICE*\n`;
+    let msg = `🚕 *VARKALA HOLIDAYS — DRIVER SETTLEMENT INVOICE*\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
     msg += `👨‍✈️ *Driver:* ${drvName} ${drv?.phone ? `(${drv.phone})` : ''}\n`;
     if (voucherNum) msg += `🧾 *Voucher #:* ${voucherNum}\n`;
@@ -1773,7 +1773,7 @@ const InvoicesPage: React.FC = () => {
             {/* Header */}
             <div className="flex items-start justify-between border-b pb-4 flex-wrap gap-3">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">VILLALEMON PICKUP</h2>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">VARKALA HOLIDAYS</h2>
                 <p className="text-xs text-slate-500 font-medium">Varkala Operations & Tourism Transport Services</p>
                 <p className="text-[11px] text-slate-400">Temple Road, Varkala, Kerala • Phone: +91 90482 79460</p>
               </div>
@@ -1985,7 +1985,7 @@ const InvoicesPage: React.FC = () => {
             {/* Header */}
             <div className="flex items-start justify-between border-b pb-4 flex-wrap gap-3">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">VILLALEMON PICKUP</h2>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">VARKALA HOLIDAYS</h2>
                 <p className="text-xs text-slate-500 font-medium">Driver Periodic Settlement Voucher & Payment Statement</p>
                 <p className="text-[11px] text-slate-400">Temple Road, Varkala, Kerala • Fleet Operations</p>
               </div>
@@ -2179,7 +2179,7 @@ const InvoicesPage: React.FC = () => {
               <div>
                 <div className="h-12 border-b border-dashed border-slate-300"></div>
                 <p className="mt-2 font-bold text-slate-800">Authorized Fleet Manager</p>
-                <p className="text-[10px] text-slate-400">VILLALEMON PICKUP Varkala</p>
+                <p className="text-[10px] text-slate-400">VARKALA HOLIDAYS Varkala</p>
               </div>
             </div>
 

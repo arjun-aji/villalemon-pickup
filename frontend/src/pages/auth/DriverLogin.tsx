@@ -134,7 +134,7 @@ const DriverLogin: React.FC = () => {
                 <label className="label mb-0">Password</label>
                 <button
                   type="button"
-                  onClick={() => alert('Please contact VillaLemon management to reset your driver login credentials.')}
+                  onClick={() => alert('Please contact Varkala Holidays management to reset your driver login credentials.')}
                   className="text-xs text-[#00875A] hover:underline font-semibold"
                 >
                   Forgot?
@@ -185,7 +185,7 @@ const DriverLogin: React.FC = () => {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-xs text-[#94A3B8] pb-4">
-        VillaLemon Pickup | Pickup & Driver Management • Varkala
+        Varkala Holidays | Pickup & Driver Management • Varkala
       </footer>
     </div>
   );

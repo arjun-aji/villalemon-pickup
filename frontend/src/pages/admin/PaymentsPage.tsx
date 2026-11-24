@@ -409,7 +409,7 @@ const PaymentsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="text-center border-b pb-4">
-              <h2 className="text-lg font-black text-slate-900">VILLALEMON PICKUP</h2>
+              <h2 className="text-lg font-black text-slate-900">VARKALA HOLIDAYS</h2>
               <p className="text-xs text-slate-500">Official Payment Receipt</p>
               <span className="font-mono font-bold text-blue-900 text-sm block mt-1">
                 {selectedReceipt.receipt_number || 'REC-RECEIPT'}

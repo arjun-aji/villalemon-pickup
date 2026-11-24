@@ -157,7 +157,7 @@ const ClientsPage: React.FC = () => {
         return `• *${t.trip_number || 'Trip'}* (${formatDate(t.trip_date || t.pickup_date)}) | Guest: ${t.guest_names || 'Guest'} | ${t.pickup_location || ''} → ${t.dropoff_location || ''} | Cost: ₹${cost.toLocaleString('en-IN')}`;
       });
 
-      const message = `🏨 *VillaLemon Pickup — Account Statement*\n` +
+      const message = `🏨 *Varkala Holidays — Account Statement*\n` +
         `*Client:* ${org.name} (${org.contact_person || ''})\n` +
         `*Date:* ${formatDate(new Date().toISOString())}\n\n` +
         `📊 *Summary:*\n` +

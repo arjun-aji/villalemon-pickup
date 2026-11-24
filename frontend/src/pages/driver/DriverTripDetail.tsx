@@ -48,7 +48,7 @@ const DriverTripDetail: React.FC = () => {
   const handleCopyPlacard = () => {
     if (!trip) return;
     const cust = trip.customer_name || trip.guest_names || 'Guest';
-    const text = trip.placard_text || `VILLALEMON PICKUP - ${cust.toUpperCase()}`;
+    const text = trip.placard_text || `VARKALA HOLIDAYS - ${cust.toUpperCase()}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -80,7 +80,7 @@ const DriverTripDetail: React.FC = () => {
     );
   }
 
-  const placard = trip.placard_text || `VILLALEMON PICKUP - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`;
+  const placard = trip.placard_text || `VARKALA HOLIDAYS - ${(trip.customer_name || trip.guest_names || 'Guest').toUpperCase()}`;
   const normSt = (trip.trip_status || '').toLowerCase().replace(/[\s-]+/g, '_');
   const isAssigned = ['assigned', 'confirmed', 'upcoming'].includes(normSt);
   const isInProgress = normSt === 'in_progress' || normSt === 'on_trip';

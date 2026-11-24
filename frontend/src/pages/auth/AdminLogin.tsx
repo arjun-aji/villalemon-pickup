@@ -163,7 +163,7 @@ const AdminLogin: React.FC = () => {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-xs text-[#94A3B8] pb-4">
-        VillaLemon Pickup | Pickup & Driver Management • Varkala
+        Varkala Holidays | Pickup & Driver Management • Varkala
       </footer>
     </div>
   );

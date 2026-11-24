@@ -133,7 +133,7 @@ const DriverUpcomingTrips: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-text-primary">My Upcoming Trips</h1>
             <p className="text-xs text-text-secondary">
-              Trips assigned to you by VillaLemon admin
+              Trips assigned to you by Varkala Holidays admin
             </p>
           </div>
         </div>

@@ -173,7 +173,7 @@ const OrganizationDashboard: React.FC = () => {
       return `• *${t.trip_number || 'Trip'}* (${formatDate(t.trip_date || t.pickup_date)}) | Guest: ${t.guest_names || 'Guest'} | ${t.pickup_location || ''} → ${t.dropoff_location || ''} | Cost: ₹${cost.toLocaleString('en-IN')}`;
     });
 
-    const message = `🏨 *VillaLemon Pickup — Account Statement*\n` +
+    const message = `🏨 *Varkala Holidays — Account Statement*\n` +
       `*Client / Partner:* ${organization?.name || profile?.full_name || 'Partner'}\n` +
       `*Date:* ${formatDate(new Date().toISOString())}\n\n` +
       `📊 *Account Summary:*\n` +
@@ -183,7 +183,7 @@ const OrganizationDashboard: React.FC = () => {
       `• *TOTAL PENDING TO PAY: ₹${outstanding.toLocaleString('en-IN')}*\n\n` +
       `📋 *Recent Trips Breakdown:*\n` +
       (lines.length > 0 ? lines.join('\n') : '• No recorded trips yet') +
-      `\n\n_VillaLemon Pickup Transport Management • Varkala Holidays_`;
+      `\n\n_Varkala Holidays Transport Management_`;
 
     const adminPhone = '917356568307';
     window.open(`https://wa.me/${adminPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -208,7 +208,7 @@ const OrganizationDashboard: React.FC = () => {
             </div>
             <h1 className="text-2xl font-black tracking-tight">{orgName}</h1>
             <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Welcome to the VillaLemon Pickup Partner Portal. Submit guest pickup requests, track assigned drivers in real time, and view account statements.
+              Welcome to the Varkala Holidays Partner Portal. Submit guest pickup requests, track assigned drivers in real time, and view account statements.
             </p>
           </div>
 

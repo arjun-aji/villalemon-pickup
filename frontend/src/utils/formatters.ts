@@ -1,4 +1,4 @@
-// Currency and date formatting utilities for VillaLemon Pickup
+// Currency and date formatting utilities for Varkala Holidays
 
 export const formatINR = (amount?: number | null): string => {
   return new Intl.NumberFormat('en-IN', {
@@ -320,7 +320,7 @@ export const getSettlementStatusLabel = (status: string): string => {
 };
 
 export const generatePlacardText = (customerName: string): string => {
-  return `VILLALEMON PICKUP - ${customerName.trim().toUpperCase()}`;
+  return `VARKALA HOLIDAYS - ${customerName.trim().toUpperCase()}`;
 };
 
 export interface DriverDispatchMessageData {

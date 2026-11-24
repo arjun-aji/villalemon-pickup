@@ -55,7 +55,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    service: 'VillaLemon Pickup API',
+    service: 'Varkala Holidays API',
     timestamp: new Date().toISOString(),
   });
 });
@@ -78,7 +78,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // Start Server
 app.listen(PORT, () => {
-  console.log(`🚀 VillaLemon Pickup API running on http://localhost:${PORT}`);
+  console.log(`🚀 Varkala Holidays API running on http://localhost:${PORT}`);
 });
 
 export default app;

@@ -160,7 +160,7 @@ const OrganizationSubmitTrip: React.FC = () => {
           </div>
           <h1 className="text-xl font-bold text-slate-900">Request New Guest Pickup</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Submit duty details for review. VillaLemon / Varkala Holidays dispatch team will verify, assign driver and vehicle, and confirm duty schedule.
+            Submit duty details for review. Varkala Holidays dispatch team will verify, assign driver and vehicle, and confirm duty schedule.
           </p>
         </div>
 
@@ -432,7 +432,7 @@ const OrganizationSubmitTrip: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
-                    The agreed transport fare you will pay to VillaLemon office for this trip.
+                    The agreed transport fare you will pay to Varkala Holidays office for this trip.
                   </span>
                 </div>
 

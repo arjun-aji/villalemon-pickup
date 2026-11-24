@@ -17,7 +17,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
       <div className="min-h-screen flex items-center justify-center bg-[#0d1527] text-white">
         <div className="text-center">
           <LoadingSpinner size="lg" className="mx-auto mb-3 text-amber-400" />
-          <p className="text-slate-300 text-sm font-medium">Loading VillaLemon Pickup...</p>
+          <p className="text-slate-300 text-sm font-medium">Loading Varkala Holidays...</p>
         </div>
       </div>
     );

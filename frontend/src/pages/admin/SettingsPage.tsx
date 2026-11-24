@@ -14,8 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 
 const SettingsPage: React.FC = () => {
   const { profile } = useAuth();
-  const [businessName, setBusinessName] = useState('VillaLemon Pickup');
-  const [placardPrefix, setPlacardPrefix] = useState('VILLALEMON PICKUP');
+  const [businessName, setBusinessName] = useState('Varkala Holidays');
+  const [placardPrefix, setPlacardPrefix] = useState('VARKALA HOLIDAYS');
   const [location, setLocation] = useState('Varkala, Kerala');
   const [saved, setSaved] = useState(false);
 
