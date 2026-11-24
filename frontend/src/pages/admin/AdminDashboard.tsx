@@ -571,7 +571,7 @@ const AdminDashboard: React.FC = () => {
                 recentTrips.map((trip, idx) => {
                   const s = trip.settlement;
                   const petrol = s?.petrol_expense || 0;
-                  const dCharge = Number(s?.driver_charge || trip.driver_charge || trip.driver_trip_pay_override || 0);
+                  const dCharge = Number(s?.driver_charge || trip.driver_charge || trip.driver_trip_pay_override || (trip.driver?.employment_type === 'Per-trip payment' ? trip.driver?.per_trip_payment : 0) || 0);
                   const other = s?.other_expenses || 0;
                   const collect = Number(s?.customer_collection || trip.amount_to_collect || trip.trip_selling_price || 0);
                   const profit = collect - petrol - dCharge - other;

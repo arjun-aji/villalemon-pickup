@@ -59,7 +59,7 @@ const ProfitAnalyticsPage: React.FC = () => {
         const s = t.settlement;
         const collect = Number(s?.customer_collection || t.amount_to_collect || t.trip_selling_price || 0);
         const petrol = s?.petrol_expense || 0;
-        const dCharge = Number(s?.driver_charge || t.driver_charge || t.driver_trip_pay_override || 0);
+        const dCharge = Number(s?.driver_charge || t.driver_charge || t.driver_trip_pay_override || (t.driver?.employment_type === 'Per-trip payment' ? t.driver?.per_trip_payment : 0) || 0);
         const other = s?.other_expenses || 0;
         const profit = collect - petrol - dCharge - other;
 

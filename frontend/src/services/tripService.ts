@@ -1075,8 +1075,11 @@ export const tripService = {
           pending_approval_trips: pendingApproval.length,
           total_collections: totalRevenue,
           total_petrol: finList.reduce((s, f) => s + (Number(f.diesel_reported) || 0), 0),
-          total_driver_charges: finList.reduce((s, f) => s + (Number(f.driver_trip_pay) || 0), 0),
-          total_other_expenses: finList.reduce((s, f) => s + (Number(f.parking_toll_food_reported) || 0), 0),
+          total_driver_charges: finList.reduce((s, f) => {
+            const trip = tripList.find(t => t.id === f.trip_id);
+            return s + (Number(f.effective_driver_pay ?? f.driver_trip_pay ?? f.driver_trip_pay_override ?? trip?.driver_trip_pay_override ?? trip?.driver_charge ?? 0));
+          }, 0) || tripList.reduce((s, t) => s + (Number(t.driver_trip_pay_override ?? t.driver_charge ?? 0)), 0),
+          total_other_expenses: finList.reduce((s, f) => s + (Number(f.parking_toll_food_reported) || 0) + (Number(f.workshop_reported) || 0), 0),
           total_expenses: totalExpenses,
           net_profit: netProfit,
           total_revenue: totalRevenue,
