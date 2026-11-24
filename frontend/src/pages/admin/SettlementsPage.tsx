@@ -22,7 +22,7 @@ import { tripService } from '../../services/tripService';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { formatINR, formatDate } from '../../utils/formatters';
+import { formatINR, formatDate, parseDriverSettlementStatus } from '../../utils/formatters';
 
 const SettlementsPage: React.FC = () => {
   const [reports, setReports] = useState<any[]>([]);
@@ -84,6 +84,17 @@ const SettlementsPage: React.FC = () => {
       await loadReports();
     } catch (err: any) {
       alert(err.message || 'Failed to update driver pay');
+    }
+  };
+
+  const handleToggleDriverSettlement = async (tripId?: string, currentStatus?: string) => {
+    if (!tripId) return;
+    const nextStatus = currentStatus === 'Settled' ? 'Not Settled' : 'Settled';
+    try {
+      await tripService.updateDriverSettlementStatus(tripId, nextStatus);
+      await loadReports();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update settlement status');
     }
   };
 
@@ -309,34 +320,50 @@ const SettlementsPage: React.FC = () => {
                         {(() => {
                           const tripPay = Number(r.trip?.driver_trip_pay_override || 0);
                           const isSettleLater = (r.trip?.special_instructions || '').includes('Settle Later') || tripPay === 0;
-
-                          if (tripPay > 0 && !isSettleLater) {
-                            return (
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-bold text-blue-700">
-                                  {formatINR(tripPay)}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, tripPay)}
-                                  className="text-[10px] text-slate-400 hover:text-blue-600"
-                                  title="Edit Driver Pay"
-                                >
-                                  ✏️
-                                </button>
-                              </div>
-                            );
-                          }
+                          const settlementStatus = parseDriverSettlementStatus(r.trip?.special_instructions);
 
                           return (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, 800)}
-                              className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] inline-flex items-center gap-1 border border-amber-300 transition-all shadow-xs"
-                              title="Driver pay was set to enter after settlement. Click to enter amount."
-                            >
-                              <span>⏳ + Enter Pay</span>
-                            </button>
+                            <div className="space-y-1">
+                              {tripPay > 0 && !isSettleLater ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-blue-700">
+                                    {formatINR(tripPay)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, tripPay)}
+                                    className="text-[10px] text-slate-400 hover:text-blue-600"
+                                    title="Edit Driver Pay"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, 800)}
+                                  className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] inline-flex items-center gap-1 border border-amber-300 transition-all shadow-xs"
+                                  title="Driver pay was set to enter after settlement. Click to enter amount."
+                                >
+                                  <span>⏳ + Enter Pay</span>
+                                </button>
+                              )}
+
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleDriverSettlement(r.trip?.id, settlementStatus)}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border transition-all inline-flex items-center gap-1 shadow-2xs ${
+                                    settlementStatus === 'Settled'
+                                      ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                                  }`}
+                                  title={settlementStatus === 'Settled' ? 'Click to mark as Not Settled' : 'Click to mark as Driver Settled'}
+                                >
+                                  {settlementStatus === 'Settled' ? '✓ Settled' : '⏳ Not Settled'}
+                                </button>
+                              </div>
+                            </div>
                           );
                         })()}
                       </td>

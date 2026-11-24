@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Trip, CreateTripInput, TripStatus, DashboardStats } from '../types';
 import { initialTrips, initialSettlements, getStored, setStored } from '../lib/mockData';
-import { parseTripBilling, embedTripBilling } from '../utils/formatters';
+import { parseTripBilling, embedTripBilling, parseDriverSettlementStatus, embedDriverSettlementStatus } from '../utils/formatters';
 
 export const tripService = {
   async getAll(filters?: { status?: TripStatus; month?: number; year?: number; driverId?: string }): Promise<Trip[]> {
@@ -68,6 +68,7 @@ export const tripService = {
             }
 
             const billingInfo = parseTripBilling(t.special_instructions, sellPrice);
+            const driverSettlementStatus = parseDriverSettlementStatus(t.special_instructions);
 
             return {
               ...t,
@@ -76,6 +77,7 @@ export const tripService = {
               advance_amount: billingInfo.advanceAmount,
               billing_status: billingInfo.billingStatus,
               pending_amount: billingInfo.pendingAmount,
+              driver_settlement_status: driverSettlementStatus,
               settlement: {
                 trip_id: t.id,
                 driver_id: t.assigned_driver_id,
@@ -152,12 +154,14 @@ export const tripService = {
         const dPay = Number(data.driver_trip_pay_override || data.driver_charge || (data.driver?.employment_type === 'Per-trip payment' ? data.driver?.per_trip_payment : 0) || 0);
         const netProfit = sellPrice - dPay - totalExp;
         const billingInfo = parseTripBilling(data.special_instructions, sellPrice);
+        const driverSettlementStatus = parseDriverSettlementStatus(data.special_instructions);
 
         return {
           ...data,
           advance_amount: billingInfo.advanceAmount,
           billing_status: billingInfo.billingStatus,
           pending_amount: billingInfo.pendingAmount,
+          driver_settlement_status: driverSettlementStatus,
           settlement: {
             trip_id: data.id,
             driver_id: data.assigned_driver_id,
@@ -755,6 +759,109 @@ export const tripService = {
       driver_trip_pay_override: driverPay,
       driver_charge: driverPay,
     });
+  },
+
+  async updateDriverSettlementStatus(id: string, status: 'Settled' | 'Not Settled'): Promise<Trip> {
+    if (isSupabaseConfigured) {
+      const { data: existing, error: getErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (getErr) throw getErr;
+
+      const updatedInstructions = embedDriverSettlementStatus(existing.special_instructions, status);
+      const { data, error } = await supabase
+        .from('trips')
+        .update({
+          special_instructions: updatedInstructions,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      const sellPrice = Number(data.trip_selling_price || 0);
+      const bInfo = parseTripBilling(data.special_instructions, sellPrice);
+      return {
+        ...data,
+        advance_amount: bInfo.advanceAmount,
+        billing_status: bInfo.billingStatus,
+        pending_amount: bInfo.pendingAmount,
+        driver_settlement_status: status,
+      } as Trip;
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => {
+      if (t.id === id) {
+        return { ...t, driver_settlement_status: status, updated_at: new Date().toISOString() };
+      }
+      return t;
+    });
+    setStored('trips', updated);
+    return updated.find(t => t.id === id)!;
+  },
+
+  async getTripsForDriverSettlement(driverId: string, fromDate?: string, toDate?: string): Promise<Trip[]> {
+    if (isSupabaseConfigured) {
+      let query = supabase
+        .from('trips')
+        .select(`
+          *,
+          driver:drivers(id, full_name, phone, driving_licence_no, monthly_salary, per_trip_payment, status, employment_type),
+          vehicle:vehicles(id, registration_number, vehicle_type, status),
+          organization:organizations(id, name, type),
+          driver_reports(*)
+        `)
+        .order('trip_date', { ascending: true })
+        .order('pickup_time', { ascending: true });
+
+      if (driverId && driverId !== 'all') {
+        query = query.eq('assigned_driver_id', driverId);
+      }
+      if (fromDate) {
+        query = query.gte('trip_date', fromDate);
+      }
+      if (toDate) {
+        query = query.lte('trip_date', toDate);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return (data || []).map((t: any) => {
+        const sellPrice = Number(t.trip_selling_price) || 0;
+        const bInfo = parseTripBilling(t.special_instructions, sellPrice);
+        const sStatus = parseDriverSettlementStatus(t.special_instructions);
+        const rep = t.driver_reports ? (Array.isArray(t.driver_reports) ? t.driver_reports[0] : t.driver_reports) : null;
+        const dCollected = Number(rep?.amount_collected || 0);
+        const dDiesel = Number(rep?.diesel_expense || 0);
+        const dToll = Number(rep?.parking_toll_permits_tickets_food || 0);
+        const dWorkshop = Number(rep?.workshop_expense || 0);
+        const dExpenses = dDiesel + dToll + dWorkshop;
+        const dPay = Number(t.driver_trip_pay_override ?? t.driver_charge ?? (t.driver?.employment_type === 'Per-trip payment' ? t.driver?.per_trip_payment : 0) ?? 0);
+
+        return {
+          ...t,
+          advance_amount: bInfo.advanceAmount,
+          billing_status: bInfo.billingStatus,
+          pending_amount: bInfo.pendingAmount,
+          driver_settlement_status: sStatus,
+          collected_by_driver: dCollected,
+          total_trip_expenses: dExpenses,
+          effective_driver_pay: dPay,
+          driver_report: rep,
+        } as Trip;
+      });
+    }
+    return [];
   },
 
   async deleteTrip(id: string): Promise<void> {

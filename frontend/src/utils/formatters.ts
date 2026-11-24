@@ -460,6 +460,7 @@ export const cleanSpecialInstructions = (instructions?: string | null): string =
   return instructions
     .replace(/\[BILLING:[^\]]*\]/gi, '')
     .replace(/\[DRIVER_PAY_STATUS:[^\]]*\]/gi, '')
+    .replace(/\[DRIVER_SETTLEMENT:[^\]]*\]/gi, '')
     .trim();
 };
 
@@ -468,6 +469,26 @@ export const isDriverPaySettleLater = (instructions?: string | null, driverPay?:
     return true;
   }
   return false;
+};
+
+export type DriverSettlementStatus = 'Settled' | 'Not Settled';
+
+export const parseDriverSettlementStatus = (instructions?: string | null): DriverSettlementStatus => {
+  if (!instructions) return 'Not Settled';
+  const match = instructions.match(/\[DRIVER_SETTLEMENT:\s*Status=([a-zA-Z\s]+)\]/i);
+  if (match && match[1].toLowerCase().includes('settled') && !match[1].toLowerCase().includes('not')) {
+    return 'Settled';
+  }
+  return 'Not Settled';
+};
+
+export const embedDriverSettlementStatus = (
+  instructions: string | null | undefined,
+  status: DriverSettlementStatus
+): string => {
+  const clean = (instructions || '').replace(/\[DRIVER_SETTLEMENT:[^\]]*\]/gi, '').trim();
+  const tag = `[DRIVER_SETTLEMENT: Status=${status}]`;
+  return clean ? `${clean}\n${tag}` : tag;
 };
 
 export const embedTripBilling = (

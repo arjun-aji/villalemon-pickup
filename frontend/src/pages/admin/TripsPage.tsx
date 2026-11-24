@@ -57,6 +57,7 @@ const TripsPage: React.FC = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [togglingSettlementTripId, setTogglingSettlementTripId] = useState<string | null>(null);
 
   // View Mode: 'trip_sheet' (Excel replica) or 'standard'
   const [viewMode, setViewMode] = useState<'trip_sheet' | 'standard'>('trip_sheet');
@@ -267,6 +268,25 @@ const TripsPage: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.message || 'Error updating driver pay');
+    }
+  };
+
+  const handleToggleDriverSettlement = async (trip: Trip) => {
+    const nextStatus = trip.driver_settlement_status === 'Settled' ? 'Not Settled' : 'Settled';
+    try {
+      setTogglingSettlementTripId(trip.id);
+      await tripService.updateDriverSettlementStatus(trip.id, nextStatus);
+      setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, driver_settlement_status: nextStatus } : t));
+      if (viewTrip && viewTrip.id === trip.id) {
+        setViewTrip({
+          ...viewTrip,
+          driver_settlement_status: nextStatus,
+        });
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating driver settlement status');
+    } finally {
+      setTogglingSettlementTripId(null);
     }
   };
 
@@ -708,6 +728,7 @@ const TripsPage: React.FC = () => {
                       const cabType = trip.vehicle?.vehicle_type || trip.required_cab_type || 'Sedan';
                       const collectAmt = Number(trip.amount_driver_must_collect || trip.amount_to_collect || 0);
                       const note = cleanSpecialInstructions(trip.special_instructions) || '-';
+                      const effectivePay = Number(trip.driver_trip_pay_override || trip.driver_charge || (trip.driver?.employment_type === 'Per-trip payment' ? trip.driver?.per_trip_payment : 0) || 0);
 
                       return (
                         <tr
@@ -847,11 +868,43 @@ const TripsPage: React.FC = () => {
                                   Cab: <span className="font-semibold text-slate-800">{cabType}</span>
                                 </div>
                               )}
-                              {(trip.special_instructions || '').includes('Settle Later') && (
+                              {(trip.special_instructions || '').includes('Settle Later') && effectivePay === 0 && (
                                 <div className="mt-1">
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                                     ⏳ Pay: Settle Later
                                   </span>
+                                </div>
+                              )}
+
+                              {trip.assigned_driver_id && (
+                                <div className="mt-2 pt-1.5 border-t border-slate-200/80 flex items-center justify-between gap-1 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleDriverSettlement(trip);
+                                    }}
+                                    disabled={togglingSettlementTripId === trip.id}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold transition-all border inline-flex items-center gap-1 shadow-2xs active:scale-95 ${
+                                      trip.driver_settlement_status === 'Settled'
+                                        ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                                        : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                                    }`}
+                                    title={trip.driver_settlement_status === 'Settled' ? 'Click to mark as Not Settled' : 'Click to mark as Driver Settled'}
+                                  >
+                                    {trip.driver_settlement_status === 'Settled' ? '✓ Settled' : '⏳ Not Settled'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handlePromptSetDriverPay(trip.id, trip.trip_number, effectivePay);
+                                    }}
+                                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold px-1.5 py-0.5 rounded hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors"
+                                    title="Edit Driver Wage / Pay"
+                                  >
+                                    {effectivePay > 0 ? `Pay: ₹${effectivePay}` : '+ Enter Pay'}
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -1166,6 +1219,24 @@ const TripsPage: React.FC = () => {
                                     Outside Driver
                                   </span>
                                 )}
+                                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleDriverSettlement(trip);
+                                    }}
+                                    disabled={togglingSettlementTripId === trip.id}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold transition-all border inline-flex items-center gap-1 shadow-2xs ${
+                                      trip.driver_settlement_status === 'Settled'
+                                        ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                                        : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                                    }`}
+                                    title={trip.driver_settlement_status === 'Settled' ? 'Click to mark as Not Settled' : 'Click to mark as Driver Settled'}
+                                  >
+                                    {trip.driver_settlement_status === 'Settled' ? '✓ Settled' : '⏳ Not Settled'}
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <span className="badge-yellow text-xs">Unassigned</span>
@@ -1657,6 +1728,43 @@ const TripsPage: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Driver Periodic Settlement Status Card */}
+            {viewTrip.assigned_driver_id && (
+              <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-blue-950 uppercase text-[10px] tracking-wide">
+                    Driver Periodic Settlement Status
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    viewTrip.driver_settlement_status === 'Settled'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {viewTrip.driver_settlement_status === 'Settled' ? '✓ Driver Settled' : '⏳ Settlement Pending'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 flex-wrap gap-2">
+                  <span className="text-[11px] text-slate-600">
+                    Assigned Driver: <strong>{viewTrip.driver?.full_name || 'Driver'}</strong>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDriverSettlement(viewTrip)}
+                      disabled={togglingSettlementTripId === viewTrip.id}
+                      className={`px-3 py-1 rounded-lg font-bold text-[11px] shadow-2xs transition-all ${
+                        viewTrip.driver_settlement_status === 'Settled'
+                          ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      {viewTrip.driver_settlement_status === 'Settled' ? 'Mark as Not Settled' : '✓ Mark as Driver Settled'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {viewTrip.trip_notes && (
               <div className="text-xs text-text-secondary bg-gray-50 p-3 rounded-xl">

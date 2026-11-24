@@ -297,6 +297,7 @@ export interface Trip {
   billing_status?: 'Pending' | 'Paid' | 'Partially Paid' | string;
   advance_amount?: number;
   pending_amount?: number;
+  driver_settlement_status?: 'Settled' | 'Not Settled';
 
   // Backward compatibility fields for legacy views
   customer_name?: string;
