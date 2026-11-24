@@ -73,6 +73,7 @@ const InvoicesPage: React.FC = () => {
   const [driverPeriodFrom, setDriverPeriodFrom] = useState(firstOfMonthStr);
   const [driverPeriodTo, setDriverPeriodTo] = useState(endOfMonthStr);
   const [driverSettlementStatusFilter, setDriverSettlementStatusFilter] = useState<'all' | 'not_settled' | 'settled'>('all');
+  const [driverCompletionFilter, setDriverCompletionFilter] = useState<'completed' | 'all'>('completed');
   const [driverTrips, setDriverTrips] = useState<Trip[]>([]);
   const [selectedDriverTripIds, setSelectedDriverTripIds] = useState<string[]>([]);
   const [loadingDriverTrips, setLoadingDriverTrips] = useState(false);
@@ -152,12 +153,31 @@ const InvoicesPage: React.FC = () => {
       setLoadingDriverTrips(true);
       const trips = await tripService.getTripsForDriverSettlement(driverId, from, to);
       setDriverTrips(trips);
-      // Auto-select all trips
-      setSelectedDriverTripIds(trips.map(t => t.id));
+      // Auto-select based on completion filter
+      if (driverCompletionFilter === 'completed') {
+        const completedIds = trips
+          .filter(t => (t.trip_status || '').toLowerCase() === 'completed' || Boolean((t as any).driver_report))
+          .map(t => t.id);
+        setSelectedDriverTripIds(completedIds);
+      } else {
+        setSelectedDriverTripIds(trips.map(t => t.id));
+      }
     } catch (err) {
       console.error('Error querying driver settlement trips:', err);
     } finally {
       setLoadingDriverTrips(false);
+    }
+  };
+
+  const handleCompletionFilterChange = (filter: 'completed' | 'all') => {
+    setDriverCompletionFilter(filter);
+    if (filter === 'completed') {
+      const completedIds = driverTrips
+        .filter(t => (t.trip_status || '').toLowerCase() === 'completed' || Boolean((t as any).driver_report))
+        .map(t => t.id);
+      setSelectedDriverTripIds(completedIds);
+    } else {
+      setSelectedDriverTripIds(driverTrips.map(t => t.id));
     }
   };
 
@@ -537,8 +557,14 @@ const InvoicesPage: React.FC = () => {
     return true;
   });
 
-  // Filtered driver trips based on status filter
+  // Filtered driver trips based on completion status and settlement status
   const filteredDriverTrips = driverTrips.filter(t => {
+    // 1. Completion filter (completed vs all)
+    if (driverCompletionFilter === 'completed') {
+      const isCompleted = (t.trip_status || '').toLowerCase() === 'completed' || Boolean((t as any).driver_report);
+      if (!isCompleted) return false;
+    }
+    // 2. Settlement status filter (all vs not_settled vs settled)
     if (driverSettlementStatusFilter === 'not_settled' && t.driver_settlement_status === 'Settled') return false;
     if (driverSettlementStatusFilter === 'settled' && t.driver_settlement_status !== 'Settled') return false;
     return true;
@@ -1127,33 +1153,61 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               {/* Quick Preset Buttons */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-slate-400 font-medium mr-1">Presets:</span>
-                <button
-                  type="button"
-                  onClick={() => setDriverPresetRange('this_month')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
-                >
-                  This Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDriverPresetRange('last_month')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
-                >
-                  Last Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDriverPresetRange('all')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
-                >
-                  All Dates
-                </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Completed vs All Rides Segmented Switch */}
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => handleCompletionFilterChange('completed')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      driverCompletionFilter === 'completed'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🏁 Completed Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCompletionFilterChange('all')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      driverCompletionFilter === 'all'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    📋 All Rides
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-400 font-medium mr-0.5">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setDriverPresetRange('this_month')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDriverPresetRange('last_month')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                  >
+                    Last Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDriverPresetRange('all')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                  >
+                    All Dates
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 pt-1">
               {/* Driver Dropdown */}
               <div className="md:col-span-3">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
@@ -1170,6 +1224,21 @@ const InvoicesPage: React.FC = () => {
                       {d.full_name} ({d.phone || 'No phone'}) - {d.employment_type || 'Driver'}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              {/* Ride Completion Filter */}
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Duty Status
+                </label>
+                <select
+                  value={driverCompletionFilter}
+                  onChange={e => handleCompletionFilterChange(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="completed">🏁 Completed Rides Only</option>
+                  <option value="all">📋 All Scheduled Rides</option>
                 </select>
               </div>
 
@@ -1200,33 +1269,33 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               {/* Settlement Status Filter */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-1.5">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Settlement Status
+                  Settlement
                 </label>
                 <select
                   value={driverSettlementStatusFilter}
                   onChange={e => setDriverSettlementStatusFilter(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-2 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >
-                  <option value="all">All Rides ({driverTrips.length})</option>
-                  <option value="not_settled">⏳ Not Settled Only</option>
-                  <option value="settled">✓ Settled Only</option>
+                  <option value="all">All ({driverTrips.length})</option>
+                  <option value="not_settled">⏳ Unsettled</option>
+                  <option value="settled">✓ Settled</option>
                 </select>
               </div>
 
               {/* Prior Cash Advance / Ledger Deduction */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-1.5">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Prior Advance / Ledger Deduction (₹)
+                  Prior Advance (₹)
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={driverLedgerAdjustment === 0 ? '' : driverLedgerAdjustment}
                   onChange={e => setDriverLedgerAdjustment(Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="0 (Optional advance)"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="₹0"
+                  className="w-full px-2 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
             </div>
