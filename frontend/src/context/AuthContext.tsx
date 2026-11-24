@@ -273,81 +273,102 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Driver Login
   const signInDriver = async (username: string, password: string): Promise<{ error: string | null }> => {
-    if (!username || !password) {
+    if (!username?.trim() || !password?.trim()) {
       return { error: 'Please enter driver username and password' };
     }
 
     const cleanUsername = username.trim().toLowerCase();
+    const cleanDigits = cleanUsername.replace(/[^0-9]/g, '');
 
     try {
-      // 1. Fetch drivers from Supabase to match phone, name, or username pattern
-      let driverData: any = null;
-      const { data: allDrivers } = await supabase.from('drivers').select('*');
-
-      if (allDrivers && allDrivers.length > 0) {
-        const cleanDigits = cleanUsername.replace(/[^0-9]/g, '');
-        const cleanAlpha = cleanUsername.replace(/[^a-z]/g, '');
-
-        driverData = allDrivers.find(d => {
-          const dPhoneDigits = (d.phone || '').replace(/[^0-9]/g, '');
-          const dNameLower = (d.full_name || '').toLowerCase().trim();
-          const dNameAlpha = dNameLower.replace(/[^a-z]/g, '');
-
-          // Direct match with input
-          if (cleanDigits.length >= 6 && dPhoneDigits.includes(cleanDigits)) return true;
-          if (dNameLower === cleanUsername) return true;
-
-          // Alpha match e.g. "arjun657" -> alpha "arjun" matches driver "Arjun"
-          if (cleanAlpha && cleanAlpha.length >= 3) {
-            if (dNameAlpha === cleanAlpha) return true;
-            if (dNameAlpha.includes(cleanAlpha) || cleanAlpha.includes(dNameAlpha)) return true;
-          }
-
-          if (d.payment_arrangement_notes && d.payment_arrangement_notes.toLowerCase().includes(cleanUsername)) return true;
-          return false;
-        });
+      // 1. Fetch drivers from Supabase to match username, phone, or name
+      const { data: allDrivers, error: fetchErr } = await supabase.from('drivers').select('*');
+      if (fetchErr) {
+        console.error('Driver fetch error:', fetchErr);
       }
 
-      // Fallback single query
+      if (!allDrivers || allDrivers.length === 0) {
+        return { error: 'Invalid driver username or password' };
+      }
+
+      // Match driver by username, full name, or phone number
+      const driverData = allDrivers.find(d => {
+        const notesStr = d.payment_arrangement_notes || '';
+        const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
+        const storedUser = userMatch ? userMatch[1].trim().toLowerCase() : '';
+        const storedPhone = (d.phone || '').trim().replace(/[^0-9]/g, '');
+        const storedName = (d.full_name || '').trim().toLowerCase();
+
+        // Match by exact username
+        if (storedUser && storedUser === cleanUsername) return true;
+        // Match by exact name (e.g. "bimal")
+        if (storedName && storedName === cleanUsername) return true;
+        // Match by phone number
+        if (cleanDigits.length >= 8 && storedPhone.length >= 8 && storedPhone === cleanDigits) return true;
+        // Match email prefix if username has @
+        if (cleanUsername.includes('@') && cleanUsername.split('@')[0] === storedUser) return true;
+
+        return false;
+      });
+
+      // If no registered driver matches this username/phone, reject immediately!
       if (!driverData) {
-        const { data: dData } = await supabase
-          .from('drivers')
-          .select('*')
-          .or(`phone.eq.${cleanUsername},full_name.ilike.%${cleanUsername}%`)
-          .maybeSingle();
-
-        if (dData) {
-          driverData = dData;
-        }
+        return { error: 'Invalid driver username or password' };
       }
 
-      const realDriverId = driverData?.id;
-      const emailsToTry = [
-        `${cleanUsername.replace(/\s+/g, '')}@villalemon.pickup`,
-        driverData?.phone ? `${driverData.phone}@villalemon.pickup` : null,
-      ].filter(Boolean) as string[];
+      // Check driver active status
+      if (driverData.status && driverData.status.toLowerCase() !== 'active') {
+        return { error: 'Driver account is inactive. Please contact administration.' };
+      }
 
-      let authUser = null;
-      for (const email of emailsToTry) {
-        try {
-          const { data: authData } = await supabase.auth.signInWithPassword({
-            email,
-            password: password,
-          });
-          if (authData?.user) {
-            authUser = authData.user;
-            break;
+      // 2. Verify Password
+      let isPasswordCorrect = false;
+      let authUser: any = null;
+
+      // Check stored password in payment_arrangement_notes
+      const notesStr = driverData.payment_arrangement_notes || '';
+      const passMatch = notesStr.match(/Password:\s*([^|]+)/i);
+      const storedPassword = passMatch ? passMatch[1].trim() : null;
+
+      if (storedPassword && storedPassword === password.trim()) {
+        isPasswordCorrect = true;
+      }
+
+      // If not matched or no stored password, check Supabase Auth
+      if (!isPasswordCorrect) {
+        const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
+        const driverUser = userMatch ? userMatch[1].trim().toLowerCase() : cleanUsername;
+        const emailsToTry = [
+          `${driverUser}@villalemon.pickup`,
+          driverData.phone ? `${driverData.phone}@villalemon.pickup` : null,
+          driverData.email || null,
+        ].filter(Boolean) as string[];
+
+        for (const email of emailsToTry) {
+          try {
+            const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+              email,
+              password: password.trim(),
+            });
+            if (authData?.user && !authErr) {
+              authUser = authData.user;
+              isPasswordCorrect = true;
+              break;
+            }
+          } catch {
+            // continue checking
           }
-        } catch {
-          // Try next email option
         }
       }
 
-      const driverEmail = authUser?.email || emailsToTry[0] || `${cleanUsername}@villalemon.pickup`;
+      // If password does not match, reject immediately!
+      if (!isPasswordCorrect) {
+        return { error: 'Invalid driver username or password' };
+      }
 
-      // Extract metadata from payment_arrangement_notes or driver record
-      const notesStr = driverData?.payment_arrangement_notes || '';
-      const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_]+)/i);
+      // 3. User authenticated successfully - assemble session
+      const realDriverId = driverData.id;
+      const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
       const addressMatch = notesStr.match(/Address:\s*([^|]+)/i);
       const vehicleMatch = notesStr.match(/Vehicle:\s*([^|]+)/i);
       const photoMatch = notesStr.match(/Photo:\s*([^|]+)/i);
@@ -358,7 +379,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: prof } = await supabase
             .from('profiles')
             .select('avatar_url')
-            .eq('id', realDriverId || authUser?.id)
+            .eq('id', driverData.profile_id || authUser?.id || realDriverId)
             .maybeSingle();
           if (prof?.avatar_url) avatarUrl = prof.avatar_url;
         } catch {
@@ -366,25 +387,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      const isFirstLogin = !driverData?.driving_licence_no ||
-                           driverData.driving_licence_no === 'N/A' ||
-                           driverData.driving_licence_no === 'PENDING' ||
-                           notesStr.includes('first_login:true') ||
-                           !notesStr.includes('profile_completed:true');
+      const isFirstLogin = notesStr.includes('first_login:true') && !notesStr.includes('profile_completed:true');
+      const driverEmail = authUser?.email || `${cleanUsername}@villalemon.pickup`;
 
       const driverProfile: Profile = {
-        id: realDriverId || authUser?.id || driverData?.profile_id || 'driver-temp-id',
+        id: driverData.profile_id || authUser?.id || realDriverId,
         role: 'driver',
-        full_name: driverData?.full_name || username,
+        full_name: driverData.full_name || username,
         email: driverEmail,
-        phone: driverData?.phone,
+        phone: driverData.phone,
         avatar_url: avatarUrl,
         is_active: true,
-        created_at: driverData?.created_at || new Date().toISOString(),
-        updated_at: driverData?.updated_at || new Date().toISOString(),
+        created_at: driverData.created_at || new Date().toISOString(),
+        updated_at: driverData.updated_at || new Date().toISOString(),
       };
 
-      const finalDriver: Driver = driverData ? {
+      const finalDriver: Driver = {
         id: driverData.id,
         full_name: driverData.full_name,
         phone: driverData.phone || '',
@@ -403,23 +421,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: driverData.status || 'Active',
         created_at: driverData.created_at || new Date().toISOString(),
         updated_at: driverData.updated_at || new Date().toISOString(),
-      } : {
-        id: driverProfile.id,
-        full_name: driverProfile.full_name,
-        phone: driverProfile.phone || '',
-        username: cleanUsername,
-        driving_licence_no: '',
-        vehicle_number: '',
-        address: '',
-        photo_url: '',
-        is_first_login: true,
-        profile_completed: false,
-        employment_type: 'Per-trip payment',
-        monthly_salary: 0,
-        per_trip_payment: 500,
-        status: 'Active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
 
       setUser({ id: driverProfile.id, email: driverEmail });
