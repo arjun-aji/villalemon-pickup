@@ -77,6 +77,7 @@ const InvoicesPage: React.FC = () => {
   const [selectedDriverTripIds, setSelectedDriverTripIds] = useState<string[]>([]);
   const [loadingDriverTrips, setLoadingDriverTrips] = useState(false);
   const [togglingSettlementId, setTogglingSettlementId] = useState<string | null>(null);
+  const [driverLedgerAdjustment, setDriverLedgerAdjustment] = useState<number>(0);
 
   // Modal: Full Printable / Shareable Invoice Bill
   const [previewInvoice, setPreviewInvoice] = useState<{
@@ -552,17 +553,15 @@ const InvoicesPage: React.FC = () => {
         ? drivers.find(d => d.id === selectedDriverTripsList[0].assigned_driver_id) || null
         : null);
 
-  // Driver ledger cash balance
-  const activeDriverBalance = selectedDriverId !== 'all'
-    ? driverBalances.find(b => b.driver_id === selectedDriverId)
-    : (currentActiveDriver ? driverBalances.find(b => b.driver_id === currentActiveDriver.id) : null);
-  const driverLedgerCashHeld = Number(activeDriverBalance?.cash_owed_to_office || 0);
+  // Prior cash advance / ledger deduction entered by user (optional)
+  const driverPriorAdvance = Math.max(0, Number(driverLedgerAdjustment) || 0);
 
   const driverTotalWages = selectedDriverTripsList.reduce((sum, t) => sum + (Number((t as any).effective_driver_pay ?? t.driver_trip_pay_override ?? t.driver_charge ?? 0)), 0);
   const driverTotalExpenses = selectedDriverTripsList.reduce((sum, t) => sum + (Number((t as any).total_trip_expenses || 0)), 0);
   const driverGrossCredit = driverTotalWages + driverTotalExpenses;
   const driverGuestCashCollected = selectedDriverTripsList.reduce((sum, t) => sum + (Number((t as any).collected_by_driver || 0)), 0);
-  const driverNetSettlement = driverGrossCredit - (driverGuestCashCollected + driverLedgerCashHeld);
+  const driverTotalDeductions = driverGuestCashCollected + driverPriorAdvance;
+  const driverNetSettlement = driverGrossCredit - driverTotalDeductions;
 
   // Open Driver Settlement Invoice Preview
   const handleOpenDriverInvoicePreview = () => {
@@ -583,7 +582,7 @@ const InvoicesPage: React.FC = () => {
       totalExpenses: driverTotalExpenses,
       grossCredit: driverGrossCredit,
       guestCashCollected: driverGuestCashCollected,
-      priorLedgerCashHeld: driverLedgerCashHeld,
+      priorLedgerCashHeld: driverPriorAdvance,
       netSettlement: driverNetSettlement,
       invoiceNumber: tempVoucherNum,
       invoiceDate: todayStr,
@@ -674,7 +673,7 @@ const InvoicesPage: React.FC = () => {
                   driverTotalExpenses,
                   driverGrossCredit,
                   driverGuestCashCollected,
-                  driverLedgerCashHeld,
+                  driverPriorAdvance,
                   driverNetSettlement,
                   driverPeriodFrom,
                   driverPeriodTo
@@ -1156,7 +1155,7 @@ const InvoicesPage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
               {/* Driver Dropdown */}
-              <div className="md:col-span-4">
+              <div className="md:col-span-3">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
                   Assigned Driver
                 </label>
@@ -1175,7 +1174,7 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               {/* From Date */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
                   From Date
                 </label>
@@ -1188,7 +1187,7 @@ const InvoicesPage: React.FC = () => {
               </div>
 
               {/* To Date */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
                   To Date
                 </label>
@@ -1214,6 +1213,21 @@ const InvoicesPage: React.FC = () => {
                   <option value="not_settled">⏳ Not Settled Only</option>
                   <option value="settled">✓ Settled Only</option>
                 </select>
+              </div>
+
+              {/* Prior Cash Advance / Ledger Deduction */}
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Prior Advance / Ledger Deduction (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={driverLedgerAdjustment === 0 ? '' : driverLedgerAdjustment}
+                  onChange={e => setDriverLedgerAdjustment(Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0 (Optional advance)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
               </div>
             </div>
           </div>
@@ -1267,13 +1281,13 @@ const InvoicesPage: React.FC = () => {
             {/* Less: Deductions */}
             <div className="p-4 bg-white rounded-2xl border border-amber-200 shadow-xs space-y-1">
               <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                Less: Guest Cash & Ledger
+                Total Deductions
               </span>
               <p className="text-2xl font-black text-amber-700 font-mono">
-                -{formatINR(driverGuestCashCollected + driverLedgerCashHeld)}
+                -{formatINR(driverTotalDeductions)}
               </p>
-              <span className="text-[10px] text-slate-500 block truncate" title={`Guest Cash: ₹${driverGuestCashCollected}, Prior Ledger: ₹${driverLedgerCashHeld}`}>
-                Guest: ₹{driverGuestCashCollected} | Ledger: ₹{driverLedgerCashHeld}
+              <span className="text-[10px] text-slate-500 block truncate" title={driverPriorAdvance > 0 ? `Guest Cash: ₹${driverGuestCashCollected} + Prior Advance: ₹${driverPriorAdvance}` : `Guest Cash Collected: ₹${driverGuestCashCollected}`}>
+                {driverPriorAdvance > 0 ? `Guest: ₹${driverGuestCashCollected} | Adv: ₹${driverPriorAdvance}` : `Guest Cash: ₹${driverGuestCashCollected}`}
               </span>
             </div>
 
@@ -1290,7 +1304,7 @@ const InvoicesPage: React.FC = () => {
                 {formatINR(Math.abs(driverNetSettlement))}
               </p>
               <span className="text-[10px] text-white/80 block">
-                {driverNetSettlement >= 0 ? 'Amount payable to driver' : 'Money driver gives back'}
+                {driverNetSettlement >= 0 ? `Gross ₹${driverGrossCredit} − Deductions ₹${driverTotalDeductions}` : `Deductions ₹${driverTotalDeductions} − Gross ₹${driverGrossCredit}`}
               </span>
             </div>
           </div>
@@ -1968,16 +1982,23 @@ const InvoicesPage: React.FC = () => {
                   <span>3. Less: Cash Collected from Guests (-):</span>
                   <span className="font-bold">-{formatINR(previewDriverInvoice.guestCashCollected)}</span>
                 </div>
-                {previewDriverInvoice.priorLedgerCashHeld > 0 && (
-                  <div className="flex justify-between text-amber-800">
-                    <span>4. Less: Prior Cash Held in Office Ledger (-):</span>
-                    <span className="font-bold">-{formatINR(previewDriverInvoice.priorLedgerCashHeld)}</span>
+                {previewDriverInvoice.priorLedgerCashHeld > 0 ? (
+                  <>
+                    <div className="flex justify-between text-amber-800">
+                      <span>4. Less: Prior Advance / Ledger Deduction (-):</span>
+                      <span className="font-bold">-{formatINR(previewDriverInvoice.priorLedgerCashHeld)}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-950 font-bold pt-1 border-t border-slate-200">
+                      <span>TOTAL DEDUCTIONS (B = 3 + 4):</span>
+                      <span>-{formatINR(previewDriverInvoice.guestCashCollected + previewDriverInvoice.priorLedgerCashHeld)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between text-amber-950 font-bold pt-1 border-t border-slate-200">
+                    <span>TOTAL DEDUCTIONS (B = 3):</span>
+                    <span>-{formatINR(previewDriverInvoice.guestCashCollected)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-amber-950 font-bold pt-1 border-t border-slate-200">
-                  <span>TOTAL DEDUCTIONS (B = 3 + 4):</span>
-                  <span>-{formatINR(previewDriverInvoice.guestCashCollected + previewDriverInvoice.priorLedgerCashHeld)}</span>
-                </div>
               </div>
 
               {/* Big Bold Final Settlement Banner */}
