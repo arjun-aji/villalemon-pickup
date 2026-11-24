@@ -35,19 +35,19 @@ const DriverExpenseEntry: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Form Fields matching Driver Reports worksheet
-  const [amountCollected, setAmountCollected] = useState<number>(0);
+  const [amountCollected, setAmountCollected] = useState<number | ''>(0);
   const [diffNote, setDiffNote] = useState('');
-  const [dieselExpense, setDieselExpense] = useState<number>(0);
-  const [tollParkingExpense, setTollParkingExpense] = useState<number>(0);
+  const [dieselExpense, setDieselExpense] = useState<number | ''>(0);
+  const [tollParkingExpense, setTollParkingExpense] = useState<number | ''>(0);
   const [otherDetails, setOtherDetails] = useState('');
-  const [workshopExpense, setWorkshopExpense] = useState<number>(0);
+  const [workshopExpense, setWorkshopExpense] = useState<number | ''>(0);
   const [workshopDetails, setWorkshopDetails] = useState('');
   const [receiptPhotoUrl, setReceiptPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Cash Handover / Return Section
   const [hasReturnedCash, setHasReturnedCash] = useState(true);
-  const [returnedAmount, setReturnedAmount] = useState<number>(0);
+  const [returnedAmount, setReturnedAmount] = useState<number | ''>(0);
   const [returnPaymentMethod, setReturnPaymentMethod] = useState<'Cash' | 'UPI'>('Cash');
   const [isAmountManuallyEdited, setIsAmountManuallyEdited] = useState(false);
   const [priorCashHeld, setPriorCashHeld] = useState<number>(0);
@@ -119,9 +119,15 @@ const DriverExpenseEntry: React.FC = () => {
   };
 
   const expectedCollection = Number(trip?.amount_driver_must_collect || trip?.amount_to_collect || 0);
-  const collectionDifference = amountCollected - expectedCollection;
-  const otherExpenses = Number(tollParkingExpense) + Number(workshopExpense);
-  const totalDriverExpenses = Number(dieselExpense) + otherExpenses;
+  const numCollected = amountCollected === '' ? 0 : Number(amountCollected);
+  const numDiesel = dieselExpense === '' ? 0 : Number(dieselExpense);
+  const numTollParking = tollParkingExpense === '' ? 0 : Number(tollParkingExpense);
+  const numWorkshop = workshopExpense === '' ? 0 : Number(workshopExpense);
+  const numReturned = returnedAmount === '' ? 0 : Number(returnedAmount);
+
+  const collectionDifference = numCollected - expectedCollection;
+  const otherExpenses = numTollParking + numWorkshop;
+  const totalDriverExpenses = numDiesel + otherExpenses;
   const driverPay = Number(
     trip?.driver_trip_pay_override ??
     trip?.driver_charge ??
@@ -132,7 +138,7 @@ const DriverExpenseEntry: React.FC = () => {
 
   // Exact unified formula requested:
   // Return = (Amount Collected + Prior Cash Held in Ledger) - Petrol - Driver Pay - Other Expenses
-  const netReturnBalance = (Number(amountCollected) + Number(priorCashHeld)) - Number(dieselExpense) - driverPay - otherExpenses;
+  const netReturnBalance = (numCollected + Number(priorCashHeld)) - numDiesel - driverPay - otherExpenses;
 
   useEffect(() => {
     if (!isAmountManuallyEdited) {
@@ -152,21 +158,21 @@ const DriverExpenseEntry: React.FC = () => {
 
     try {
       setSaving(true);
-      const availableCashForSalary = Math.max(0, (Number(amountCollected) + Number(priorCashHeld)) - totalDriverExpenses);
+      const availableCashForSalary = Math.max(0, (numCollected + Number(priorCashHeld)) - totalDriverExpenses);
       const cashSalaryRetained = Math.max(0, Math.min(driverPay, availableCashForSalary));
 
       await driverReportService.submitReport({
         trip_id: trip.id,
         driver_id: trip.assigned_driver_id || driver?.id || '',
-        amount_collected: Number(amountCollected) || 0,
+        amount_collected: numCollected,
         collection_difference_note: diffNote || undefined,
-        diesel_expense: Number(dieselExpense) || 0,
-        parking_toll_permits_tickets_food: Number(tollParkingExpense) || 0,
+        diesel_expense: numDiesel,
+        parking_toll_permits_tickets_food: numTollParking,
         other_expenses_details: otherDetails || undefined,
-        workshop_expense: Number(workshopExpense) || 0,
+        workshop_expense: numWorkshop,
         workshop_details: workshopDetails || undefined,
         receipt_photo_url: receiptPhotoUrl || undefined,
-        cash_returned_to_office: (hasReturnedCash && Number(returnedAmount) > 0) ? Number(returnedAmount) : 0,
+        cash_returned_to_office: (hasReturnedCash && numReturned > 0) ? numReturned : 0,
         cash_return_method: returnPaymentMethod,
         driver_salary_deducted: cashSalaryRetained > 0 ? cashSalaryRetained : undefined,
       });
@@ -261,18 +267,38 @@ const DriverExpenseEntry: React.FC = () => {
           </h2>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Actual Amount Collected from Guest (₹) *
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Actual Amount Collected from Guest (₹) *
+              </label>
+              <button
+                type="button"
+                onClick={() => setAmountCollected(0)}
+                className={`text-[11px] px-2.5 py-0.5 rounded-lg font-bold transition-all border ${
+                  numCollected === 0 && amountCollected !== ''
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                }`}
+              >
+                ₹0 (Prepaid / No Cash)
+              </button>
+            </div>
             <input
               type="number"
               min="0"
               step="1"
-              value={amountCollected || ''}
-              onChange={e => setAmountCollected(parseFloat(e.target.value) || 0)}
+              value={amountCollected === '' ? '' : amountCollected}
+              onChange={e => {
+                const val = e.target.value;
+                setAmountCollected(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+              }}
               required
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-base font-bold font-mono focus:ring-2 focus:ring-blue-500"
+              placeholder="0"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-base font-bold font-mono focus:ring-2 focus:ring-blue-500 bg-white"
             />
+            <p className="text-[11px] text-slate-500 mt-1">
+              For prepaid rides, online payment, or when no cash is collected, enter <b>0</b>.
+            </p>
           </div>
 
           {/* Collection Difference Notice */}
@@ -288,11 +314,34 @@ const DriverExpenseEntry: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-amber-800 mb-1">
                   Reason for Collection Difference *
                 </label>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDiffNote('Prepaid / Paid online to office')}
+                    className="px-2 py-0.5 rounded bg-white border border-amber-300 text-[10px] text-amber-900 font-medium hover:bg-amber-100"
+                  >
+                    Prepaid to Office
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiffNote('Guest paid via UPI directly')}
+                    className="px-2 py-0.5 rounded bg-white border border-amber-300 text-[10px] text-amber-900 font-medium hover:bg-amber-100"
+                  >
+                    UPI Payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiffNote('Partner organization will settle')}
+                    className="px-2 py-0.5 rounded bg-white border border-amber-300 text-[10px] text-amber-900 font-medium hover:bg-amber-100"
+                  >
+                    Partner Org Bill
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={diffNote}
                   onChange={e => setDiffNote(e.target.value)}
-                  placeholder="e.g. Guest paid ₹500 tip / guest paid balance via UPI to office"
+                  placeholder="e.g. Prepaid to office / Paid via UPI / Tip included"
                   required={collectionDifference !== 0}
                   className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs"
                 />
@@ -315,8 +364,11 @@ const DriverExpenseEntry: React.FC = () => {
                 type="number"
                 min="0"
                 step="1"
-                value={dieselExpense || ''}
-                onChange={e => setDieselExpense(parseFloat(e.target.value) || 0)}
+                value={dieselExpense === '' ? '' : dieselExpense}
+                onChange={e => {
+                  const val = e.target.value;
+                  setDieselExpense(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                }}
                 placeholder="0"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold"
               />
@@ -328,8 +380,11 @@ const DriverExpenseEntry: React.FC = () => {
                 type="number"
                 min="0"
                 step="1"
-                value={tollParkingExpense || ''}
-                onChange={e => setTollParkingExpense(parseFloat(e.target.value) || 0)}
+                value={tollParkingExpense === '' ? '' : tollParkingExpense}
+                onChange={e => {
+                  const val = e.target.value;
+                  setTollParkingExpense(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                }}
                 placeholder="0"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold"
               />
@@ -360,8 +415,11 @@ const DriverExpenseEntry: React.FC = () => {
                   type="number"
                   min="0"
                   step="1"
-                  value={workshopExpense || ''}
-                  onChange={e => setWorkshopExpense(parseFloat(e.target.value) || 0)}
+                  value={workshopExpense === '' ? '' : workshopExpense}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setWorkshopExpense(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                  }}
                   placeholder="0"
                   className="w-full px-3 py-1.5 rounded-lg border border-slate-200 font-mono"
                 />
@@ -419,7 +477,7 @@ const DriverExpenseEntry: React.FC = () => {
           <div className="space-y-1.5 pt-1">
             <div className="flex justify-between items-center">
               <span className="text-slate-300">1. Amount Collected from Guest:</span>
-              <span className="font-bold font-mono text-sm text-white">{formatINR(amountCollected)}</span>
+              <span className="font-bold font-mono text-sm text-white">{formatINR(numCollected)}</span>
             </div>
             <div className="flex justify-between items-center text-amber-200">
               <span className="text-slate-300">2. Prior Cash Held in Ledger:</span>
@@ -427,7 +485,7 @@ const DriverExpenseEntry: React.FC = () => {
             </div>
             <div className="flex justify-between items-center text-amber-300">
               <span className="text-slate-300">3. Petrol / Diesel Filled:</span>
-              <span className="font-bold font-mono text-sm">− {formatINR(dieselExpense)}</span>
+              <span className="font-bold font-mono text-sm">− {formatINR(numDiesel)}</span>
             </div>
             {driverPay > 0 && (
               <div className="flex justify-between items-center text-emerald-300">
@@ -445,7 +503,7 @@ const DriverExpenseEntry: React.FC = () => {
           <div className="pt-2 border-t border-white/10 text-[11px] font-mono text-slate-300 flex flex-wrap items-center justify-between gap-1">
             <span>Calculation:</span>
             <span>
-              ₹{amountCollected} + ₹{priorCashHeld} − ₹{dieselExpense} − ₹{driverPay} − ₹{otherExpenses}
+              ₹{numCollected} + ₹{priorCashHeld} − ₹{numDiesel} − ₹{driverPay} − ₹{otherExpenses}
             </span>
           </div>
 
@@ -519,16 +577,16 @@ const DriverExpenseEntry: React.FC = () => {
                 >
                   Return Full Due ({formatINR(netReturnBalance)})
                 </button>
-                {Math.max(0, amountCollected - totalDriverExpenses - driverPay) > 0 && Math.max(0, amountCollected - totalDriverExpenses - driverPay) !== netReturnBalance && (
+                {Math.max(0, numCollected - totalDriverExpenses - driverPay) > 0 && Math.max(0, numCollected - totalDriverExpenses - driverPay) !== netReturnBalance && (
                   <button
                     type="button"
                     onClick={() => {
                       setIsAmountManuallyEdited(true);
-                      setReturnedAmount(Math.max(0, amountCollected - totalDriverExpenses - driverPay));
+                      setReturnedAmount(Math.max(0, numCollected - totalDriverExpenses - driverPay));
                     }}
                     className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-300 text-blue-800 font-bold hover:bg-blue-100 transition-colors"
                   >
-                    Return This Duty Only ({formatINR(Math.max(0, amountCollected - totalDriverExpenses - driverPay))})
+                    Return This Duty Only ({formatINR(Math.max(0, numCollected - totalDriverExpenses - driverPay))})
                   </button>
                 )}
               </div>
@@ -542,10 +600,11 @@ const DriverExpenseEntry: React.FC = () => {
                     type="number"
                     min="0"
                     step="1"
-                    value={returnedAmount || ''}
+                    value={returnedAmount === '' ? '' : returnedAmount}
                     onChange={e => {
                       setIsAmountManuallyEdited(true);
-                      setReturnedAmount(parseFloat(e.target.value) || 0);
+                      const val = e.target.value;
+                      setReturnedAmount(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
                     }}
                     placeholder="0"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-sm bg-emerald-50/50 text-emerald-900 border-emerald-200 focus:ring-2 focus:ring-emerald-500"
@@ -569,7 +628,7 @@ const DriverExpenseEntry: React.FC = () => {
 
               {/* Remaining Cash Held Status */}
               {(() => {
-                const remainingHeld = Math.max(0, netReturnBalance - returnedAmount);
+                const remainingHeld = Math.max(0, netReturnBalance - numReturned);
                 return (
                   <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
                     remainingHeld > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
