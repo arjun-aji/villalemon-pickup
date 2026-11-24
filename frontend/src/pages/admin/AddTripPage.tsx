@@ -54,6 +54,7 @@ import {
   formatTime,
   generateDriverDispatchMessage,
   formatWhatsAppShareUrl,
+  embedTripBilling,
 } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Modal from '../../components/ui/Modal';
@@ -231,6 +232,8 @@ const AddTripPage: React.FC = () => {
   const [collectionRule, setCollectionRule] = useState<CollectionRule>('Collect');
   const [amountDriverMustCollect, setAmountDriverMustCollect] = useState<number | ''>(2500);
   const [driverTripPay, setDriverTripPay] = useState<number | ''>(800);
+  const [advancePaid, setAdvancePaid] = useState<number | ''>(0);
+  const [billingStatus, setBillingStatus] = useState<'Pending' | 'Paid'>('Pending');
 
   // Placard text (Manually entered for Airport Pickup)
   const [placardText, setPlacardText] = useState('VARKALA HOLIDAYS - GUEST');
@@ -513,7 +516,10 @@ const AddTripPage: React.FC = () => {
               flight_number_and_time: flightNumberAndTime || undefined,
               airport_terminal: isAirport ? airportTerminal : undefined,
               required_cab_type: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
-              special_instructions: combinedInstructions,
+              special_instructions: embedTripBilling(combinedInstructions, {
+                advanceAmount: Number(advancePaid) || 0,
+                billingStatus: billingStatus,
+              }),
               placard_text: isAirportPickup ? placardText : undefined,
               assigned_driver_id: c.assignmentMode === 'registered' ? c.assignedDriverId : undefined,
               assigned_vehicle_id: c.assignmentMode === 'registered' ? c.assignedVehicleId : undefined,
@@ -633,7 +639,10 @@ const AddTripPage: React.FC = () => {
           flight_number_and_time: flightNumberAndTime || undefined,
           airport_terminal: isAirport ? airportTerminal : undefined,
           required_cab_type: requiredCabType,
-          special_instructions: specialInstructions || undefined,
+          special_instructions: embedTripBilling(specialInstructions, {
+            advanceAmount: Number(advancePaid) || 0,
+            billingStatus: billingStatus,
+          }),
           placard_text: isAirportPickup ? placardText : undefined,
           assigned_driver_id: assignmentMode === 'registered' ? assignedDriverId : undefined,
           assigned_vehicle_id: assignmentMode === 'registered' ? assignedVehicleId : undefined,
@@ -1727,6 +1736,67 @@ const AddTripPage: React.FC = () => {
                   <p className="text-[10px] text-blue-700">
                     Agreed driver wage for this duty trip.
                   </p>
+                </div>
+
+                {/* Field 4: Organization Billing & Advance (for Invoicing & Pending Bills) */}
+                <div className="p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 space-y-2 md:col-span-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-bold text-amber-950 text-xs">
+                      Client Organization Billing & Advance (Invoicing from Date to Date)
+                    </label>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-200/80 text-amber-900 border border-amber-300">
+                      Org Pending Bills & Invoice
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Advance Received from Client (₹)
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={advancePaid}
+                        onChange={e => setAdvancePaid(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500/20"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Advance already given by organization (deducted from pending bill).
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Pending Balance to Collect
+                      </span>
+                      <div className="px-3 py-2 rounded-xl border border-amber-200 bg-white font-mono font-black text-sm text-amber-900 flex items-center justify-between">
+                        <span>{formatINR(Math.max(0, (Number(tripSellingPrice) || 0) - (Number(advancePaid) || 0)))}</span>
+                        <span className="text-[10px] text-amber-700 font-sans font-semibold">Remaining Due</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Amount remaining on client bill after deducting advance.
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Initial Payment / Bill Status
+                      </span>
+                      <select
+                        value={billingStatus}
+                        onChange={e => setBillingStatus(e.target.value as 'Pending' | 'Paid')}
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-semibold text-xs text-slate-800"
+                      >
+                        <option value="Pending">Pending (Unpaid Bill)</option>
+                        <option value="Paid">Paid in Full</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Can be updated anytime from Trip Sheet or Invoices.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

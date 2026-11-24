@@ -10,6 +10,7 @@ import {
   Driver,
   Trip,
 } from '../types';
+import { parseTripBilling, embedTripBilling } from '../utils/formatters';
 
 export const organizationService = {
   async getAll(): Promise<Organization[]> {
@@ -301,28 +302,106 @@ export const invoiceService = {
         .from('invoices')
         .select(`
           *,
-          organization:organizations(id, name, contact_person, phone)
+          organization:organizations(id, name, contact_person, phone, billing_address, email),
+          invoice_trips(
+            id,
+            trip_id,
+            trip:trips(
+              id,
+              trip_number,
+              trip_date,
+              pickup_time,
+              trip_category,
+              guest_names,
+              pickup_location,
+              dropoff_location,
+              required_cab_type,
+              trip_selling_price,
+              special_instructions,
+              trip_status
+            )
+          )
         `)
         .order('invoice_date', { ascending: false });
       if (error) throw error;
-      return (data as Invoice[]) || [];
+
+      return (data || []).map((inv: any) => {
+        const rawTrips = (inv.invoice_trips || [])
+          .map((it: any) => it.trip)
+          .filter(Boolean);
+
+        const enrichedTrips = rawTrips.map((t: any) => {
+          const sellPrice = Number(t.trip_selling_price) || 0;
+          const bInfo = parseTripBilling(t.special_instructions, sellPrice);
+          return {
+            ...t,
+            advance_amount: bInfo.advanceAmount,
+            billing_status: bInfo.billingStatus,
+            pending_amount: bInfo.pendingAmount,
+          };
+        });
+
+        const totalAmt = enrichedTrips.reduce((s: number, t: any) => s + (Number(t.trip_selling_price) || 0), 0);
+        const totalAdv = enrichedTrips.reduce(
+          (s: number, t: any) => s + (t.billing_status === 'Paid' ? (Number(t.trip_selling_price) || 0) : (Number(t.advance_amount) || 0)),
+          0
+        );
+        const bal = Math.max(0, totalAmt - totalAdv);
+
+        return {
+          ...inv,
+          trips: enrichedTrips,
+          trips_count: enrichedTrips.length,
+          total_amount: totalAmt,
+          paid_against_invoice: totalAdv,
+          balance: bal,
+        } as Invoice;
+      });
     }
     return [];
   },
 
-  async getUnbilledTrips(organizationId: string): Promise<Trip[]> {
+  async getTripsForInvoice(organizationId: string, fromDate?: string, toDate?: string): Promise<Trip[]> {
     if (isSupabaseConfigured) {
-      // Find completed trips for this org that aren't on an active invoice
-      const { data, error } = await supabase
+      let query = supabase
         .from('trips')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .eq('trip_status', 'Completed')
-        .order('trip_date', { ascending: false });
+        .select(`
+          *,
+          organization:organizations(id, name, type),
+          driver:drivers(id, full_name, phone)
+        `)
+        .order('trip_date', { ascending: true })
+        .order('pickup_time', { ascending: true });
+
+      if (organizationId && organizationId !== 'all') {
+        query = query.eq('organization_id', organizationId);
+      }
+      if (fromDate) {
+        query = query.gte('trip_date', fromDate);
+      }
+      if (toDate) {
+        query = query.lte('trip_date', toDate);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      return (data as Trip[]) || [];
+
+      return (data || []).map((t: any) => {
+        const sellPrice = Number(t.trip_selling_price) || 0;
+        const bInfo = parseTripBilling(t.special_instructions, sellPrice);
+        return {
+          ...t,
+          advance_amount: bInfo.advanceAmount,
+          billing_status: bInfo.billingStatus,
+          pending_amount: bInfo.pendingAmount,
+        } as Trip;
+      });
     }
     return [];
+  },
+
+  async getUnbilledTrips(organizationId: string, fromDate?: string, toDate?: string): Promise<Trip[]> {
+    return this.getTripsForInvoice(organizationId, fromDate, toDate);
   },
 
   async create(invoiceData: Partial<Invoice>, tripIds: string[]): Promise<Invoice> {
@@ -330,7 +409,15 @@ export const invoiceService = {
       // 1. Insert invoice
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
-        .insert(invoiceData)
+        .insert({
+          organization_id: invoiceData.organization_id,
+          invoice_type: invoiceData.invoice_type || 'Weekly invoice',
+          invoice_date: invoiceData.invoice_date || new Date().toISOString().split('T')[0],
+          period_from: invoiceData.period_from || null,
+          period_to: invoiceData.period_to || null,
+          status: invoiceData.status || 'Issued',
+          notes: invoiceData.notes || null,
+        })
         .select()
         .single();
       if (invErr) throw invErr;
@@ -350,6 +437,33 @@ export const invoiceService = {
       return inv as Invoice;
     }
     throw new Error('Supabase not configured');
+  },
+
+  async deleteInvoice(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      await supabase.from('invoice_trips').delete().eq('invoice_id', id);
+      const { error } = await supabase.from('invoices').delete().eq('id', id);
+      if (error) throw error;
+    }
+  },
+
+  async updateTripBilling(tripId: string, billing: { advanceAmount?: number; billingStatus?: 'Pending' | 'Paid' }): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: trip } = await supabase.from('trips').select('special_instructions, trip_selling_price').eq('id', tripId).single();
+      if (!trip) return;
+      const current = parseTripBilling(trip.special_instructions, trip.trip_selling_price);
+      const newAdvance = billing.advanceAmount !== undefined ? billing.advanceAmount : current.advanceAmount;
+      const newStatus = billing.billingStatus !== undefined ? billing.billingStatus : current.billingStatus;
+      const updated = embedTripBilling(trip.special_instructions, {
+        advanceAmount: newAdvance,
+        billingStatus: newStatus,
+      });
+      const { error } = await supabase.from('trips').update({
+        special_instructions: updated,
+        updated_at: new Date().toISOString(),
+      }).eq('id', tripId);
+      if (error) throw error;
+    }
   },
 };
 

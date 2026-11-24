@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Trip, CreateTripInput, TripStatus, DashboardStats } from '../types';
 import { initialTrips, initialSettlements, getStored, setStored } from '../lib/mockData';
+import { parseTripBilling, embedTripBilling } from '../utils/formatters';
 
 export const tripService = {
   async getAll(filters?: { status?: TripStatus; month?: number; year?: number; driverId?: string }): Promise<Trip[]> {
@@ -66,10 +67,15 @@ export const tripService = {
               }
             }
 
+            const billingInfo = parseTripBilling(t.special_instructions, sellPrice);
+
             return {
               ...t,
               driver: driverObj,
               vehicle: vehicleObj,
+              advance_amount: billingInfo.advanceAmount,
+              billing_status: billingInfo.billingStatus,
+              pending_amount: billingInfo.pendingAmount,
               settlement: {
                 trip_id: t.id,
                 driver_id: t.assigned_driver_id,
@@ -145,9 +151,13 @@ export const tripService = {
         const sellPrice = Number(data.trip_selling_price || data.amount_to_collect || 0);
         const dPay = Number(data.driver_trip_pay_override || data.driver_charge || (data.driver?.employment_type === 'Per-trip payment' ? data.driver?.per_trip_payment : 0) || 0);
         const netProfit = sellPrice - dPay - totalExp;
+        const billingInfo = parseTripBilling(data.special_instructions, sellPrice);
 
         return {
           ...data,
+          advance_amount: billingInfo.advanceAmount,
+          billing_status: billingInfo.billingStatus,
+          pending_amount: billingInfo.pendingAmount,
           settlement: {
             trip_id: data.id,
             driver_id: data.assigned_driver_id,
@@ -622,6 +632,76 @@ export const tripService = {
 
     const trips: Trip[] = getStored('trips', initialTrips);
     const updated = trips.map(t => (t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t));
+    setStored('trips', updated);
+    return updated.find(t => t.id === id)!;
+  },
+
+  async updateTripBilling(id: string, billing: { advanceAmount?: number; billingStatus?: 'Pending' | 'Paid' }): Promise<Trip> {
+    if (isSupabaseConfigured) {
+      const { data: existing, error: getErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (getErr) throw getErr;
+
+      const currentBilling = parseTripBilling(existing.special_instructions, existing.trip_selling_price);
+      const newAdvance = billing.advanceAmount !== undefined ? billing.advanceAmount : currentBilling.advanceAmount;
+      const newStatus = billing.billingStatus !== undefined ? billing.billingStatus : currentBilling.billingStatus;
+
+      const updatedInstructions = embedTripBilling(existing.special_instructions, {
+        advanceAmount: newAdvance,
+        billingStatus: newStatus,
+      });
+
+      const { data, error } = await supabase
+        .from('trips')
+        .update({
+          special_instructions: updatedInstructions,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      const sellPrice = Number(data.trip_selling_price || 0);
+      const bInfo = parseTripBilling(data.special_instructions, sellPrice);
+      return {
+        ...data,
+        advance_amount: bInfo.advanceAmount,
+        billing_status: bInfo.billingStatus,
+        pending_amount: bInfo.pendingAmount,
+      } as Trip;
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => {
+      if (t.id === id) {
+        const cur = parseTripBilling(t.special_instructions, t.trip_selling_price);
+        const newAdvance = billing.advanceAmount !== undefined ? billing.advanceAmount : cur.advanceAmount;
+        const newStatus = billing.billingStatus !== undefined ? billing.billingStatus : cur.billingStatus;
+        const newInstructions = embedTripBilling(t.special_instructions, {
+          advanceAmount: newAdvance,
+          billingStatus: newStatus,
+        });
+        const bInfo = parseTripBilling(newInstructions, t.trip_selling_price);
+        return {
+          ...t,
+          special_instructions: newInstructions,
+          advance_amount: bInfo.advanceAmount,
+          billing_status: bInfo.billingStatus,
+          pending_amount: bInfo.pendingAmount,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return t;
+    });
     setStored('trips', updated);
     return updated.find(t => t.id === id)!;
   },

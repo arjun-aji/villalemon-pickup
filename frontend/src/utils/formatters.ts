@@ -430,3 +430,45 @@ export const formatWhatsAppShareUrl = (phone?: string, text?: string): string =>
     : `https://wa.me/?text=${encodeURIComponent(text || '')}`;
 };
 
+export interface TripBillingInfo {
+  advanceAmount: number;
+  billingStatus: 'Pending' | 'Paid';
+  pendingAmount: number;
+}
+
+export const parseTripBilling = (instructions?: string | null, sellingPrice?: number): TripBillingInfo => {
+  const sellPrice = Number(sellingPrice) || 0;
+  if (!instructions) {
+    return { advanceAmount: 0, billingStatus: 'Pending', pendingAmount: sellPrice };
+  }
+  const match = instructions.match(/\[BILLING:\s*Advance=([0-9.]+),\s*Status=([a-zA-Z]+)\]/i);
+  if (!match) {
+    return { advanceAmount: 0, billingStatus: 'Pending', pendingAmount: sellPrice };
+  }
+  const advance = parseFloat(match[1]) || 0;
+  const status: 'Pending' | 'Paid' = match[2].toLowerCase() === 'paid' ? 'Paid' : 'Pending';
+  const pending = status === 'Paid' ? 0 : Math.max(0, sellPrice - advance);
+  return {
+    advanceAmount: advance,
+    billingStatus: status,
+    pendingAmount: pending,
+  };
+};
+
+export const cleanSpecialInstructions = (instructions?: string | null): string => {
+  if (!instructions) return '';
+  return instructions
+    .replace(/\[BILLING:[^\]]*\]/gi, '')
+    .trim();
+};
+
+export const embedTripBilling = (
+  instructions: string | null | undefined,
+  billing: { advanceAmount?: number; billingStatus?: 'Pending' | 'Paid' }
+): string => {
+  const clean = cleanSpecialInstructions(instructions);
+  const tag = `[BILLING: Advance=${billing.advanceAmount || 0}, Status=${billing.billingStatus || 'Pending'}]`;
+  return clean ? `${clean}\n${tag}` : tag;
+};
+
+

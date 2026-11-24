@@ -137,7 +137,7 @@ export type DriverLedgerEntryType =
 
 export type InvoiceType = 'Trip invoice' | 'Weekly invoice' | 'Monthly invoice';
 
-export type InvoiceStatus = 'Draft' | 'Issued' | 'Cancelled';
+export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Cancelled';
 
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
@@ -294,7 +294,9 @@ export interface Trip {
   collected_by_driver?: number;
   collection_difference?: number;
   effective_driver_pay?: number;
-  billing_status?: string;
+  billing_status?: 'Pending' | 'Paid' | 'Partially Paid' | string;
+  advance_amount?: number;
+  pending_amount?: number;
 
   // Backward compatibility fields for legacy views
   customer_name?: string;

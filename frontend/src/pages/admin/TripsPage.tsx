@@ -47,6 +47,7 @@ import {
   generateDriverDispatchMessage,
   getTripDayHighlight,
   sortTripsUpcomingFirst as sortUpcomingTripsOrder,
+  cleanSpecialInstructions,
 } from '../../utils/formatters';
 
 const TripsPage: React.FC = () => {
@@ -315,7 +316,7 @@ const TripsPage: React.FC = () => {
       requiredCabType: t.required_cab_type,
       vehicleReg: t.vehicle?.registration_number,
       driverName: t.driver?.full_name,
-      specialInstructions: t.special_instructions || t.trip_notes,
+      specialInstructions: cleanSpecialInstructions(t.special_instructions || t.trip_notes),
     });
   };
 
@@ -678,7 +679,7 @@ const TripsPage: React.FC = () => {
                       const vehicleReg = trip.vehicle?.registration_number || (trip as any).vehicle_reg;
                       const cabType = trip.vehicle?.vehicle_type || trip.required_cab_type || 'Sedan';
                       const collectAmt = Number(trip.amount_driver_must_collect || trip.amount_to_collect || 0);
-                      const note = trip.special_instructions || '-';
+                      const note = cleanSpecialInstructions(trip.special_instructions) || '-';
 
                       return (
                         <tr
@@ -718,6 +719,33 @@ const TripsPage: React.FC = () => {
                               <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1 shadow-2xs">
                                 <span>⚠️</span>
                                 <span>Verify terminal with customer</span>
+                              </div>
+                            )}
+
+                            {trip.organization?.name && (
+                              <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                                  {trip.organization.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const nextStatus: 'Pending' | 'Paid' = trip.billing_status === 'Paid' ? 'Pending' : 'Paid';
+                                    await tripService.updateTripBilling(trip.id, { billingStatus: nextStatus });
+                                    loadData();
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-transform active:scale-95 ${
+                                    trip.billing_status === 'Paid'
+                                      ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                                      : 'bg-amber-100 hover:bg-amber-200 text-amber-800'
+                                  }`}
+                                  title="Click to toggle Bill Pending / Paid"
+                                >
+                                  {trip.billing_status === 'Paid'
+                                    ? '✓ Bill Paid'
+                                    : `⏳ Due: ₹${(trip.pending_amount !== undefined ? trip.pending_amount : (trip.trip_selling_price || 0)).toLocaleString('en-IN')}`}
+                                </button>
                               </div>
                             )}
                           </td>
@@ -1518,6 +1546,57 @@ const TripsPage: React.FC = () => {
                 </div>
               );
             })()}
+
+            {/* Organization Billing & Pending Bill Details */}
+            <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-amber-950 uppercase text-[10px] tracking-wide">
+                  Organization Billing & Pending Status
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  viewTrip.billing_status === 'Paid'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {viewTrip.billing_status === 'Paid' ? '✓ Bill Paid' : '⏳ Payment Pending'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 font-mono text-center pt-1">
+                <div className="p-2 bg-white rounded-lg border border-amber-200">
+                  <span className="text-[9px] font-sans text-slate-400 block uppercase">Trip Cost</span>
+                  <span className="font-bold text-slate-900">{formatINR(viewTrip.trip_selling_price || 0)}</span>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-amber-200">
+                  <span className="text-[9px] font-sans text-slate-400 block uppercase">Advance</span>
+                  <span className="font-bold text-emerald-600">{formatINR(viewTrip.advance_amount || 0)}</span>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-amber-200">
+                  <span className="text-[9px] font-sans text-slate-400 block uppercase">Pending Due</span>
+                  <span className="font-black text-amber-900">{formatINR(viewTrip.pending_amount !== undefined ? viewTrip.pending_amount : ((viewTrip.trip_selling_price || 0) - (viewTrip.advance_amount || 0)))}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-amber-200/60 flex-wrap gap-2">
+                <span className="text-[11px] text-slate-600">
+                  Organization: <strong>{viewTrip.organization?.name || 'Villa Lemon'}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const newStatus: 'Pending' | 'Paid' = viewTrip.billing_status === 'Paid' ? 'Pending' : 'Paid';
+                    await tripService.updateTripBilling(viewTrip.id, { billingStatus: newStatus });
+                    setViewTrip({
+                      ...viewTrip,
+                      billing_status: newStatus,
+                      pending_amount: newStatus === 'Paid' ? 0 : Math.max(0, (viewTrip.trip_selling_price || 0) - (viewTrip.advance_amount || 0)),
+                    });
+                    loadData();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px]"
+                >
+                  Mark as {viewTrip.billing_status === 'Paid' ? 'Pending' : 'Paid'}
+                </button>
+              </div>
+            </div>
 
             {viewTrip.trip_notes && (
               <div className="text-xs text-text-secondary bg-gray-50 p-3 rounded-xl">
