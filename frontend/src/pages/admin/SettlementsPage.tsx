@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { driverReportService } from '../../services/driverReportService';
+import { tripService } from '../../services/tripService';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -60,6 +61,29 @@ const SettlementsPage: React.FC = () => {
       alert(err.message || 'Failed to update check status');
     } finally {
       setActionInProgress(null);
+    }
+  };
+
+  const handleUpdateDriverPay = async (tripId?: string, tripNumber?: string, currentPay?: number) => {
+    if (!tripId) {
+      alert('Trip record not found for this report');
+      return;
+    }
+    const input = window.prompt(
+      `Enter driver settlement wage / payment for trip ${tripNumber || ''} (₹):`,
+      currentPay ? String(currentPay) : '800'
+    );
+    if (input === null) return;
+    const amount = parseFloat(input);
+    if (isNaN(amount) || amount < 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+    try {
+      await tripService.updateTripDriverPay(tripId, amount);
+      await loadReports();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update driver pay');
     }
   };
 
@@ -222,6 +246,7 @@ const SettlementsPage: React.FC = () => {
                   <th className="p-3">Collected</th>
                   <th className="p-3">Expected</th>
                   <th className="p-3">Diff / Note</th>
+                  <th className="p-3">Driver Pay</th>
                   <th className="p-3">Diesel</th>
                   <th className="p-3">Toll & Other</th>
                   <th className="p-3">Workshop</th>
@@ -277,6 +302,43 @@ const SettlementsPage: React.FC = () => {
                         ) : (
                           <span className="text-slate-400 font-mono">0</span>
                         )}
+                      </td>
+
+                      {/* Driver Pay / Settlement Wage Column */}
+                      <td className="p-3">
+                        {(() => {
+                          const tripPay = Number(r.trip?.driver_trip_pay_override || 0);
+                          const isSettleLater = (r.trip?.special_instructions || '').includes('Settle Later') || tripPay === 0;
+
+                          if (tripPay > 0 && !isSettleLater) {
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono font-bold text-blue-700">
+                                  {formatINR(tripPay)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, tripPay)}
+                                  className="text-[10px] text-slate-400 hover:text-blue-600"
+                                  title="Edit Driver Pay"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateDriverPay(r.trip?.id, r.trip?.trip_number, 800)}
+                              className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] inline-flex items-center gap-1 border border-amber-300 transition-all shadow-xs"
+                              title="Driver pay was set to enter after settlement. Click to enter amount."
+                            >
+                              <span>⏳ + Enter Pay</span>
+                            </button>
+                          );
+                        })()}
                       </td>
 
                       <td className="p-3 font-mono text-slate-700">

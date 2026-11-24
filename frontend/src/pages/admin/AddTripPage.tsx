@@ -79,6 +79,7 @@ export interface MultiCabItem {
   assignmentMode: 'registered' | 'outside';
   assignedDriverId: string;
   driverTripPay: number | '';
+  driverPayMode?: 'set_now' | 'settle_later';
   amountToCollect: number | '';
   sellingPriceShare: number | '';
   outsideDriverName: string;
@@ -191,6 +192,7 @@ const AddTripPage: React.FC = () => {
       assignmentMode: 'registered',
       assignedDriverId: '',
       driverTripPay: 500,
+      driverPayMode: 'set_now',
       amountToCollect: 2500,
       sellingPriceShare: 1500,
       outsideDriverName: '',
@@ -206,6 +208,7 @@ const AddTripPage: React.FC = () => {
       assignmentMode: 'registered',
       assignedDriverId: '',
       driverTripPay: 500,
+      driverPayMode: 'set_now',
       amountToCollect: 0,
       sellingPriceShare: 1500,
       outsideDriverName: '',
@@ -232,6 +235,7 @@ const AddTripPage: React.FC = () => {
   const [collectionRule, setCollectionRule] = useState<CollectionRule>('Collect');
   const [amountDriverMustCollect, setAmountDriverMustCollect] = useState<number | ''>(2500);
   const [driverTripPay, setDriverTripPay] = useState<number | ''>(800);
+  const [driverPayMode, setDriverPayMode] = useState<'set_now' | 'settle_later'>('set_now');
   const [advancePaid, setAdvancePaid] = useState<number | ''>(0);
   const [billingStatus, setBillingStatus] = useState<'Pending' | 'Paid'>('Pending');
 
@@ -393,6 +397,7 @@ const AddTripPage: React.FC = () => {
       assignmentMode: 'registered',
       assignedDriverId: drivers[0]?.id || '',
       driverTripPay: drivers[0]?.per_trip_payment || 500,
+      driverPayMode: 'set_now',
       amountToCollect: 0,
       sellingPriceShare: 1500,
       outsideDriverName: '',
@@ -496,8 +501,11 @@ const AddTripPage: React.FC = () => {
             ? Math.round(totalClientPrice / multiCabs.length)
             : (i === 0 ? totalClientPrice : 0);
 
+          const isCabSettleLater = c.driverPayMode === 'settle_later';
+          const effectiveCabPay = isCabSettleLater ? 0 : (Number(c.driverTripPay) || 0);
+          const cabPayNote = isCabSettleLater ? '[DRIVER_PAY_STATUS: Settle Later]' : '';
           const convoyTag = `[Convoy: Cab ${i + 1} of ${multiCabs.length} (${c.vehicleType})]`;
-          const combinedInstructions = [convoyTag, specialInstructions].filter(Boolean).join(' ');
+          const combinedInstructions = [convoyTag, specialInstructions, cabPayNote].filter(Boolean).join(' ');
 
           const createdTrip = await tripService.create(
             {
@@ -530,13 +538,13 @@ const AddTripPage: React.FC = () => {
               trip_selling_price: cabSellingPrice,
               collection_rule: Number(c.amountToCollect) > 0 ? 'Collect' : 'Do not collect',
               amount_driver_must_collect: Number(c.amountToCollect) || 0,
-              driver_trip_pay_override: c.driverTripPay ? Number(c.driverTripPay) : undefined,
+              driver_trip_pay_override: isCabSettleLater ? 0 : (c.driverTripPay ? Number(c.driverTripPay) : undefined),
               is_published_for_enrollment: false,
               trip_status: 'Assigned',
               customer_name: guestNames,
               customer_phone: guestContact,
               amount_to_collect: Number(c.amountToCollect) || 0,
-              driver_charge: Number(c.driverTripPay) || 0,
+              driver_charge: effectiveCabPay,
             },
             user?.id || profile?.id
           );
@@ -639,10 +647,13 @@ const AddTripPage: React.FC = () => {
           flight_number_and_time: flightNumberAndTime || undefined,
           airport_terminal: isAirport ? airportTerminal : undefined,
           required_cab_type: requiredCabType,
-          special_instructions: embedTripBilling(specialInstructions, {
-            advanceAmount: Number(advancePaid) || 0,
-            billingStatus: billingStatus,
-          }),
+          special_instructions: [
+            embedTripBilling(specialInstructions, {
+              advanceAmount: Number(advancePaid) || 0,
+              billingStatus: billingStatus,
+            }),
+            driverPayMode === 'settle_later' ? '[DRIVER_PAY_STATUS: Settle Later]' : '',
+          ].filter(Boolean).join('\n'),
           placard_text: isAirportPickup ? placardText : undefined,
           assigned_driver_id: assignmentMode === 'registered' ? assignedDriverId : undefined,
           assigned_vehicle_id: assignmentMode === 'registered' ? assignedVehicleId : undefined,
@@ -655,14 +666,14 @@ const AddTripPage: React.FC = () => {
           trip_selling_price: Number(tripSellingPrice) || 0,
           collection_rule: collectionRule,
           amount_driver_must_collect: Number(amountDriverMustCollect) || 0,
-          driver_trip_pay_override: driverTripPay ? Number(driverTripPay) : undefined,
+          driver_trip_pay_override: driverPayMode === 'settle_later' ? 0 : (driverTripPay ? Number(driverTripPay) : undefined),
           is_published_for_enrollment: false,
           trip_status: (assignmentMode === 'registered' || assignmentMode === 'outside') ? 'Assigned' : 'Confirmed',
           // Backward compatibility
           customer_name: guestNames,
           customer_phone: guestContact,
           amount_to_collect: Number(amountDriverMustCollect) || 0,
-          driver_charge: Number(driverTripPay) || 0,
+          driver_charge: driverPayMode === 'settle_later' ? 0 : (Number(driverTripPay) || 0),
         },
         user?.id || profile?.id
       );
@@ -1604,19 +1615,39 @@ const AddTripPage: React.FC = () => {
                             <span className="text-[9px] text-slate-400 block mt-0.5">Billed to client</span>
                           </div>
 
-                          <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-200">
-                            <span className="text-[10px] uppercase font-bold text-blue-700 block mb-1">
-                              Driver Pay / Allowance (₹)
+                          <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-200 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-bold text-blue-700 block">
+                                Driver Pay (₹)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCabUpdate(cab.id, {
+                                  driverPayMode: cab.driverPayMode === 'settle_later' ? 'set_now' : 'settle_later',
+                                  driverTripPay: cab.driverPayMode === 'settle_later' ? 800 : 0
+                                })}
+                                className="text-[9px] font-bold text-blue-700 underline"
+                              >
+                                {cab.driverPayMode === 'settle_later' ? 'Set Amount Now' : 'Settle After Trip'}
+                              </button>
+                            </div>
+                            {cab.driverPayMode === 'settle_later' ? (
+                              <div className="p-1.5 bg-amber-100/70 border border-amber-300 rounded-lg text-[10px] font-bold text-amber-900">
+                                ⏳ Settle After Trip
+                              </div>
+                            ) : (
+                              <input
+                                type="number"
+                                min="0"
+                                step="50"
+                                value={cab.driverTripPay}
+                                onChange={e => handleCabUpdate(cab.id, { driverTripPay: parseFloat(e.target.value) || 0 })}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-blue-200 text-xs font-mono font-bold text-blue-900 bg-white"
+                              />
+                            )}
+                            <span className="text-[9px] text-blue-500 block mt-0.5">
+                              {cab.driverPayMode === 'settle_later' ? 'Enter during settlement' : 'Pay for this driver'}
                             </span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="50"
-                              value={cab.driverTripPay}
-                              onChange={e => handleCabUpdate(cab.id, { driverTripPay: parseFloat(e.target.value) || 0 })}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-blue-200 text-xs font-mono font-bold text-blue-900 bg-white"
-                            />
-                            <span className="text-[9px] text-blue-500 block mt-0.5">Pay for this driver</span>
                           </div>
 
                           <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200">
@@ -1715,7 +1746,7 @@ const AddTripPage: React.FC = () => {
                 </div>
 
                 {/* Field 3: Driver Pay / Allowance */}
-                <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-1.5">
+                <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block font-bold text-blue-950 text-xs">
                       Driver Pay / Allowance (₹)
@@ -1724,18 +1755,69 @@ const AddTripPage: React.FC = () => {
                       Driver Pay
                     </span>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={driverTripPay}
-                    onChange={e => setDriverTripPay(parseFloat(e.target.value) || 0)}
-                    placeholder="800"
-                    className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-mono font-bold text-base text-blue-900 focus:ring-2 focus:ring-blue-400"
-                  />
-                  <p className="text-[10px] text-blue-700">
-                    Agreed driver wage for this duty trip.
-                  </p>
+
+                  {/* Choice: Set Amount Now vs Settle After Trip */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setDriverPayMode('set_now')}
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        driverPayMode === 'set_now'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        driverPayMode === 'set_now' ? 'border-white' : 'border-slate-400'
+                      }`}>
+                        {driverPayMode === 'set_now' && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </span>
+                      <span>Enter Amount Now</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDriverPayMode('settle_later')}
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        driverPayMode === 'settle_later'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        driverPayMode === 'settle_later' ? 'border-white' : 'border-slate-400'
+                      }`}>
+                        {driverPayMode === 'settle_later' && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </span>
+                      <span>Settle After Trip</span>
+                    </button>
+                  </div>
+
+                  {driverPayMode === 'set_now' ? (
+                    <div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={driverTripPay}
+                        onChange={e => setDriverTripPay(parseFloat(e.target.value) || 0)}
+                        placeholder="800"
+                        className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-mono font-bold text-base text-blue-900 focus:ring-2 focus:ring-blue-400"
+                      />
+                      <p className="text-[10px] text-blue-700 mt-1">
+                        Agreed driver wage for this duty trip.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1 text-amber-800">
+                        <span>⏳ Enter Information After Settlement</span>
+                      </p>
+                      <p className="text-[10px] text-amber-700">
+                        Will add driver payment after the trip and driver settlement. You can enter the amount during settlement or from Trips page.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Field 4: Organization Billing & Advance (for Invoicing & Pending Bills) */}

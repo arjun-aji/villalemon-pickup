@@ -242,6 +242,34 @@ const TripsPage: React.FC = () => {
     }
   };
 
+  const handlePromptSetDriverPay = async (tripId: string, tripNumber?: string, currentVal?: number) => {
+    const input = window.prompt(
+      `Enter driver settlement wage / payment for trip ${tripNumber || ''} (₹):`,
+      currentVal ? String(currentVal) : '800'
+    );
+    if (input === null) return;
+    const amount = parseFloat(input);
+    if (isNaN(amount) || amount < 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+    try {
+      await tripService.updateTripDriverPay(tripId, amount);
+      const updated = await tripService.getAll();
+      setTrips(updated);
+      if (viewTrip && viewTrip.id === tripId) {
+        setViewTrip({
+          ...viewTrip,
+          driver_trip_pay_override: amount,
+          driver_charge: amount,
+          special_instructions: (viewTrip.special_instructions || '').replace(/\[DRIVER_PAY_STATUS:[^\]]*\]/gi, '').trim(),
+        });
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating driver pay');
+    }
+  };
+
   const handleExportExcel = async () => {
     try {
       setExportingExcel(true);
@@ -817,6 +845,13 @@ const TripsPage: React.FC = () => {
                               ) : (
                                 <div className="text-slate-600 text-[11px]">
                                   Cab: <span className="font-semibold text-slate-800">{cabType}</span>
+                                </div>
+                              )}
+                              {(trip.special_instructions || '').includes('Settle Later') && (
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    ⏳ Pay: Settle Later
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -1517,9 +1552,34 @@ const TripsPage: React.FC = () => {
                     <span className="text-text-secondary">Customer Collection:</span>
                     <span className="font-bold text-text-primary">{formatINR(dCollect)}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-text-secondary">Driver Pay / Charge:</span>
-                    <span className="font-medium text-text-primary">{formatINR(dDriverCharge)}</span>
+                    {(viewTrip.special_instructions || '').includes('Settle Later') && dDriverCharge === 0 ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          ⏳ Settle After Trip
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handlePromptSetDriverPay(viewTrip.id, viewTrip.trip_number)}
+                          className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] transition-colors shadow-2xs"
+                        >
+                          + Enter Pay
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-text-primary">{formatINR(dDriverCharge)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handlePromptSetDriverPay(viewTrip.id, viewTrip.trip_number, dDriverCharge)}
+                          className="text-[10px] text-blue-600 hover:underline font-bold"
+                          title="Edit Driver Pay"
+                        >
+                          ✏️ Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {dPetrol > 0 && (
                     <div className="flex justify-between text-expense">

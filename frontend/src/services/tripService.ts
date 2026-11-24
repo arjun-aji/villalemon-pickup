@@ -706,6 +706,57 @@ export const tripService = {
     return updated.find(t => t.id === id)!;
   },
 
+  async updateTripDriverPay(id: string, driverPay: number): Promise<Trip> {
+    if (isSupabaseConfigured) {
+      const { data: existing, error: getErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (getErr) throw getErr;
+
+      // Clean out any previous [DRIVER_PAY_STATUS: Settle Later] tag
+      const cleanInst = (existing.special_instructions || '')
+        .replace(/\[DRIVER_PAY_STATUS:[^\]]*\]/gi, '')
+        .trim();
+      const updatedInstructions = cleanInst
+        ? `${cleanInst}\n[DRIVER_PAY_STATUS: Settled (₹${driverPay})]`
+        : `[DRIVER_PAY_STATUS: Settled (₹${driverPay})]`;
+
+      const { data, error } = await supabase
+        .from('trips')
+        .update({
+          driver_trip_pay_override: driverPay,
+          driver_charge: driverPay,
+          special_instructions: updatedInstructions,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      const sellPrice = Number(data.trip_selling_price || 0);
+      const bInfo = parseTripBilling(data.special_instructions, sellPrice);
+      return {
+        ...data,
+        advance_amount: bInfo.advanceAmount,
+        billing_status: bInfo.billingStatus,
+        pending_amount: bInfo.pendingAmount,
+      } as Trip;
+    }
+
+    return this.updateTrip(id, {
+      driver_trip_pay_override: driverPay,
+      driver_charge: driverPay,
+    });
+  },
+
   async deleteTrip(id: string): Promise<void> {
     if (isSupabaseConfigured) {
       // 1. Fetch trip details first to identify trip number and driver

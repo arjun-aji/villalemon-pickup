@@ -459,7 +459,15 @@ export const cleanSpecialInstructions = (instructions?: string | null): string =
   if (!instructions) return '';
   return instructions
     .replace(/\[BILLING:[^\]]*\]/gi, '')
+    .replace(/\[DRIVER_PAY_STATUS:[^\]]*\]/gi, '')
     .trim();
+};
+
+export const isDriverPaySettleLater = (instructions?: string | null, driverPay?: number): boolean => {
+  if (instructions && instructions.includes('[DRIVER_PAY_STATUS: Settle Later]')) {
+    return true;
+  }
+  return false;
 };
 
 export const embedTripBilling = (

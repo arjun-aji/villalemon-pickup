@@ -154,6 +154,7 @@ export const driverReportService = {
             amount_driver_must_collect, 
             collection_rule, 
             driver_trip_pay_override, 
+            special_instructions, 
             organization:organizations(name),
             vehicle:vehicles(registration_number, vehicle_type)
           ),
