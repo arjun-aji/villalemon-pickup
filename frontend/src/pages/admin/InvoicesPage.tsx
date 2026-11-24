@@ -22,10 +22,13 @@ import {
   AlertCircle,
   RefreshCw,
   Edit2,
+  FileText,
+  Send,
+  Layers,
 } from 'lucide-react';
 import { invoiceService, organizationService } from '../../services/adminOperationsService';
 import { tripService } from '../../services/tripService';
-import { Invoice, Organization, Trip, InvoiceType, InvoiceStatus } from '../../types';
+import { Invoice, Organization, Trip, InvoiceType } from '../../types';
 import { formatINR, formatDate, formatTime, formatWhatsAppShareUrl } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
@@ -36,39 +39,57 @@ const INVOICE_TYPES: InvoiceType[] = [
 ];
 
 const InvoicesPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'pending_bills' | 'saved_invoices'>('pending_bills');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
-  // Form state
-  const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>('Weekly invoice');
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  // Date-to-Date range: Default to first of current month through today
-  const todayStr = new Date().toISOString().split('T')[0];
-  const firstOfMonthStr = `${todayStr.slice(0, 7)}-01`;
+  // Active Filter: Organization & Date Range (From Date to Date)
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const firstOfMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const endOfMonthStr = `${lastDayOfMonth.getFullYear()}-${String(lastDayOfMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDayOfMonth.getDate()).padStart(2, '0')}`;
+
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('all_partners');
   const [periodFrom, setPeriodFrom] = useState(firstOfMonthStr);
-  const [periodTo, setPeriodTo] = useState(todayStr);
-  const [notes, setNotes] = useState('');
+  const [periodTo, setPeriodTo] = useState(endOfMonthStr);
 
-  // Trips selection
-  const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
+  // Trips matching organization and date range
+  const [liveTrips, setLiveTrips] = useState<Trip[]>([]);
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
 
-  // Quick edit trip inside generator modal
+  // Quick edit trip advance inline
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [editAdvanceVal, setEditAdvanceVal] = useState<number | ''>(0);
 
+  // Modal: Full Printable / Shareable Invoice Bill
+  const [previewInvoice, setPreviewInvoice] = useState<{
+    invoice_number: string;
+    invoice_date: string;
+    organization: Organization | null;
+    period_from: string;
+    period_to: string;
+    trips: Trip[];
+    total_amount: number;
+    paid_against_invoice: number;
+    balance: number;
+    notes?: string;
+  } | null>(null);
+
+  // Modal: Save as Formal Invoice
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveInvoiceType, setSaveInvoiceType] = useState<InvoiceType>('Weekly invoice');
+  const [saveInvoiceDate, setSaveInvoiceDate] = useState(todayStr);
+  const [saveNotes, setSaveNotes] = useState('');
+
   useEffect(() => {
-    loadAll();
+    loadInitialData();
   }, []);
 
-  const loadAll = async () => {
+  const loadInitialData = async () => {
     try {
       setLoading(true);
       const [invList, orgList] = await Promise.all([
@@ -77,42 +98,27 @@ const InvoicesPage: React.FC = () => {
       ]);
       setInvoices(invList);
       setOrganizations(orgList);
-      
-      // Auto-select first non-Villa Lemon organization if available
-      if (orgList.length > 0 && !selectedOrgId) {
-        const externalOrg = orgList.find(o => !o.name.toLowerCase().includes('villa lemon')) || orgList[0];
-        setSelectedOrgId(externalOrg.id);
-      }
+
+      // Default to "All Partner Organizations (Excluding Villa Lemon)"
+      const defaultOrg = 'all_partners';
+      setSelectedOrgId(defaultOrg);
+      await loadTrips(defaultOrg, periodFrom, periodTo);
     } catch (err) {
-      console.error('Error loading invoices:', err);
+      console.error('Error loading bills & invoices data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenCreate = async () => {
-    setIsCreateModalOpen(true);
-    // Find initial org
-    let targetOrg = selectedOrgId;
-    if (!targetOrg && organizations.length > 0) {
-      const externalOrg = organizations.find(o => !o.name.toLowerCase().includes('villa lemon')) || organizations[0];
-      targetOrg = externalOrg.id;
-      setSelectedOrgId(targetOrg);
-    }
-    if (targetOrg) {
-      loadTripsForRange(targetOrg, periodFrom, periodTo);
-    }
-  };
-
-  const loadTripsForRange = async (orgId: string, from: string, to: string) => {
+  const loadTrips = async (orgId: string, from: string, to: string) => {
     try {
       setLoadingTrips(true);
       const trips = await invoiceService.getTripsForInvoice(orgId, from, to);
-      setAvailableTrips(trips);
-      // Default select all trips
+      setLiveTrips(trips);
+      // Auto-select all trips by default
       setSelectedTripIds(trips.map(t => t.id));
     } catch (err) {
-      console.error('Error loading trips for invoice range:', err);
+      console.error('Error querying trips for invoice:', err);
     } finally {
       setLoadingTrips(false);
     }
@@ -120,28 +126,29 @@ const InvoicesPage: React.FC = () => {
 
   const handleOrgChange = (newOrgId: string) => {
     setSelectedOrgId(newOrgId);
-    loadTripsForRange(newOrgId, periodFrom, periodTo);
+    loadTrips(newOrgId, periodFrom, periodTo);
   };
 
   const handleDateRangeChange = (from: string, to: string) => {
     setPeriodFrom(from);
     setPeriodTo(to);
     if (selectedOrgId) {
-      loadTripsForRange(selectedOrgId, from, to);
+      loadTrips(selectedOrgId, from, to);
     }
   };
 
   const setPresetRange = (preset: 'this_month' | 'last_month' | 'all') => {
-    const now = new Date();
+    const nowDate = new Date();
     if (preset === 'this_month') {
-      const from = `${now.toISOString().slice(0, 7)}-01`;
-      const to = now.toISOString().split('T')[0];
+      const from = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
+      const to = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
       handleDateRangeChange(from, to);
     } else if (preset === 'last_month') {
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-      const from = prev.toISOString().split('T')[0];
-      const to = lastDay.toISOString().split('T')[0];
+      const prev = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
+      const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth(), 0);
+      const from = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`;
+      const to = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
       handleDateRangeChange(from, to);
     } else if (preset === 'all') {
       handleDateRangeChange('', '');
@@ -157,73 +164,73 @@ const InvoicesPage: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedTripIds.length === availableTrips.length) {
+    if (selectedTripIds.length === liveTrips.length) {
       setSelectedTripIds([]);
     } else {
-      setSelectedTripIds(availableTrips.map(t => t.id));
+      setSelectedTripIds(liveTrips.map(t => t.id));
     }
   };
 
-  // Quick toggle trip status between Pending and Paid
+  // Toggle single trip status (Pending <-> Paid)
   const handleToggleTripStatus = async (tripId: string, currentStatus?: string) => {
-    const newStatus: 'Pending' | 'Paid' = currentStatus === 'Paid' ? 'Pending' : 'Paid';
+    const nextStatus: 'Pending' | 'Paid' = currentStatus === 'Paid' ? 'Pending' : 'Paid';
     try {
-      await tripService.updateTripBilling(tripId, { billingStatus: newStatus });
-      setAvailableTrips(prev => prev.map(t => {
+      await tripService.updateTripBilling(tripId, { billingStatus: nextStatus });
+      setLiveTrips(prev => prev.map(t => {
         if (t.id === tripId) {
-          const sellPrice = Number(t.trip_selling_price || 0);
+          const cost = Number(t.trip_selling_price || 0);
           const adv = Number(t.advance_amount || 0);
           return {
             ...t,
-            billing_status: newStatus,
-            pending_amount: newStatus === 'Paid' ? 0 : Math.max(0, sellPrice - adv),
+            billing_status: nextStatus,
+            pending_amount: nextStatus === 'Paid' ? 0 : Math.max(0, cost - adv),
           };
         }
         return t;
       }));
     } catch (err: any) {
-      alert(err.message || 'Error updating trip status');
+      alert(err.message || 'Error updating status');
     }
   };
 
-  // Quick save advance amount on a trip
+  // Save advance amount for a trip
   const handleSaveTripAdvance = async (tripId: string) => {
     const adv = Number(editAdvanceVal) || 0;
     try {
       await tripService.updateTripBilling(tripId, { advanceAmount: adv });
-      setAvailableTrips(prev => prev.map(t => {
+      setLiveTrips(prev => prev.map(t => {
         if (t.id === tripId) {
-          const sellPrice = Number(t.trip_selling_price || 0);
+          const cost = Number(t.trip_selling_price || 0);
           const isPaid = t.billing_status === 'Paid';
           return {
             ...t,
             advance_amount: adv,
-            pending_amount: isPaid ? 0 : Math.max(0, sellPrice - adv),
+            pending_amount: isPaid ? 0 : Math.max(0, cost - adv),
           };
         }
         return t;
       }));
       setEditingTripId(null);
     } catch (err: any) {
-      alert(err.message || 'Error updating trip advance');
+      alert(err.message || 'Error updating advance');
     }
   };
 
-  // Bulk update all selected trips to Paid or Pending
+  // Bulk update all selected trips
   const handleBulkSetStatus = async (targetStatus: 'Pending' | 'Paid') => {
     if (selectedTripIds.length === 0) return;
     try {
       for (const tid of selectedTripIds) {
         await tripService.updateTripBilling(tid, { billingStatus: targetStatus });
       }
-      setAvailableTrips(prev => prev.map(t => {
+      setLiveTrips(prev => prev.map(t => {
         if (selectedTripIds.includes(t.id)) {
-          const sellPrice = Number(t.trip_selling_price || 0);
+          const cost = Number(t.trip_selling_price || 0);
           const adv = Number(t.advance_amount || 0);
           return {
             ...t,
             billing_status: targetStatus,
-            pending_amount: targetStatus === 'Paid' ? 0 : Math.max(0, sellPrice - adv),
+            pending_amount: targetStatus === 'Paid' ? 0 : Math.max(0, cost - adv),
           };
         }
         return t;
@@ -234,55 +241,153 @@ const InvoicesPage: React.FC = () => {
   };
 
   // Selected trips calculations
-  const selectedTripsList = availableTrips.filter(t => selectedTripIds.includes(t.id));
-  const totalGrossAmount = selectedTripsList.reduce((sum, t) => sum + (Number(t.trip_selling_price) || 0), 0);
-  const totalAdvancePaid = selectedTripsList.reduce((sum, t) => {
+  const selectedTripsList = liveTrips.filter(t => selectedTripIds.includes(t.id));
+  const totalCost = selectedTripsList.reduce((sum, t) => sum + (Number(t.trip_selling_price) || 0), 0);
+  const totalAdv = selectedTripsList.reduce((sum, t) => {
     if (t.billing_status === 'Paid') return sum + (Number(t.trip_selling_price) || 0);
     return sum + (Number(t.advance_amount) || 0);
   }, 0);
-  const totalPendingBalance = Math.max(0, totalGrossAmount - totalAdvancePaid);
+  const totalPending = Math.max(0, totalCost - totalAdv);
 
-  const handleCreateInvoice = async (e: React.FormEvent) => {
+  // Active Organization
+  const currentOrg: Organization | null = selectedOrgId === 'all_partners'
+    ? (selectedTripsList.length > 0 && selectedTripsList.every(t => t.organization_id === selectedTripsList[0].organization_id)
+        ? organizations.find(o => o.id === selectedTripsList[0].organization_id) || null
+        : {
+            id: 'all_partners',
+            name: 'All Partner Organizations',
+            type: 'Client',
+            contact_person: 'Partner Coordinator',
+            phone: '',
+            payment_terms: 'Billing Settlement',
+            whatsapp: '',
+            credit_limit: 0,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as unknown as Organization)
+    : organizations.find(o => o.id === selectedOrgId) || null;
+
+  // Open Live Bill Preview / Print
+  const handleOpenLiveBillPreview = () => {
+    if (selectedTripsList.length === 0) {
+      alert('Please select at least one trip to generate the bill.');
+      return;
+    }
+    const orgName = currentOrg?.name || 'Client';
+    const cleanPrefix = orgName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+    const tempInvNum = `BILL-${cleanPrefix}-${todayStr.replace(/-/g, '').slice(2)}`;
+
+    setPreviewInvoice({
+      invoice_number: tempInvNum,
+      invoice_date: todayStr,
+      organization: currentOrg,
+      period_from: periodFrom,
+      period_to: periodTo,
+      trips: selectedTripsList,
+      total_amount: totalCost,
+      paid_against_invoice: totalAdv,
+      balance: totalPending,
+      notes: currentOrg?.payment_terms || 'Please transfer pending balance to our official bank account or UPI.',
+    });
+  };
+
+  // Save as Formal Invoice in DB
+  const handleSaveFormalInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedTripIds.length === 0) {
       alert('Please select at least one trip to generate this invoice');
       return;
     }
 
+    const orgIdToSave = selectedOrgId === 'all_partners'
+      ? selectedTripsList[0]?.organization_id
+      : selectedOrgId;
+
+    if (!orgIdToSave) {
+      alert('Please select a specific organization for formal invoice archiving');
+      return;
+    }
+
     try {
       await invoiceService.create(
         {
-          organization_id: selectedOrgId,
-          invoice_type: invoiceType,
-          invoice_date: invoiceDate,
+          organization_id: orgIdToSave,
+          invoice_type: saveInvoiceType,
+          invoice_date: saveInvoiceDate,
           period_from: periodFrom || null as any,
           period_to: periodTo || null as any,
-          status: totalPendingBalance === 0 ? 'Paid' : 'Issued',
-          notes: notes || null as any,
-          total_amount: totalGrossAmount,
+          status: totalPending === 0 ? 'Paid' : 'Issued',
+          notes: saveNotes || null as any,
+          total_amount: totalCost,
         },
         selectedTripIds
       );
-      setIsCreateModalOpen(false);
-      loadAll();
+      setIsSaveModalOpen(false);
+      // Reload invoices
+      const invList = await invoiceService.getAll();
+      setInvoices(invList);
+      setActiveTab('saved_invoices');
     } catch (err: any) {
-      alert(err.message || 'Error creating invoice');
+      alert(err.message || 'Error saving invoice');
     }
   };
 
   const handleDeleteInvoice = async (invoiceId: string) => {
-    if (!confirm('Are you sure you want to delete this invoice? The linked trips will remain available for future billing.')) {
+    if (!confirm('Are you sure you want to delete this invoice? The linked trips will remain available for billing.')) {
       return;
     }
     try {
       await invoiceService.deleteInvoice(invoiceId);
-      loadAll();
+      const invList = await invoiceService.getAll();
+      setInvoices(invList);
     } catch (err: any) {
       alert(err.message || 'Error deleting invoice');
     }
   };
 
-  const filtered = invoices.filter(inv => {
+  // WhatsApp Message Generator
+  const generateWhatsAppBillMessage = (
+    org: Organization | null,
+    trips: Trip[],
+    gross: number,
+    advance: number,
+    balance: number,
+    from: string,
+    to: string,
+    invNum?: string
+  ) => {
+    const orgName = org?.name || 'Client';
+    const periodStr = from && to ? `${formatDate(from)} to ${formatDate(to)}` : 'Current Pending Billing';
+
+    let msg = `📄 *VILLALEMON PICKUP — CLIENT BILL*\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `🏢 *Organization:* ${orgName}\n`;
+    if (invNum) msg += `🧾 *Bill / Invoice #:* ${invNum}\n`;
+    msg += `📅 *Billing Period:* ${periodStr}\n`;
+    msg += `🚕 *Total Trips:* ${trips.length}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💰 *Total Trip Cost:* Rs. ${gross.toLocaleString('en-IN')}\n`;
+    msg += `✅ *Advance / Paid:* Rs. ${advance.toLocaleString('en-IN')}\n`;
+    msg += `⚠️ *Net Pending Balance:* Rs. ${balance.toLocaleString('en-IN')}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    msg += `*Trip Breakdown:*\n`;
+
+    trips.forEach((t, idx) => {
+      const c = Number(t.trip_selling_price || 0);
+      const a = Number(t.advance_amount || 0);
+      const p = t.billing_status === 'Paid' ? 0 : Math.max(0, c - a);
+      msg += `${idx + 1}. ${formatDate(t.trip_date)} (${t.trip_number}): ${t.guest_names || 'Guest'} • Cost: Rs. ${c.toLocaleString('en-IN')}`;
+      if (a > 0) msg += ` (Adv: Rs. ${a.toLocaleString('en-IN')})`;
+      msg += ` • Due: Rs. ${p.toLocaleString('en-IN')} [${t.billing_status || 'Pending'}]\n`;
+    });
+
+    msg += `\n_Please transfer pending balance to our official bank account or UPI. Thank you for your continued partnership!_`;
+    return msg;
+  };
+
+  // Filter saved invoices
+  const filteredInvoices = invoices.filter(inv => {
     if (search.trim()) {
       const q = search.toLowerCase();
       const matchNum = (inv.invoice_number || '').toLowerCase().includes(q);
@@ -292,445 +397,298 @@ const InvoicesPage: React.FC = () => {
     return true;
   });
 
-  const totalBilled = invoices.reduce((sum, i) => sum + (i.total_amount || 0), 0);
-  const totalPaid = invoices.reduce((sum, i) => sum + (i.paid_against_invoice || 0), 0);
-  const totalBalanceDue = invoices.reduce((sum, i) => sum + (i.balance || 0), 0);
-
-  // Helper to format WhatsApp message for an invoice
-  const generateInvoiceWhatsAppMessage = (inv: Invoice) => {
-    const orgName = inv.organization?.name || 'Client';
-    const periodStr = inv.period_from && inv.period_to ? `${formatDate(inv.period_from)} to ${formatDate(inv.period_to)}` : formatDate(inv.invoice_date);
-    const trips = inv.trips || [];
-    
-    let text = `📄 *VILLALEMON PICKUP — CLIENT INVOICE*\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🏢 *Organization:* ${orgName}\n`;
-    text += `🧾 *Invoice #:* ${inv.invoice_number}\n`;
-    text += `📅 *Billing Period:* ${periodStr}\n`;
-    text += `🚕 *Total Trips:* ${trips.length}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `💰 *Total Trip Cost:* Rs. ${(inv.total_amount || 0).toLocaleString('en-IN')}\n`;
-    text += `✅ *Advance / Paid:* Rs. ${(inv.paid_against_invoice || 0).toLocaleString('en-IN')}\n`;
-    text += `⚠️ *Net Pending Balance:* Rs. ${(inv.balance || 0).toLocaleString('en-IN')}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    text += `*Trip Breakdown:*\n`;
-
-    trips.forEach((t, idx) => {
-      const cost = Number(t.trip_selling_price) || 0;
-      const adv = Number(t.advance_amount) || 0;
-      const pend = t.billing_status === 'Paid' ? 0 : Math.max(0, cost - adv);
-      text += `${idx + 1}. ${formatDate(t.trip_date)} (${t.trip_number}): ${t.guest_names || 'Guest'} • Cost: Rs. ${cost.toLocaleString('en-IN')}`;
-      if (adv > 0) text += ` (Adv: Rs. ${adv.toLocaleString('en-IN')})`;
-      text += ` • Due: Rs. ${pend.toLocaleString('en-IN')} [${t.billing_status || 'Pending'}]\n`;
-    });
-
-    text += `\n_Please transfer pending balance to our official bank account or UPI. Thank you for your partnership!_`;
-    return text;
-  };
-
-  const selectedOrgObj = organizations.find(o => o.id === selectedOrgId);
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bills & Invoices</h1>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">Bills & Invoices</h1>
           <p className="text-xs text-slate-500">
-            Generate and manage tax bills from date to date for partner organizations with full trip breakdowns, advances, and pending balances
+            Generate and manage pending bills from date to date for partner organizations with full trip breakdowns, advances, and balances due
           </p>
-        </div>
-
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all active:scale-95"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Generate Invoice (Date to Date)</span>
-        </button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-            Total Invoiced Amount
-          </span>
-          <p className="text-2xl font-black text-slate-900">{formatINR(totalBilled)}</p>
-          <p className="text-[11px] text-slate-500 mt-1">{invoices.length} issued bills</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-            Total Paid / Advances
-          </span>
-          <p className="text-2xl font-black text-emerald-600">{formatINR(totalPaid)}</p>
-          <p className="text-[11px] text-slate-500 mt-1">Advances credited & settled amounts</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-            Total Pending Balance Due
-          </span>
-          <p className="text-2xl font-black text-amber-600">{formatINR(totalBalanceDue)}</p>
-          <p className="text-[11px] text-slate-500 mt-1">Pending collection from partner organizations</p>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search invoice #, client organization..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={handleOpenCreate}
-            className="btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-1.5"
+            onClick={handleOpenLiveBillPreview}
+            disabled={selectedTripsList.length === 0}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
           >
-            <Calendar className="w-3.5 h-3.5 text-blue-600" />
-            <span>New Bill from Date Range</span>
+            <Printer className="w-4 h-4" />
+            <span>Print / View Date-to-Date Bill</span>
           </button>
+
+          <a
+            href={formatWhatsAppShareUrl(
+              currentOrg?.phone,
+              generateWhatsAppBillMessage(currentOrg, selectedTripsList, totalCost, totalAdv, totalPending, periodFrom, periodTo)
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 inline-flex items-center gap-1.5"
+            title="Share Pending Bill on WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4 fill-white" />
+            <span className="hidden sm:inline">WhatsApp Bill</span>
+          </a>
         </div>
       </div>
 
-      {/* Invoices Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-16 flex justify-center">
-            <LoadingSpinner size="lg" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-            <p className="text-base font-bold text-slate-700">No invoices generated yet</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Select any partner organization (e.g. Rythm Bay Home) and date range to bundle trips, reduce advances, and issue official bills.
-            </p>
-            <button
-              onClick={handleOpenCreate}
-              className="mt-4 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Generate First Invoice</span>
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-4">Invoice #</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Client Organization</th>
-                  <th className="py-3 px-4">Billing Period</th>
-                  <th className="py-3 px-4 text-center">Trips</th>
-                  <th className="py-3 px-4 text-right">Total Amount</th>
-                  <th className="py-3 px-4 text-right">Advance / Paid</th>
-                  <th className="py-3 px-4 text-right">Pending Balance</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map(inv => (
-                  <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-blue-900 text-sm">
-                      {inv.invoice_number}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-slate-700">
-                      {formatDate(inv.invoice_date)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <p className="font-bold text-slate-900">{inv.organization?.name || 'Client'}</p>
-                      <p className="text-slate-500 text-[11px]">{inv.organization?.contact_person}</p>
-                    </td>
-                    <td className="py-3 px-4">
-                      {inv.period_from ? (
-                        <p className="font-semibold text-slate-800">
-                          {formatDate(inv.period_from)} → {formatDate(inv.period_to || '')}
-                        </p>
-                      ) : (
-                        <span className="text-slate-400">Single invoice</span>
-                      )}
-                      <span className="text-[10px] text-slate-400">{inv.invoice_type}</span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800">
-                        {inv.trips_count || inv.trips?.length || 0} trips
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
-                      {formatINR(inv.total_amount)}
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-emerald-600 font-mono">
-                      {formatINR(inv.paid_against_invoice || 0)}
-                    </td>
-                    <td className="py-3 px-4 text-right font-black text-amber-700 font-mono text-sm">
-                      {formatINR(inv.balance || 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        (inv.balance || 0) === 0 || inv.status === 'Paid'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {(inv.balance || 0) === 0 ? 'Paid' : inv.status || 'Pending'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setSelectedInvoice(inv)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors text-xs font-semibold"
-                          title="View & Print Full Bill"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View Bill</span>
-                        </button>
+      {/* Tabs Header */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold">
+        <button
+          onClick={() => setActiveTab('pending_bills')}
+          className={`px-4 py-2 rounded-xl transition-all inline-flex items-center gap-2 ${
+            activeTab === 'pending_bills'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Pending Bills by Organization (Date to Date)</span>
+          {liveTrips.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-white">
+              {liveTrips.length}
+            </span>
+          )}
+        </button>
 
-                        <a
-                          href={formatWhatsAppShareUrl(
-                            inv.organization?.phone,
-                            generateInvoiceWhatsAppMessage(inv)
-                          )}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors text-xs font-semibold"
-                          title="Share Bill Breakdown on WhatsApp"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </a>
-
-                        <button
-                          onClick={() => handleDeleteInvoice(inv.id)}
-                          className="p-1 text-slate-400 hover:text-red-600 transition-colors rounded-lg"
-                          title="Delete Invoice"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <button
+          onClick={() => setActiveTab('saved_invoices')}
+          className={`px-4 py-2 rounded-xl transition-all inline-flex items-center gap-2 ${
+            activeTab === 'saved_invoices'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Receipt className="w-4 h-4" />
+          <span>Issued Invoices Archive</span>
+          {invoices.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-800">
+              {invoices.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* ============================================================== */}
-      {/* GENERATE INVOICE MODAL (From Date to Date with Full Breakdown)  */}
+      {/* TAB 1: LIVE PENDING BILLS BY ORGANIZATION (Date to Date)       */}
       {/* ============================================================== */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-7 shadow-2xl max-h-[92vh] overflow-y-auto space-y-5 border border-slate-100">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                  Generate Organization Bill from Date to Date
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Select client organization and date range to load trips, apply advances, and prepare pending bills
-                </p>
+      {activeTab === 'pending_bills' && (
+        <div className="space-y-5">
+          {/* Filter Bar: Select Organization & Date Range */}
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <span className="font-black text-slate-900 text-xs uppercase tracking-wider">
+                  Organization & Billing Period Filter
+                </span>
               </div>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-slate-400 font-medium mr-1">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => setPresetRange('this_month')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                >
+                  This Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetRange('last_month')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                >
+                  Last Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetRange('all')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700"
+                >
+                  All Dates
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleCreateInvoice} className="space-y-4 text-xs">
-              {/* Row 1: Organization & Invoice Type */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Select Client Organization *
-                  </label>
-                  <select
-                    value={selectedOrgId}
-                    onChange={e => handleOrgChange(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    {organizations.map(o => {
-                      const isOwn = o.name.toLowerCase().includes('villa lemon');
-                      return (
-                        <option key={o.id} value={o.id}>
-                          {o.name} {isOwn ? '(Own Organization)' : `(${o.type || 'Client Partner'})`}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedOrgObj?.name.toLowerCase().includes('villa lemon') && (
-                    <p className="text-[11px] text-amber-600 font-medium mt-1">
-                      ℹ️ Villa Lemon is the in-house organization. For external clients (e.g. Rythm Bay Home, Panchavadi), select their organization above.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Invoice Type
-                  </label>
-                  <select
-                    value={invoiceType}
-                    onChange={e => setInvoiceType(e.target.value as InvoiceType)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    {INVOICE_TYPES.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Client Partner Organization *
+                </label>
+                <select
+                  value={selectedOrgId}
+                  onChange={e => handleOrgChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all_partners">⚡ All Partner Organizations (Excluding Villa Lemon)</option>
+                  {organizations.map(o => {
+                    const isOwn = o.name.toLowerCase().includes('villa lemon');
+                    return (
+                      <option key={o.id} value={o.id}>
+                        {o.name} {isOwn ? '(Own Organization)' : `(${o.type || 'Client'})`}
+                      </option>
+                    );
+                  })}
+                </select>
+                {currentOrg?.name.toLowerCase().includes('villa lemon') && (
+                  <p className="text-[10px] text-amber-600 mt-1 font-medium">
+                    Villa Lemon is the in-house organization. For external clients (Rythm Bay Home, Monkutty, Panchavadi), select their organization above.
+                  </p>
+                )}
               </div>
 
-              {/* Row 2: Date to Date Selection with Quick Presets */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="font-bold text-slate-800 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Billing Date Range (From Date to Date)</span>
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setPresetRange('this_month')}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 shadow-xs"
-                    >
-                      This Month
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPresetRange('last_month')}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 shadow-xs"
-                    >
-                      Last Month
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPresetRange('all')}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 shadow-xs"
-                    >
-                      All Pending
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Invoice Bill Date</label>
-                    <input
-                      type="date"
-                      value={invoiceDate}
-                      onChange={e => setInvoiceDate(e.target.value)}
-                      required
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Period From (Start Date)</label>
-                    <input
-                      type="date"
-                      value={periodFrom}
-                      onChange={e => handleDateRangeChange(e.target.value, periodTo)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Period To (End Date)</label>
-                    <input
-                      type="date"
-                      value={periodTo}
-                      onChange={e => handleDateRangeChange(periodFrom, e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 bg-white"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Billing Period From (Start Date)
+                </label>
+                <input
+                  type="date"
+                  value={periodFrom}
+                  onChange={e => handleDateRangeChange(e.target.value, periodTo)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold bg-white"
+                />
               </div>
 
-              {/* Row 3: Live Trips Breakdown Section */}
-              <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-900 text-xs uppercase tracking-wider">
-                      Trips Breakdown ({availableTrips.length} found)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleSelectAll}
-                      className="text-[11px] font-bold text-blue-600 hover:underline"
-                    >
-                      {selectedTripIds.length === availableTrips.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  </div>
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Billing Period To (End Date)
+                </label>
+                <input
+                  type="date"
+                  value={periodTo}
+                  onChange={e => handleDateRangeChange(periodFrom, e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold bg-white"
+                />
+              </div>
+            </div>
+          </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleBulkSetStatus('Pending')}
-                      className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold"
-                      title="Set all selected trips status to Pending"
-                    >
-                      Mark Selected Pending
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBulkSetStatus('Paid')}
-                      className="px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-bold"
-                      title="Set all selected trips status to Paid"
-                    >
-                      Mark Selected Paid
-                    </button>
-                  </div>
-                </div>
+          {/* Live Dynamic KPI Cards for this Organization & Date Range */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Selected Trips
+              </span>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 font-mono">
+                {selectedTripsList.length} <span className="text-xs font-normal text-slate-400">/ {liveTrips.length}</span>
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{currentOrg?.name || 'Selected client'}</p>
+            </div>
 
-                {/* Summary Banner for Selected Trips */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-white rounded-xl border border-slate-200 shadow-xs font-mono text-center">
-                  <div>
-                    <span className="text-[10px] font-sans font-bold text-slate-400 block uppercase">No. of Trips</span>
-                    <span className="text-sm font-black text-blue-900">{selectedTripsList.length} trips</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-sans font-bold text-slate-400 block uppercase">Total Trip Cost</span>
-                    <span className="text-sm font-black text-slate-900">{formatINR(totalGrossAmount)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-sans font-bold text-slate-400 block uppercase">Advance / Paid</span>
-                    <span className="text-sm font-black text-emerald-600">{formatINR(totalAdvancePaid)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-sans font-bold text-slate-400 block uppercase">Pending Balance</span>
-                    <span className="text-sm font-black text-amber-700">{formatINR(totalPendingBalance)}</span>
-                  </div>
-                </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Total Trip Cost
+              </span>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                {formatINR(totalCost)}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Full amount client gives</p>
+            </div>
 
-                {/* Table of Trips */}
-                {loadingTrips ? (
-                  <div className="py-8 flex justify-center">
-                    <LoadingSpinner size="md" />
-                  </div>
-                ) : availableTrips.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
-                    <p className="font-semibold text-xs">No trips found for this organization in this date range.</p>
-                    <p className="text-[11px] mt-0.5">Try widening the dates or selecting another organization.</p>
-                  </div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
-                    {availableTrips.map(t => {
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block mb-0.5">
+                Advance / Paid
+              </span>
+              <p className="text-xl sm:text-2xl font-black text-emerald-600 font-mono">
+                {formatINR(totalAdv)}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Deducted from bill</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-amber-300 shadow-xs bg-gradient-to-b from-amber-50/40 to-white">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block mb-0.5">
+                Net Pending Due
+              </span>
+              <p className="text-xl sm:text-2xl font-black text-amber-700 font-mono">
+                {formatINR(totalPending)}
+              </p>
+              <p className="text-[10px] text-amber-800 font-medium mt-0.5">Amount to collect now</p>
+            </div>
+          </div>
+
+          {/* Trips Breakdown Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="font-black text-slate-900 uppercase tracking-wider">
+                  Trips in Range: {currentOrg?.name || 'Client'} ({liveTrips.length} Found)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="font-bold text-blue-600 hover:underline"
+                >
+                  {selectedTripIds.length === liveTrips.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleBulkSetStatus('Pending')}
+                  className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px]"
+                >
+                  Mark Selected as Pending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkSetStatus('Paid')}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px]"
+                >
+                  Mark Selected as Paid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSaveModalOpen(true)}
+                  disabled={selectedTripsList.length === 0}
+                  className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50 inline-flex items-center gap-1"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Save as Invoice</span>
+                </button>
+              </div>
+            </div>
+
+            {loadingTrips ? (
+              <div className="p-16 flex justify-center">
+                <LoadingSpinner size="lg" />
+              </div>
+            ) : liveTrips.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">No trips found for this organization in this date range</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Select another organization (e.g. Rythm Bay Home) or click "All Dates" preset above to view all past and upcoming trips.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-3 text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedTripIds.length === liveTrips.length && liveTrips.length > 0}
+                          onChange={handleSelectAll}
+                          className="rounded text-blue-600"
+                        />
+                      </th>
+                      <th className="py-3 px-3">Date & Time</th>
+                      <th className="py-3 px-3">Trip ID</th>
+                      <th className="py-3 px-3">Guest & Route</th>
+                      <th className="py-3 px-3">Vehicle</th>
+                      <th className="py-3 px-3 text-right">Trip Cost (Gross)</th>
+                      <th className="py-3 px-3 text-right">Advance Given</th>
+                      <th className="py-3 px-3 text-right">Pending Balance</th>
+                      <th className="py-3 px-3 text-center">Payment Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {liveTrips.map(t => {
                       const isSelected = selectedTripIds.includes(t.id);
                       const cost = Number(t.trip_selling_price || 0);
                       const adv = Number(t.advance_amount || 0);
@@ -738,153 +696,279 @@ const InvoicesPage: React.FC = () => {
                       const pend = isPaid ? 0 : Math.max(0, cost - adv);
 
                       return (
-                        <div
+                        <tr
                           key={t.id}
-                          className={`p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors ${
-                            isSelected ? 'bg-blue-50/50' : 'hover:bg-slate-50'
-                          }`}
+                          className={`transition-colors ${isSelected ? 'bg-blue-50/40' : 'hover:bg-slate-50/60'}`}
                         >
-                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <td className="py-3 px-3 text-center">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleTripSelection(t.id)}
-                              className="mt-1 rounded text-blue-600 focus:ring-blue-500"
+                              className="rounded text-blue-600"
                             />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono font-black text-blue-900">{t.trip_number}</span>
-                                <span className="font-semibold text-slate-800">{formatDate(t.trip_date)}</span>
-                                {t.pickup_time && (
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    {formatTime(t.pickup_time)}
-                                  </span>
-                                )}
-                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">
-                                  {t.required_cab_type || 'Cab'}
-                                </span>
-                              </div>
-                              <p className="text-slate-700 font-medium truncate mt-0.5">
-                                Guest: <strong>{t.guest_names || 'Guest'}</strong> • Route: {t.pickup_location} → {t.dropoff_location}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 font-mono self-end sm:self-auto shrink-0 flex-wrap">
-                            <div>
-                              <span className="text-[9px] font-sans text-slate-400 block">Cost</span>
-                              <span className="font-bold text-slate-900">{formatINR(cost)}</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[9px] font-sans text-slate-400 block">Advance</span>
-                              {editingTripId === t.id ? (
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    value={editAdvanceVal}
-                                    onChange={e => setEditAdvanceVal(e.target.value === '' ? '' : Number(e.target.value))}
-                                    className="w-16 px-1 py-0.5 text-[11px] border rounded"
-                                    autoFocus
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveTripAdvance(t.id)}
-                                    className="p-1 bg-emerald-600 text-white rounded text-[10px]"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
+                          </td>
+                          <td className="py-3 px-3 font-medium text-slate-800 whitespace-nowrap">
+                            {formatDate(t.trip_date)}
+                            {t.pickup_time && (
+                              <span className="text-[10px] text-slate-400 block font-mono">
+                                {formatTime(t.pickup_time)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-blue-900 whitespace-nowrap">
+                            {t.trip_number}
+                          </td>
+                          <td className="py-3 px-3">
+                            <p className="font-bold text-slate-900">{t.guest_names || 'Guest'}</p>
+                            <p className="text-slate-500 text-[11px] truncate max-w-xs">
+                              {t.pickup_location} → {t.dropoff_location}
+                            </p>
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 font-medium">
+                            {t.required_cab_type || 'Cab'}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm whitespace-nowrap">
+                            {formatINR(cost)}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                            {editingTripId === t.id ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  value={editAdvanceVal}
+                                  onChange={e => setEditAdvanceVal(e.target.value === '' ? '' : Number(e.target.value))}
+                                  className="w-16 px-1.5 py-0.5 text-xs border rounded bg-white text-right"
+                                  autoFocus
+                                />
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setEditingTripId(t.id);
-                                    setEditAdvanceVal(adv);
-                                  }}
-                                  className="font-semibold text-emerald-700 hover:underline flex items-center gap-0.5"
-                                  title="Click to edit advance"
+                                  onClick={() => handleSaveTripAdvance(t.id)}
+                                  className="p-1 bg-emerald-600 text-white rounded text-[10px]"
+                                  title="Save Advance"
                                 >
-                                  <span>{formatINR(adv)}</span>
-                                  <Edit2 className="w-2.5 h-2.5 text-slate-400" />
+                                  <Check className="w-3 h-3" />
                                 </button>
-                              )}
-                            </div>
-
-                            <div>
-                              <span className="text-[9px] font-sans text-slate-400 block">Pending</span>
-                              <span className="font-black text-amber-700">{formatINR(pend)}</span>
-                            </div>
-
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingTripId(t.id);
+                                  setEditAdvanceVal(adv);
+                                }}
+                                className="font-semibold text-emerald-700 hover:underline inline-flex items-center gap-1 group"
+                                title="Click to adjust advance received"
+                              >
+                                <span>{formatINR(adv)}</span>
+                                <Edit2 className="w-2.5 h-2.5 text-slate-300 group-hover:text-emerald-700" />
+                              </button>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-black text-amber-700 text-sm whitespace-nowrap">
+                            {formatINR(pend)}
+                          </td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => handleToggleTripStatus(t.id, t.billing_status)}
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-sans transition-transform active:scale-95 ${
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-transform active:scale-95 shadow-2xs ${
                                 isPaid
                                   ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
                                   : 'bg-amber-100 hover:bg-amber-200 text-amber-800'
                               }`}
-                              title="Click to toggle status"
+                              title="Click to toggle status between Pending and Paid"
                             >
-                              {isPaid ? '✓ Paid' : '⏳ Pending'}
+                              {isPaid ? '✓ Bill Paid' : '⏳ Due (Pending)'}
                             </button>
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       );
                     })}
-                  </div>
-                )}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t font-mono font-bold">
+                    <tr>
+                      <td colSpan={5} className="py-3 px-3 font-sans font-bold text-slate-800 text-right">
+                        Selected Subtotals ({selectedTripsList.length} trips):
+                      </td>
+                      <td className="py-3 px-3 text-right text-slate-900 text-sm">
+                        {formatINR(totalCost)}
+                      </td>
+                      <td className="py-3 px-3 text-right text-emerald-700 text-sm">
+                        {formatINR(totalAdv)}
+                      </td>
+                      <td className="py-3 px-3 text-right text-base text-amber-800 font-black">
+                        {formatINR(totalPending)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Invoice Notes & Bank Account / UPI Details
-                </label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="e.g. Please transfer to Villa Lemon A/c 1234567890 IFSC ... / UPI villalemon@upi"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                />
-              </div>
-
-              {/* Footer */}
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-                <span className="text-xs font-mono font-bold text-slate-700">
-                  Total Billable Due: <strong className="text-blue-900 text-sm">{formatINR(totalPendingBalance)}</strong>
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateModalOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={selectedTripIds.length === 0}
-                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md disabled:opacity-50 inline-flex items-center gap-1.5"
-                  >
-                    <Receipt className="w-4 h-4" />
-                    <span>Issue Invoice ({selectedTripIds.length} Trips)</span>
-                  </button>
-                </div>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       )}
 
       {/* ============================================================== */}
-      {/* PRINTABLE / VIEW INVOICE MODAL (Complete Breakdown with Print) */}
+      {/* TAB 2: ISSUED INVOICES ARCHIVE                                  */}
       {/* ============================================================== */}
-      {selectedInvoice && (
+      {activeTab === 'saved_invoices' && (
+        <div className="space-y-4">
+          {/* Search bar */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search invoice #, client organization..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <button
+              onClick={() => setActiveTab('pending_bills')}
+              className="btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
+              <span>Bill Unbilled Trips</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            {filteredInvoices.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-base font-bold text-slate-700">No saved invoices in archive</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Go to "Pending Bills by Organization" tab above and click "Save as Invoice" to issue official archival bills.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-4">Invoice #</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Client Organization</th>
+                      <th className="py-3 px-4">Billing Period</th>
+                      <th className="py-3 px-4 text-center">Trips</th>
+                      <th className="py-3 px-4 text-right">Total Amount</th>
+                      <th className="py-3 px-4 text-right">Advance / Paid</th>
+                      <th className="py-3 px-4 text-right">Pending Balance</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredInvoices.map(inv => (
+                      <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-blue-900 text-sm">
+                          {inv.invoice_number}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-700">
+                          {formatDate(inv.invoice_date)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <p className="font-bold text-slate-900">{inv.organization?.name || 'Client'}</p>
+                          <p className="text-slate-500 text-[11px]">{inv.organization?.contact_person}</p>
+                        </td>
+                        <td className="py-3 px-4">
+                          {inv.period_from ? (
+                            <p className="font-semibold text-slate-800">
+                              {formatDate(inv.period_from)} → {formatDate(inv.period_to || '')}
+                            </p>
+                          ) : (
+                            <span className="text-slate-400">Single invoice</span>
+                          )}
+                          <span className="text-[10px] text-slate-400">{inv.invoice_type}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800">
+                            {inv.trips_count || inv.trips?.length || 0} trips
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
+                          {formatINR(inv.total_amount)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-emerald-600 font-mono">
+                          {formatINR(inv.paid_against_invoice || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-amber-700 font-mono text-sm">
+                          {formatINR(inv.balance || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            (inv.balance || 0) === 0 || inv.status === 'Paid'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {(inv.balance || 0) === 0 ? 'Paid' : inv.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setPreviewInvoice({
+                                invoice_number: inv.invoice_number,
+                                invoice_date: inv.invoice_date,
+                                organization: inv.organization || null,
+                                period_from: inv.period_from || '',
+                                period_to: inv.period_to || '',
+                                trips: inv.trips || [],
+                                total_amount: inv.total_amount || 0,
+                                paid_against_invoice: inv.paid_against_invoice || 0,
+                                balance: inv.balance || 0,
+                                notes: inv.notes,
+                              })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors text-xs font-semibold"
+                              title="View & Print Full Bill"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View Bill</span>
+                            </button>
+
+                            <a
+                              href={formatWhatsAppShareUrl(
+                                inv.organization?.phone,
+                                generateWhatsAppBillMessage(inv.organization || null, inv.trips || [], inv.total_amount || 0, inv.paid_against_invoice || 0, inv.balance || 0, inv.period_from || '', inv.period_to || '', inv.invoice_number)
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors text-xs font-semibold"
+                              title="Share Bill Breakdown on WhatsApp"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+
+                            <button
+                              onClick={() => handleDeleteInvoice(inv.id)}
+                              className="p-1 text-slate-400 hover:text-red-600 transition-colors rounded-lg"
+                              title="Delete Invoice"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 1: PRINTABLE INVOICE / DATE-TO-DATE TAX BILL             */}
+      {/* ============================================================== */}
+      {previewInvoice && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl max-h-[92vh] overflow-y-auto space-y-6 border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl max-h-[92vh] overflow-y-auto space-y-6 border border-slate-100">
             {/* Header */}
             <div className="flex items-start justify-between border-b pb-4 flex-wrap gap-3">
               <div>
@@ -894,15 +978,15 @@ const InvoicesPage: React.FC = () => {
               </div>
               <div className="text-right">
                 <span className="font-mono font-black text-blue-900 text-lg sm:text-xl block">
-                  {selectedInvoice.invoice_number}
+                  {previewInvoice.invoice_number}
                 </span>
-                <p className="text-xs text-slate-500">Date: {formatDate(selectedInvoice.invoice_date)}</p>
+                <p className="text-xs text-slate-500">Date: {formatDate(previewInvoice.invoice_date)}</p>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
-                  (selectedInvoice.balance || 0) === 0
+                  previewInvoice.balance === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {(selectedInvoice.balance || 0) === 0 ? 'STATUS: PAID' : 'STATUS: PENDING PAYMENT'}
+                  {previewInvoice.balance === 0 ? 'STATUS: PAID' : 'STATUS: PENDING PAYMENT'}
                 </span>
               </div>
             </div>
@@ -911,24 +995,23 @@ const InvoicesPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                 <p className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Billed To (Client)</p>
-                <p className="font-black text-slate-900 text-base">{selectedInvoice.organization?.name || 'Client'}</p>
-                <p className="text-slate-600">Contact: {selectedInvoice.organization?.contact_person || 'Authorized Manager'}</p>
-                <p className="text-slate-600">Phone: {selectedInvoice.organization?.phone || '-'}</p>
-                {selectedInvoice.organization?.billing_address && (
-                  <p className="text-slate-500 text-[11px] mt-1">{selectedInvoice.organization?.billing_address}</p>
+                <p className="font-black text-slate-900 text-base">{previewInvoice.organization?.name || 'Client'}</p>
+                <p className="text-slate-600">Contact: {previewInvoice.organization?.contact_person || 'Authorized Manager'}</p>
+                <p className="text-slate-600">Phone: {previewInvoice.organization?.phone || '-'}</p>
+                {previewInvoice.organization?.billing_address && (
+                  <p className="text-slate-500 text-[11px] mt-1">{previewInvoice.organization?.billing_address}</p>
                 )}
               </div>
 
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                 <p className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Invoice Overview</p>
-                <p className="text-slate-700">Billing Type: <strong>{selectedInvoice.invoice_type}</strong></p>
-                {selectedInvoice.period_from && (
+                {previewInvoice.period_from && (
                   <p className="text-slate-700">
-                    Period: <strong>{formatDate(selectedInvoice.period_from)}</strong> to <strong>{formatDate(selectedInvoice.period_to || '')}</strong>
+                    Billing Period: <strong>{formatDate(previewInvoice.period_from)}</strong> to <strong>{formatDate(previewInvoice.period_to || '')}</strong>
                   </p>
                 )}
                 <p className="text-slate-700">
-                  Total Trips Included: <strong>{selectedInvoice.trips?.length || selectedInvoice.trips_count || 0} trips</strong>
+                  Total Duties Billed: <strong>{previewInvoice.trips.length} trips</strong>
                 </p>
               </div>
             </div>
@@ -937,26 +1020,26 @@ const InvoicesPage: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono">
               <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
                 <span className="text-[10px] font-sans font-bold text-blue-700 block uppercase">No. of Trips</span>
-                <span className="text-base font-black text-blue-950">{selectedInvoice.trips?.length || 0}</span>
+                <span className="text-base font-black text-blue-950">{previewInvoice.trips.length}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="text-[10px] font-sans font-bold text-slate-500 block uppercase">Total Amount</span>
-                <span className="text-base font-black text-slate-900">{formatINR(selectedInvoice.total_amount)}</span>
+                <span className="text-[10px] font-sans font-bold text-slate-500 block uppercase">Total Trip Cost</span>
+                <span className="text-base font-black text-slate-900">{formatINR(previewInvoice.total_amount)}</span>
               </div>
               <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
                 <span className="text-[10px] font-sans font-bold text-emerald-700 block uppercase">Advance / Paid</span>
-                <span className="text-base font-black text-emerald-700">{formatINR(selectedInvoice.paid_against_invoice || 0)}</span>
+                <span className="text-base font-black text-emerald-700">{formatINR(previewInvoice.paid_against_invoice)}</span>
               </div>
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
                 <span className="text-[10px] font-sans font-bold text-amber-800 block uppercase">Pending Balance</span>
-                <span className="text-base font-black text-amber-900">{formatINR(selectedInvoice.balance || 0)}</span>
+                <span className="text-base font-black text-amber-900">{formatINR(previewInvoice.balance)}</span>
               </div>
             </div>
 
-            {/* Full Itemized Trips Breakdown Table */}
+            {/* Itemized Table */}
             <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
               <div className="p-3 bg-slate-100/70 border-b border-slate-200 font-bold text-slate-800 uppercase text-[10px] tracking-wider flex items-center justify-between">
-                <span>Trip Breakdown ({selectedInvoice.trips?.length || 0} Duties)</span>
+                <span>Itemized Duty Breakdown ({previewInvoice.trips.length} Duties)</span>
                 <span>Currency: INR (₹)</span>
               </div>
 
@@ -976,7 +1059,7 @@ const InvoicesPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {(selectedInvoice.trips || []).map((t, idx) => {
+                    {previewInvoice.trips.map((t, idx) => {
                       const cost = Number(t.trip_selling_price || 0);
                       const adv = Number(t.advance_amount || 0);
                       const isPaid = t.billing_status === 'Paid';
@@ -1025,13 +1108,13 @@ const InvoicesPage: React.FC = () => {
                         Totals:
                       </td>
                       <td className="py-2.5 px-3 text-right text-slate-900">
-                        {formatINR(selectedInvoice.total_amount)}
+                        {formatINR(previewInvoice.total_amount)}
                       </td>
                       <td className="py-2.5 px-3 text-right text-emerald-600">
-                        {formatINR(selectedInvoice.paid_against_invoice || 0)}
+                        {formatINR(previewInvoice.paid_against_invoice)}
                       </td>
                       <td className="py-2.5 px-3 text-right text-sm text-amber-900 font-black">
-                        {formatINR(selectedInvoice.balance || 0)}
+                        {formatINR(previewInvoice.balance)}
                       </td>
                       <td></td>
                     </tr>
@@ -1040,17 +1123,17 @@ const InvoicesPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Notes & Bank Transfer */}
-            {selectedInvoice.notes && (
+            {/* Notes & Bank Details */}
+            {previewInvoice.notes && (
               <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-xs text-amber-900">
-                <strong>Payment Instructions:</strong> {selectedInvoice.notes}
+                <strong>Payment Instructions:</strong> {previewInvoice.notes}
               </div>
             )}
 
-            {/* Action Buttons */}
+            {/* Actions */}
             <div className="flex justify-between items-center pt-4 border-t gap-2 flex-wrap">
               <button
-                onClick={() => setSelectedInvoice(null)}
+                onClick={() => setPreviewInvoice(null)}
                 className="btn-secondary text-xs px-4 py-2"
               >
                 Close
@@ -1059,8 +1142,17 @@ const InvoicesPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <a
                   href={formatWhatsAppShareUrl(
-                    selectedInvoice.organization?.phone,
-                    generateInvoiceWhatsAppMessage(selectedInvoice)
+                    previewInvoice.organization?.phone,
+                    generateWhatsAppBillMessage(
+                      previewInvoice.organization,
+                      previewInvoice.trips,
+                      previewInvoice.total_amount,
+                      previewInvoice.paid_against_invoice,
+                      previewInvoice.balance,
+                      previewInvoice.period_from,
+                      previewInvoice.period_to,
+                      previewInvoice.invoice_number
+                    )
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -1079,6 +1171,109 @@ const InvoicesPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 2: SAVE AS FORMAL INVOICE MODAL                          */}
+      {/* ============================================================== */}
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900 tracking-tight">Save Formal Invoice</h3>
+                <p className="text-xs text-slate-500">Record this batch into your issued invoices archive</p>
+              </div>
+              <button
+                onClick={() => setIsSaveModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFormalInvoice} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Client Organization</label>
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900">
+                  {currentOrg?.name} ({currentOrg?.type || 'Client'})
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Invoice Type</label>
+                  <select
+                    value={saveInvoiceType}
+                    onChange={e => setSaveInvoiceType(e.target.value as InvoiceType)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-medium"
+                  >
+                    {INVOICE_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Invoice Issue Date</label>
+                  <input
+                    type="date"
+                    value={saveInvoiceDate}
+                    onChange={e => setSaveInvoiceDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 font-mono">
+                <div className="flex justify-between text-slate-600">
+                  <span>Included Duties:</span>
+                  <span className="font-bold text-slate-900">{selectedTripsList.length} trips</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Total Amount:</span>
+                  <span className="font-bold text-slate-900">{formatINR(totalCost)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-700">
+                  <span>Advance / Paid:</span>
+                  <span className="font-bold">{formatINR(totalAdv)}</span>
+                </div>
+                <div className="flex justify-between text-amber-900 font-black pt-1 border-t border-slate-200 text-sm">
+                  <span>Net Balance Due:</span>
+                  <span>{formatINR(totalPending)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Payment Instructions / Notes</label>
+                <input
+                  type="text"
+                  value={saveNotes}
+                  onChange={e => setSaveNotes(e.target.value)}
+                  placeholder="e.g. Bank transfer to A/c ... IFSC ..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSaveModalOpen(false)}
+                  className="btn-secondary text-xs px-4 py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary text-xs px-4 py-2"
+                >
+                  Save & Issue Formal Bill
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

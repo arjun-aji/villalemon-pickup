@@ -373,7 +373,7 @@ export const invoiceService = {
         .order('trip_date', { ascending: true })
         .order('pickup_time', { ascending: true });
 
-      if (organizationId && organizationId !== 'all') {
+      if (organizationId && organizationId !== 'all' && organizationId !== 'all_partners') {
         query = query.eq('organization_id', organizationId);
       }
       if (fromDate) {
@@ -386,7 +386,7 @@ export const invoiceService = {
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || []).map((t: any) => {
+      let list = (data || []).map((t: any) => {
         const sellPrice = Number(t.trip_selling_price) || 0;
         const bInfo = parseTripBilling(t.special_instructions, sellPrice);
         return {
@@ -396,6 +396,12 @@ export const invoiceService = {
           pending_amount: bInfo.pendingAmount,
         } as Trip;
       });
+
+      if (organizationId === 'all_partners') {
+        list = list.filter(t => !t.organization?.name?.toLowerCase().includes('villa lemon'));
+      }
+
+      return list;
     }
     return [];
   },
