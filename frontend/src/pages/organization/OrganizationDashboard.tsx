@@ -185,7 +185,7 @@ const OrganizationDashboard: React.FC = () => {
       (lines.length > 0 ? lines.join('\n') : '• No recorded trips yet') +
       `\n\n_Varkala Holidays Transport Management_`;
 
-    const adminPhone = '917356568307';
+    const adminPhone = '918714929460'; // +91 87149 29460 Varkala Holidays Admin / Dispatch Office
     window.open(`https://wa.me/${adminPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 

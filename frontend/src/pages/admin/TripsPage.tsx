@@ -448,6 +448,8 @@ const TripsPage: React.FC = () => {
     });
   };
 
+  const ADMIN_OFFICE_PHONE = '918714929460'; // +91 87149 29460 Varkala Holidays Admin / Dispatch Office
+
   const handleCopyDispatch = (t: Trip) => {
     navigator.clipboard.writeText(generateWhatsAppText(t));
     setCopiedDispatch(true);
@@ -455,6 +457,13 @@ const TripsPage: React.FC = () => {
   };
 
   const handleShareWhatsApp = (t: Trip) => {
+    // Dispatch message sent to Office (+91 87149 29460)
+    const text = generateWhatsAppText(t);
+    const url = `https://wa.me/${ADMIN_OFFICE_PHONE}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleShareWhatsAppDriver = (t: Trip) => {
     const text = generateWhatsAppText(t);
     const phone = t.driver?.phone ? t.driver.phone.replace(/[^0-9]/g, '') : '';
     const url = phone
@@ -2481,26 +2490,39 @@ const TripsPage: React.FC = () => {
         >
           <div className="space-y-4 text-xs">
             <p className="text-slate-500">
-              Generated in Varkala Holidays driver dispatch format. One-click share directly to the driver via WhatsApp.
+              Generated in Varkala Holidays dispatch format. One-click share to the Dispatch Office (+91 87149 29460) or to the driver.
             </p>
             <pre className="p-4 bg-slate-900 text-emerald-400 font-mono rounded-xl whitespace-pre-wrap leading-relaxed text-[11px] select-all max-h-80 overflow-y-auto">
               {generateWhatsAppText(dispatchTrip)}
             </pre>
-            <div className="flex justify-between items-center pt-2">
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
               <button
                 onClick={() => handleCopyDispatch(dispatchTrip)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 flex items-center gap-1.5"
               >
                 {copiedDispatch ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedDispatch ? 'Copied to Clipboard!' : 'Copy Text'}</span>
               </button>
-              <button
-                onClick={() => handleShareWhatsApp(dispatchTrip)}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Send via WhatsApp</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleShareWhatsApp(dispatchTrip)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md text-xs"
+                  title="Send to Office (+91 87149 29460)"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Send to Office (+91 87149 29460)</span>
+                </button>
+                {dispatchTrip.driver?.phone && (
+                  <button
+                    onClick={() => handleShareWhatsAppDriver(dispatchTrip)}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold flex items-center gap-1.5 shadow-sm text-xs"
+                    title={`Send to driver (${dispatchTrip.driver.full_name})`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>To Driver</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </Modal>

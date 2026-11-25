@@ -214,15 +214,15 @@ const ClientBookingPage: React.FC = () => {
             {/* WhatsApp Contact Action */}
             <div className="pt-2 space-y-3">
               <a
-                href={`https://wa.me/918086066992?text=${encodeURIComponent(
-                  `Hi Varkala Holidays, I just submitted a booking request #${bookingSuccess.trip_number || ''} for ${guestName} on ${tripDate} (${pickupLocation} to ${dropoffLocation}). Please confirm my driver!`
+                href={`https://wa.me/918714929460?text=${encodeURIComponent(
+                  `Hi Varkala Holidays, I just submitted a booking request #${bookingSuccess.trip_number || ''} for ${guestName} on ${formatDate(tripDate)} (${pickupLocation} to ${dropoffLocation}). Please confirm my driver!`
                 )}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/20 transition-all text-sm"
               >
                 <MessageSquare className="w-5 h-5" />
-                <span>Message Dispatch Office on WhatsApp</span>
+                <span>Message Dispatch Office (+91 87149 29460) on WhatsApp</span>
               </a>
 
               <button
