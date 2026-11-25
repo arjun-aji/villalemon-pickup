@@ -97,6 +97,8 @@ const ClientBookingPage: React.FC = () => {
 
       const instructionsCombined = [
         `[Direct Client Booking Form]`,
+        isRailway ? `[Service: Railway Station Transfer]` : null,
+        flightNumber ? (isRailway ? `[Train: ${flightNumber.trim()}]` : `[Flight: ${flightNumber.trim()}]`) : null,
         placardText ? `[Placard: ${placardText.trim()}]` : null,
         luggageNotes ? `[Luggage: ${luggageNotes.trim()}]` : null,
         specialInstructions.trim() ? specialInstructions.trim() : null,
@@ -104,7 +106,7 @@ const ClientBookingPage: React.FC = () => {
 
       const newTrip = await tripService.create(
         {
-          trip_category: tripCategory as any,
+          trip_category: (isRailway ? 'Pick-up from Location' : tripCategory) as any,
           guest_names: guestName.trim(),
           guest_contact_number: guestPhone.trim(),
           trip_date: tripDate,

@@ -309,10 +309,21 @@ export const tripService = {
         dbTripStatus = 'Confirmed';
       }
 
-      // Map category safely for DB enum
-      let dbTripCategory = input.trip_category || 'Airport Pick-up';
-      if (dbTripCategory === 'Others') {
+      // Map category safely for DB enum ('Airport Pick-up' | 'Airport Drop' | 'Sightseeing' | 'Drop Only at Location' | 'Pick-up from Location')
+      let dbTripCategory: string = input.trip_category || 'Airport Pick-up';
+      const catLower = dbTripCategory.toLowerCase();
+      if (catLower.includes('railway') || catLower.includes('train') || catLower.includes('station')) {
+        dbTripCategory = 'Pick-up from Location';
+      } else if (catLower === 'others') {
         dbTripCategory = 'Drop Only at Location';
+      } else if (![
+        'Airport Pick-up',
+        'Airport Drop',
+        'Sightseeing',
+        'Drop Only at Location',
+        'Pick-up from Location'
+      ].includes(dbTripCategory)) {
+        dbTripCategory = 'Pick-up from Location';
       }
 
       // Combine outside driver info into special_instructions if provided
@@ -599,7 +610,24 @@ export const tripService = {
       };
       if (updates.trip_date !== undefined) dbUpdates.trip_date = updates.trip_date;
       if (updates.pickup_time !== undefined) dbUpdates.pickup_time = updates.pickup_time;
-      if (updates.trip_category !== undefined) dbUpdates.trip_category = updates.trip_category;
+      if (updates.trip_category !== undefined) {
+        let cat = String(updates.trip_category);
+        const cLower = cat.toLowerCase();
+        if (cLower.includes('railway') || cLower.includes('train') || cLower.includes('station')) {
+          cat = 'Pick-up from Location';
+        } else if (cLower === 'others') {
+          cat = 'Drop Only at Location';
+        } else if (![
+          'Airport Pick-up',
+          'Airport Drop',
+          'Sightseeing',
+          'Drop Only at Location',
+          'Pick-up from Location'
+        ].includes(cat)) {
+          cat = 'Pick-up from Location';
+        }
+        dbUpdates.trip_category = cat;
+      }
       if (updates.guest_names !== undefined) dbUpdates.guest_names = updates.guest_names;
       if (updates.guest_contact_number !== undefined) dbUpdates.guest_contact_number = updates.guest_contact_number;
       if (updates.total_people !== undefined) dbUpdates.total_people = updates.total_people;
