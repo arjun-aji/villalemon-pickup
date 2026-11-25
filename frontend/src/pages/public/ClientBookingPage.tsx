@@ -142,6 +142,7 @@ const ClientBookingPage: React.FC = () => {
   };
 
   const isAirport = tripCategory.includes('Airport');
+  const isRailway = tripCategory.includes('Railway');
 
   return (
     <div className="min-h-screen bg-[#F5F8FC] relative selection:bg-emerald-500 selection:text-white py-8 px-4 sm:px-6">
@@ -263,7 +264,14 @@ const ClientBookingPage: React.FC = () => {
                           setPickupLocation('Trivandrum Airport (TRV) Terminal 2 (International)');
                           setDropoffLocation('');
                         } else if (cat.id === 'Airport Drop') {
+                          setPickupLocation('');
                           setDropoffLocation('Trivandrum Airport (TRV) Terminal 2 (International)');
+                        } else if (cat.id === 'Railway Pick-up') {
+                          setPickupLocation('Varkala Sivagiri Railway Station');
+                          setDropoffLocation('');
+                        } else if (cat.id === 'Drop Only at Location') {
+                          setPickupLocation('');
+                          setDropoffLocation('');
                         }
                       }}
                       className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
@@ -360,6 +368,28 @@ const ClientBookingPage: React.FC = () => {
                       <option value="Terminal 1">Terminal 1 (Domestic / Shanghumugham)</option>
                     </select>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Train info if Railway Station */}
+            {isRailway && (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                  <Train className="w-4 h-4 text-emerald-600" />
+                  <span>Train & Arrival Details</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Train Number & Name / Coach (e.g. 16382 Kanyakumari Exp / B2)
+                  </label>
+                  <input
+                    type="text"
+                    value={flightNumber}
+                    onChange={e => setFlightNumber(e.target.value)}
+                    placeholder="e.g. Train 16382 / Vanchinad Express / Coach S4"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                  />
                 </div>
               </div>
             )}
