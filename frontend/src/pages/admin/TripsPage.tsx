@@ -87,6 +87,20 @@ const TripsPage: React.FC = () => {
   const [copiedPlacard, setCopiedPlacard] = useState(false);
   const [copiedDispatch, setCopiedDispatch] = useState(false);
 
+  // Complete Trip by Admin Modal State
+  const [completeModalTrip, setCompleteModalTrip] = useState<Trip | null>(null);
+  const [completeDriverId, setCompleteDriverId] = useState('');
+  const [completeAmountCollected, setCompleteAmountCollected] = useState<number | string>(0);
+  const [completeDiesel, setCompleteDiesel] = useState<number | string>(0);
+  const [completeParkingToll, setCompleteParkingToll] = useState<number | string>(0);
+  const [completeTollDetails, setCompleteTollDetails] = useState('');
+  const [completeWorkshop, setCompleteWorkshop] = useState<number | string>(0);
+  const [completeWorkshopDetails, setCompleteWorkshopDetails] = useState('');
+  const [completeDriverPay, setCompleteDriverPay] = useState<number | string>(500);
+  const [completeDriverSettled, setCompleteDriverSettled] = useState(false);
+  const [completeAdminNotes, setCompleteAdminNotes] = useState('');
+  const [completingTrip, setCompletingTrip] = useState(false);
+
   // Edit Trip Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
@@ -287,6 +301,67 @@ const TripsPage: React.FC = () => {
       alert(err.message || 'Error updating driver settlement status');
     } finally {
       setTogglingSettlementTripId(null);
+    }
+  };
+
+  const handleOpenCompleteModal = (t: Trip) => {
+    setCompleteModalTrip(t);
+    setCompleteDriverId(t.assigned_driver_id || '');
+
+    // Default collection:
+    const isPrepaid = (t.collection_rule || '').toLowerCase().includes('do not collect') ||
+                      (t.trip_selling_price && Number(t.amount_driver_must_collect) === 0);
+    const defaultCollect = isPrepaid ? 0 : Number(t.amount_driver_must_collect ?? t.amount_to_collect ?? 0);
+    setCompleteAmountCollected(defaultCollect);
+
+    // Existing report if any:
+    const rep = (t as any).driver_reports
+      ? (Array.isArray((t as any).driver_reports) ? (t as any).driver_reports[0] : (t as any).driver_reports)
+      : null;
+
+    setCompleteDiesel(rep?.diesel_expense || t.settlement?.petrol_expense || 0);
+    setCompleteParkingToll(rep?.parking_toll_permits_tickets_food || 0);
+    setCompleteTollDetails(rep?.other_expenses_details || '');
+    setCompleteWorkshop(rep?.workshop_expense || 0);
+    setCompleteWorkshopDetails(rep?.workshop_details || '');
+
+    const effPay = Number(
+      t.driver_trip_pay_override ??
+      t.driver_charge ??
+      (t.driver?.employment_type === 'Per-trip payment' ? t.driver?.per_trip_payment : 500) ??
+      500
+    );
+    setCompleteDriverPay(effPay);
+    setCompleteDriverSettled(t.driver_settlement_status === 'Settled');
+    setCompleteAdminNotes('Completed by Admin on behalf of driver');
+  };
+
+  const handleCompleteTripSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completeModalTrip) return;
+    try {
+      setCompletingTrip(true);
+      await tripService.completeTripByAdmin({
+        tripId: completeModalTrip.id,
+        driverId: completeDriverId || completeModalTrip.assigned_driver_id,
+        amountCollected: Number(completeAmountCollected) || 0,
+        dieselExpense: Number(completeDiesel) || 0,
+        parkingTollExpense: Number(completeParkingToll) || 0,
+        otherDetails: completeTollDetails.trim() || undefined,
+        workshopExpense: Number(completeWorkshop) || 0,
+        workshopDetails: completeWorkshopDetails.trim() || undefined,
+        driverPay: Number(completeDriverPay) || 0,
+        isDriverSettled: completeDriverSettled,
+        adminNotes: completeAdminNotes.trim() || undefined,
+      });
+
+      alert(`Trip ${completeModalTrip.trip_number} successfully marked as Completed!`);
+      setCompleteModalTrip(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error completing trip');
+    } finally {
+      setCompletingTrip(false);
     }
   };
 
@@ -936,6 +1011,15 @@ const TripsPage: React.FC = () => {
                           {/* Col 9: Actions */}
                           <td className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1">
+                              {trip.trip_status !== 'Completed' && (
+                                <button
+                                  onClick={() => handleOpenCompleteModal(trip)}
+                                  className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg transition-colors font-bold shadow-2xs"
+                                  title="Complete Ride & Enter Expenses"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleOpenEditTrip(trip)}
                                 className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
@@ -1345,6 +1429,16 @@ const TripsPage: React.FC = () => {
                                   <span>Approve</span>
                                 </button>
                               )}
+                              {trip.trip_status !== 'Completed' && (
+                                <button
+                                  onClick={() => handleOpenCompleteModal(trip)}
+                                  className="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                                  title="Complete Ride & Enter Expenses"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  <span>Complete</span>
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleOpenEditTrip(trip)}
                                 className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
@@ -1511,6 +1605,266 @@ const TripsPage: React.FC = () => {
         </Modal>
       )}
 
+      {/* Complete Ride by Admin Modal */}
+      {completeModalTrip && (
+        <Modal
+          isOpen={Boolean(completeModalTrip)}
+          onClose={() => setCompleteModalTrip(null)}
+          title={`Complete Ride: ${completeModalTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleCompleteTripSubmit} className="space-y-4 text-xs">
+            {/* Trip Info Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-amber-400 text-sm">{completeModalTrip.trip_number}</span>
+                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-md font-semibold text-slate-200">
+                  {completeModalTrip.trip_category || 'Duty'}
+                </span>
+              </div>
+              <div className="text-xs">
+                <span className="font-bold text-slate-100">{completeModalTrip.guest_names || completeModalTrip.customer_name || 'Guest'}</span>
+                <span className="text-slate-400 mx-1.5">•</span>
+                <span className="text-slate-300">{completeModalTrip.pickup_location} → {completeModalTrip.dropoff_location || completeModalTrip.destination}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                <span>Trip Date: <strong>{formatDate(completeModalTrip.trip_date || completeModalTrip.pickup_date || '')}</strong></span>
+                <span>Trip Selling Price: <strong className="text-emerald-400 font-mono">{formatINR(completeModalTrip.trip_selling_price || 0)}</strong></span>
+              </div>
+            </div>
+
+            {/* Driver Assignment if unassigned or change */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver *</label>
+                <select
+                  value={completeDriverId}
+                  onChange={e => {
+                    setCompleteDriverId(e.target.value);
+                    const drv = drivers.find(d => d.id === e.target.value);
+                    if (drv?.per_trip_payment) {
+                      setCompleteDriverPay(drv.per_trip_payment);
+                    }
+                  }}
+                  required
+                  className="input-field font-semibold"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) {d.employment_type ? `• ${d.employment_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Driver Duty Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeDriverPay}
+                  onChange={e => setCompleteDriverPay(e.target.value)}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* 1. Guest Cash Collection */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1. Guest Collection (Actual Cash Received by Driver)</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompleteAmountCollected(0)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-slate-200 hover:bg-slate-300 font-bold text-slate-700"
+                  >
+                    ₹0 (Prepaid / Hotel Bill)
+                  </button>
+                  {completeModalTrip.amount_driver_must_collect && (
+                    <button
+                      type="button"
+                      onClick={() => setCompleteAmountCollected(completeModalTrip.amount_driver_must_collect || 0)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 hover:bg-emerald-200 font-bold text-emerald-800"
+                    >
+                      ₹{completeModalTrip.amount_driver_must_collect} (Expected)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeAmountCollected}
+                  onChange={e => setCompleteAmountCollected(e.target.value)}
+                  placeholder="0"
+                  className="input-field font-mono font-bold text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 if the ride is prepaid by customer or billed directly to hotel / homestay on monthly account.
+                </span>
+              </div>
+            </div>
+
+            {/* 2. On-Trip Running Expenses */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-rose-600" />
+                <span>2. On-Trip Running Expenses (Spent by Driver)</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Diesel / Petrol Expense (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeDiesel}
+                    onChange={e => setCompleteDiesel(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Toll, Parking, Permits (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeParkingToll}
+                    onChange={e => setCompleteParkingToll(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Toll / Parking / Other Details (Optional)</label>
+                <input
+                  type="text"
+                  value={completeTollDetails}
+                  onChange={e => setCompleteTollDetails(e.target.value)}
+                  placeholder="e.g. Airport parking ₹120, Highway toll ₹80"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="label">Workshop / Repairs (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeWorkshop}
+                    onChange={e => setCompleteWorkshop(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Repair Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={completeWorkshopDetails}
+                    onChange={e => setCompleteWorkshopDetails(e.target.value)}
+                    placeholder="e.g. Puncture repair, Bulb change"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Driver Settlement Option & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completeDriverSettled}
+                  onChange={e => setCompleteDriverSettled(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">Mark Driver as Settled</span>
+                  <span className="text-[10px] text-slate-500">Check if payment/balance for this ride is already settled with driver</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="label">Admin Notes</label>
+                <input
+                  type="text"
+                  value={completeAdminNotes}
+                  onChange={e => setCompleteAdminNotes(e.target.value)}
+                  placeholder="Completed on behalf of driver"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Financial Accounting Calculation Breakdown */}
+            {(() => {
+              const pay = Number(completeDriverPay) || 0;
+              const exp = (Number(completeDiesel) || 0) + (Number(completeParkingToll) || 0) + (Number(completeWorkshop) || 0);
+              const credit = pay + exp;
+              const collected = Number(completeAmountCollected) || 0;
+              const netBalance = credit - collected;
+
+              return (
+                <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <span className="font-bold text-[11px] text-slate-300 uppercase tracking-wider block border-b border-white/10 pb-1.5">
+                    Live Duty Accounting Balance:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Driver Credit</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{credit.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Pay ₹{pay} + Exp ₹{exp})</span>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Guest Cash</span>
+                      <span className="font-mono font-bold text-amber-300">₹{collected.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Collected)</span>
+                    </div>
+                    <div className={`p-2 rounded-xl font-bold ${netBalance >= 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'}`}>
+                      <span className="text-[10px] block opacity-80">{netBalance >= 0 ? 'Office Pays Driver' : 'Driver Holds Cash'}</span>
+                      <span className="font-mono text-sm font-black">₹{Math.abs(netBalance).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCompleteModalTrip(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={completingTrip || !completeDriverId}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {completingTrip ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{completingTrip ? 'Completing Ride...' : 'Complete Ride & Save'}</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {/* View Full Trip Details Modal */}
       {viewTrip && (
         <Modal
@@ -1524,6 +1878,20 @@ const TripsPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <StatusBadge status={viewTrip.trip_status} />
+                {viewTrip.trip_status !== 'Completed' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = viewTrip;
+                      setViewTrip(null);
+                      handleOpenCompleteModal(t);
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Complete Ride</span>
+                  </button>
+                )}
                 <span className="text-xs text-text-secondary">
                   Created {formatDate(viewTrip.created_at || '')}
                 </span>
@@ -1776,6 +2144,266 @@ const TripsPage: React.FC = () => {
         </Modal>
       )}
 
+      {/* Complete Ride by Admin Modal */}
+      {completeModalTrip && (
+        <Modal
+          isOpen={Boolean(completeModalTrip)}
+          onClose={() => setCompleteModalTrip(null)}
+          title={`Complete Ride: ${completeModalTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleCompleteTripSubmit} className="space-y-4 text-xs">
+            {/* Trip Info Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-amber-400 text-sm">{completeModalTrip.trip_number}</span>
+                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-md font-semibold text-slate-200">
+                  {completeModalTrip.trip_category || 'Duty'}
+                </span>
+              </div>
+              <div className="text-xs">
+                <span className="font-bold text-slate-100">{completeModalTrip.guest_names || completeModalTrip.customer_name || 'Guest'}</span>
+                <span className="text-slate-400 mx-1.5">•</span>
+                <span className="text-slate-300">{completeModalTrip.pickup_location} → {completeModalTrip.dropoff_location || completeModalTrip.destination}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                <span>Trip Date: <strong>{formatDate(completeModalTrip.trip_date || completeModalTrip.pickup_date || '')}</strong></span>
+                <span>Trip Selling Price: <strong className="text-emerald-400 font-mono">{formatINR(completeModalTrip.trip_selling_price || 0)}</strong></span>
+              </div>
+            </div>
+
+            {/* Driver Assignment if unassigned or change */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver *</label>
+                <select
+                  value={completeDriverId}
+                  onChange={e => {
+                    setCompleteDriverId(e.target.value);
+                    const drv = drivers.find(d => d.id === e.target.value);
+                    if (drv?.per_trip_payment) {
+                      setCompleteDriverPay(drv.per_trip_payment);
+                    }
+                  }}
+                  required
+                  className="input-field font-semibold"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) {d.employment_type ? `• ${d.employment_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Driver Duty Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeDriverPay}
+                  onChange={e => setCompleteDriverPay(e.target.value)}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* 1. Guest Cash Collection */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1. Guest Collection (Actual Cash Received by Driver)</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompleteAmountCollected(0)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-slate-200 hover:bg-slate-300 font-bold text-slate-700"
+                  >
+                    ₹0 (Prepaid / Hotel Bill)
+                  </button>
+                  {completeModalTrip.amount_driver_must_collect && (
+                    <button
+                      type="button"
+                      onClick={() => setCompleteAmountCollected(completeModalTrip.amount_driver_must_collect || 0)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 hover:bg-emerald-200 font-bold text-emerald-800"
+                    >
+                      ₹{completeModalTrip.amount_driver_must_collect} (Expected)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeAmountCollected}
+                  onChange={e => setCompleteAmountCollected(e.target.value)}
+                  placeholder="0"
+                  className="input-field font-mono font-bold text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 if the ride is prepaid by customer or billed directly to hotel / homestay on monthly account.
+                </span>
+              </div>
+            </div>
+
+            {/* 2. On-Trip Running Expenses */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-rose-600" />
+                <span>2. On-Trip Running Expenses (Spent by Driver)</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Diesel / Petrol Expense (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeDiesel}
+                    onChange={e => setCompleteDiesel(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Toll, Parking, Permits (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeParkingToll}
+                    onChange={e => setCompleteParkingToll(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Toll / Parking / Other Details (Optional)</label>
+                <input
+                  type="text"
+                  value={completeTollDetails}
+                  onChange={e => setCompleteTollDetails(e.target.value)}
+                  placeholder="e.g. Airport parking ₹120, Highway toll ₹80"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="label">Workshop / Repairs (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeWorkshop}
+                    onChange={e => setCompleteWorkshop(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Repair Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={completeWorkshopDetails}
+                    onChange={e => setCompleteWorkshopDetails(e.target.value)}
+                    placeholder="e.g. Puncture repair, Bulb change"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Driver Settlement Option & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completeDriverSettled}
+                  onChange={e => setCompleteDriverSettled(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">Mark Driver as Settled</span>
+                  <span className="text-[10px] text-slate-500">Check if payment/balance for this ride is already settled with driver</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="label">Admin Notes</label>
+                <input
+                  type="text"
+                  value={completeAdminNotes}
+                  onChange={e => setCompleteAdminNotes(e.target.value)}
+                  placeholder="Completed on behalf of driver"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Financial Accounting Calculation Breakdown */}
+            {(() => {
+              const pay = Number(completeDriverPay) || 0;
+              const exp = (Number(completeDiesel) || 0) + (Number(completeParkingToll) || 0) + (Number(completeWorkshop) || 0);
+              const credit = pay + exp;
+              const collected = Number(completeAmountCollected) || 0;
+              const netBalance = credit - collected;
+
+              return (
+                <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <span className="font-bold text-[11px] text-slate-300 uppercase tracking-wider block border-b border-white/10 pb-1.5">
+                    Live Duty Accounting Balance:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Driver Credit</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{credit.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Pay ₹{pay} + Exp ₹{exp})</span>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Guest Cash</span>
+                      <span className="font-mono font-bold text-amber-300">₹{collected.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Collected)</span>
+                    </div>
+                    <div className={`p-2 rounded-xl font-bold ${netBalance >= 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'}`}>
+                      <span className="text-[10px] block opacity-80">{netBalance >= 0 ? 'Office Pays Driver' : 'Driver Holds Cash'}</span>
+                      <span className="font-mono text-sm font-black">₹{Math.abs(netBalance).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCompleteModalTrip(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={completingTrip || !completeDriverId}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {completingTrip ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{completingTrip ? 'Completing Ride...' : 'Complete Ride & Save'}</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {/* WhatsApp Dispatch Modal */}
       {dispatchTrip && (
         <Modal
@@ -1808,6 +2436,266 @@ const TripsPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Complete Ride by Admin Modal */}
+      {completeModalTrip && (
+        <Modal
+          isOpen={Boolean(completeModalTrip)}
+          onClose={() => setCompleteModalTrip(null)}
+          title={`Complete Ride: ${completeModalTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleCompleteTripSubmit} className="space-y-4 text-xs">
+            {/* Trip Info Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-amber-400 text-sm">{completeModalTrip.trip_number}</span>
+                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-md font-semibold text-slate-200">
+                  {completeModalTrip.trip_category || 'Duty'}
+                </span>
+              </div>
+              <div className="text-xs">
+                <span className="font-bold text-slate-100">{completeModalTrip.guest_names || completeModalTrip.customer_name || 'Guest'}</span>
+                <span className="text-slate-400 mx-1.5">•</span>
+                <span className="text-slate-300">{completeModalTrip.pickup_location} → {completeModalTrip.dropoff_location || completeModalTrip.destination}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                <span>Trip Date: <strong>{formatDate(completeModalTrip.trip_date || completeModalTrip.pickup_date || '')}</strong></span>
+                <span>Trip Selling Price: <strong className="text-emerald-400 font-mono">{formatINR(completeModalTrip.trip_selling_price || 0)}</strong></span>
+              </div>
+            </div>
+
+            {/* Driver Assignment if unassigned or change */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver *</label>
+                <select
+                  value={completeDriverId}
+                  onChange={e => {
+                    setCompleteDriverId(e.target.value);
+                    const drv = drivers.find(d => d.id === e.target.value);
+                    if (drv?.per_trip_payment) {
+                      setCompleteDriverPay(drv.per_trip_payment);
+                    }
+                  }}
+                  required
+                  className="input-field font-semibold"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) {d.employment_type ? `• ${d.employment_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Driver Duty Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeDriverPay}
+                  onChange={e => setCompleteDriverPay(e.target.value)}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* 1. Guest Cash Collection */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1. Guest Collection (Actual Cash Received by Driver)</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompleteAmountCollected(0)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-slate-200 hover:bg-slate-300 font-bold text-slate-700"
+                  >
+                    ₹0 (Prepaid / Hotel Bill)
+                  </button>
+                  {completeModalTrip.amount_driver_must_collect && (
+                    <button
+                      type="button"
+                      onClick={() => setCompleteAmountCollected(completeModalTrip.amount_driver_must_collect || 0)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 hover:bg-emerald-200 font-bold text-emerald-800"
+                    >
+                      ₹{completeModalTrip.amount_driver_must_collect} (Expected)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeAmountCollected}
+                  onChange={e => setCompleteAmountCollected(e.target.value)}
+                  placeholder="0"
+                  className="input-field font-mono font-bold text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 if the ride is prepaid by customer or billed directly to hotel / homestay on monthly account.
+                </span>
+              </div>
+            </div>
+
+            {/* 2. On-Trip Running Expenses */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-rose-600" />
+                <span>2. On-Trip Running Expenses (Spent by Driver)</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Diesel / Petrol Expense (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeDiesel}
+                    onChange={e => setCompleteDiesel(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Toll, Parking, Permits (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeParkingToll}
+                    onChange={e => setCompleteParkingToll(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Toll / Parking / Other Details (Optional)</label>
+                <input
+                  type="text"
+                  value={completeTollDetails}
+                  onChange={e => setCompleteTollDetails(e.target.value)}
+                  placeholder="e.g. Airport parking ₹120, Highway toll ₹80"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="label">Workshop / Repairs (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeWorkshop}
+                    onChange={e => setCompleteWorkshop(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Repair Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={completeWorkshopDetails}
+                    onChange={e => setCompleteWorkshopDetails(e.target.value)}
+                    placeholder="e.g. Puncture repair, Bulb change"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Driver Settlement Option & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completeDriverSettled}
+                  onChange={e => setCompleteDriverSettled(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">Mark Driver as Settled</span>
+                  <span className="text-[10px] text-slate-500">Check if payment/balance for this ride is already settled with driver</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="label">Admin Notes</label>
+                <input
+                  type="text"
+                  value={completeAdminNotes}
+                  onChange={e => setCompleteAdminNotes(e.target.value)}
+                  placeholder="Completed on behalf of driver"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Financial Accounting Calculation Breakdown */}
+            {(() => {
+              const pay = Number(completeDriverPay) || 0;
+              const exp = (Number(completeDiesel) || 0) + (Number(completeParkingToll) || 0) + (Number(completeWorkshop) || 0);
+              const credit = pay + exp;
+              const collected = Number(completeAmountCollected) || 0;
+              const netBalance = credit - collected;
+
+              return (
+                <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <span className="font-bold text-[11px] text-slate-300 uppercase tracking-wider block border-b border-white/10 pb-1.5">
+                    Live Duty Accounting Balance:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Driver Credit</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{credit.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Pay ₹{pay} + Exp ₹{exp})</span>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Guest Cash</span>
+                      <span className="font-mono font-bold text-amber-300">₹{collected.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Collected)</span>
+                    </div>
+                    <div className={`p-2 rounded-xl font-bold ${netBalance >= 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'}`}>
+                      <span className="text-[10px] block opacity-80">{netBalance >= 0 ? 'Office Pays Driver' : 'Driver Holds Cash'}</span>
+                      <span className="font-mono text-sm font-black">₹{Math.abs(netBalance).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCompleteModalTrip(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={completingTrip || !completeDriverId}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {completingTrip ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{completingTrip ? 'Completing Ride...' : 'Complete Ride & Save'}</span>
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 
@@ -1919,6 +2807,266 @@ const TripsPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Complete Ride by Admin Modal */}
+      {completeModalTrip && (
+        <Modal
+          isOpen={Boolean(completeModalTrip)}
+          onClose={() => setCompleteModalTrip(null)}
+          title={`Complete Ride: ${completeModalTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleCompleteTripSubmit} className="space-y-4 text-xs">
+            {/* Trip Info Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-amber-400 text-sm">{completeModalTrip.trip_number}</span>
+                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-md font-semibold text-slate-200">
+                  {completeModalTrip.trip_category || 'Duty'}
+                </span>
+              </div>
+              <div className="text-xs">
+                <span className="font-bold text-slate-100">{completeModalTrip.guest_names || completeModalTrip.customer_name || 'Guest'}</span>
+                <span className="text-slate-400 mx-1.5">•</span>
+                <span className="text-slate-300">{completeModalTrip.pickup_location} → {completeModalTrip.dropoff_location || completeModalTrip.destination}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                <span>Trip Date: <strong>{formatDate(completeModalTrip.trip_date || completeModalTrip.pickup_date || '')}</strong></span>
+                <span>Trip Selling Price: <strong className="text-emerald-400 font-mono">{formatINR(completeModalTrip.trip_selling_price || 0)}</strong></span>
+              </div>
+            </div>
+
+            {/* Driver Assignment if unassigned or change */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver *</label>
+                <select
+                  value={completeDriverId}
+                  onChange={e => {
+                    setCompleteDriverId(e.target.value);
+                    const drv = drivers.find(d => d.id === e.target.value);
+                    if (drv?.per_trip_payment) {
+                      setCompleteDriverPay(drv.per_trip_payment);
+                    }
+                  }}
+                  required
+                  className="input-field font-semibold"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) {d.employment_type ? `• ${d.employment_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Driver Duty Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeDriverPay}
+                  onChange={e => setCompleteDriverPay(e.target.value)}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* 1. Guest Cash Collection */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1. Guest Collection (Actual Cash Received by Driver)</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompleteAmountCollected(0)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-slate-200 hover:bg-slate-300 font-bold text-slate-700"
+                  >
+                    ₹0 (Prepaid / Hotel Bill)
+                  </button>
+                  {completeModalTrip.amount_driver_must_collect && (
+                    <button
+                      type="button"
+                      onClick={() => setCompleteAmountCollected(completeModalTrip.amount_driver_must_collect || 0)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 hover:bg-emerald-200 font-bold text-emerald-800"
+                    >
+                      ₹{completeModalTrip.amount_driver_must_collect} (Expected)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeAmountCollected}
+                  onChange={e => setCompleteAmountCollected(e.target.value)}
+                  placeholder="0"
+                  className="input-field font-mono font-bold text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 if the ride is prepaid by customer or billed directly to hotel / homestay on monthly account.
+                </span>
+              </div>
+            </div>
+
+            {/* 2. On-Trip Running Expenses */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-rose-600" />
+                <span>2. On-Trip Running Expenses (Spent by Driver)</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Diesel / Petrol Expense (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeDiesel}
+                    onChange={e => setCompleteDiesel(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Toll, Parking, Permits (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeParkingToll}
+                    onChange={e => setCompleteParkingToll(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Toll / Parking / Other Details (Optional)</label>
+                <input
+                  type="text"
+                  value={completeTollDetails}
+                  onChange={e => setCompleteTollDetails(e.target.value)}
+                  placeholder="e.g. Airport parking ₹120, Highway toll ₹80"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="label">Workshop / Repairs (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeWorkshop}
+                    onChange={e => setCompleteWorkshop(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Repair Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={completeWorkshopDetails}
+                    onChange={e => setCompleteWorkshopDetails(e.target.value)}
+                    placeholder="e.g. Puncture repair, Bulb change"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Driver Settlement Option & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completeDriverSettled}
+                  onChange={e => setCompleteDriverSettled(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">Mark Driver as Settled</span>
+                  <span className="text-[10px] text-slate-500">Check if payment/balance for this ride is already settled with driver</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="label">Admin Notes</label>
+                <input
+                  type="text"
+                  value={completeAdminNotes}
+                  onChange={e => setCompleteAdminNotes(e.target.value)}
+                  placeholder="Completed on behalf of driver"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Financial Accounting Calculation Breakdown */}
+            {(() => {
+              const pay = Number(completeDriverPay) || 0;
+              const exp = (Number(completeDiesel) || 0) + (Number(completeParkingToll) || 0) + (Number(completeWorkshop) || 0);
+              const credit = pay + exp;
+              const collected = Number(completeAmountCollected) || 0;
+              const netBalance = credit - collected;
+
+              return (
+                <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <span className="font-bold text-[11px] text-slate-300 uppercase tracking-wider block border-b border-white/10 pb-1.5">
+                    Live Duty Accounting Balance:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Driver Credit</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{credit.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Pay ₹{pay} + Exp ₹{exp})</span>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Guest Cash</span>
+                      <span className="font-mono font-bold text-amber-300">₹{collected.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Collected)</span>
+                    </div>
+                    <div className={`p-2 rounded-xl font-bold ${netBalance >= 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'}`}>
+                      <span className="text-[10px] block opacity-80">{netBalance >= 0 ? 'Office Pays Driver' : 'Driver Holds Cash'}</span>
+                      <span className="font-mono text-sm font-black">₹{Math.abs(netBalance).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCompleteModalTrip(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={completingTrip || !completeDriverId}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {completingTrip ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{completingTrip ? 'Completing Ride...' : 'Complete Ride & Save'}</span>
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
       {/* Edit Trip Modal */}
@@ -2200,6 +3348,266 @@ const TripsPage: React.FC = () => {
                 className="btn-primary text-xs"
               >
                 {savingTrip ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Complete Ride by Admin Modal */}
+      {completeModalTrip && (
+        <Modal
+          isOpen={Boolean(completeModalTrip)}
+          onClose={() => setCompleteModalTrip(null)}
+          title={`Complete Ride: ${completeModalTrip.trip_number}`}
+          size="lg"
+        >
+          <form onSubmit={handleCompleteTripSubmit} className="space-y-4 text-xs">
+            {/* Trip Info Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-black text-amber-400 text-sm">{completeModalTrip.trip_number}</span>
+                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-md font-semibold text-slate-200">
+                  {completeModalTrip.trip_category || 'Duty'}
+                </span>
+              </div>
+              <div className="text-xs">
+                <span className="font-bold text-slate-100">{completeModalTrip.guest_names || completeModalTrip.customer_name || 'Guest'}</span>
+                <span className="text-slate-400 mx-1.5">•</span>
+                <span className="text-slate-300">{completeModalTrip.pickup_location} → {completeModalTrip.dropoff_location || completeModalTrip.destination}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                <span>Trip Date: <strong>{formatDate(completeModalTrip.trip_date || completeModalTrip.pickup_date || '')}</strong></span>
+                <span>Trip Selling Price: <strong className="text-emerald-400 font-mono">{formatINR(completeModalTrip.trip_selling_price || 0)}</strong></span>
+              </div>
+            </div>
+
+            {/* Driver Assignment if unassigned or change */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Assigned Driver *</label>
+                <select
+                  value={completeDriverId}
+                  onChange={e => {
+                    setCompleteDriverId(e.target.value);
+                    const drv = drivers.find(d => d.id === e.target.value);
+                    if (drv?.per_trip_payment) {
+                      setCompleteDriverPay(drv.per_trip_payment);
+                    }
+                  }}
+                  required
+                  className="input-field font-semibold"
+                >
+                  <option value="">-- Select Driver --</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} ({d.phone}) {d.employment_type ? `• ${d.employment_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Driver Duty Pay (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeDriverPay}
+                  onChange={e => setCompleteDriverPay(e.target.value)}
+                  className="input-field font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* 1. Guest Cash Collection */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1. Guest Collection (Actual Cash Received by Driver)</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompleteAmountCollected(0)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-slate-200 hover:bg-slate-300 font-bold text-slate-700"
+                  >
+                    ₹0 (Prepaid / Hotel Bill)
+                  </button>
+                  {completeModalTrip.amount_driver_must_collect && (
+                    <button
+                      type="button"
+                      onClick={() => setCompleteAmountCollected(completeModalTrip.amount_driver_must_collect || 0)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 hover:bg-emerald-200 font-bold text-emerald-800"
+                    >
+                      ₹{completeModalTrip.amount_driver_must_collect} (Expected)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={completeAmountCollected}
+                  onChange={e => setCompleteAmountCollected(e.target.value)}
+                  placeholder="0"
+                  className="input-field font-mono font-bold text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 if the ride is prepaid by customer or billed directly to hotel / homestay on monthly account.
+                </span>
+              </div>
+            </div>
+
+            {/* 2. On-Trip Running Expenses */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-rose-600" />
+                <span>2. On-Trip Running Expenses (Spent by Driver)</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Diesel / Petrol Expense (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeDiesel}
+                    onChange={e => setCompleteDiesel(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Toll, Parking, Permits (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeParkingToll}
+                    onChange={e => setCompleteParkingToll(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Toll / Parking / Other Details (Optional)</label>
+                <input
+                  type="text"
+                  value={completeTollDetails}
+                  onChange={e => setCompleteTollDetails(e.target.value)}
+                  placeholder="e.g. Airport parking ₹120, Highway toll ₹80"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="label">Workshop / Repairs (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={completeWorkshop}
+                    onChange={e => setCompleteWorkshop(e.target.value)}
+                    placeholder="0"
+                    className="input-field font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Repair Description (Optional)</label>
+                  <input
+                    type="text"
+                    value={completeWorkshopDetails}
+                    onChange={e => setCompleteWorkshopDetails(e.target.value)}
+                    placeholder="e.g. Puncture repair, Bulb change"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Driver Settlement Option & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completeDriverSettled}
+                  onChange={e => setCompleteDriverSettled(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">Mark Driver as Settled</span>
+                  <span className="text-[10px] text-slate-500">Check if payment/balance for this ride is already settled with driver</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="label">Admin Notes</label>
+                <input
+                  type="text"
+                  value={completeAdminNotes}
+                  onChange={e => setCompleteAdminNotes(e.target.value)}
+                  placeholder="Completed on behalf of driver"
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Financial Accounting Calculation Breakdown */}
+            {(() => {
+              const pay = Number(completeDriverPay) || 0;
+              const exp = (Number(completeDiesel) || 0) + (Number(completeParkingToll) || 0) + (Number(completeWorkshop) || 0);
+              const credit = pay + exp;
+              const collected = Number(completeAmountCollected) || 0;
+              const netBalance = credit - collected;
+
+              return (
+                <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <span className="font-bold text-[11px] text-slate-300 uppercase tracking-wider block border-b border-white/10 pb-1.5">
+                    Live Duty Accounting Balance:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Driver Credit</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{credit.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Pay ₹{pay} + Exp ₹{exp})</span>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded-xl">
+                      <span className="text-slate-400 block text-[10px]">Guest Cash</span>
+                      <span className="font-mono font-bold text-amber-300">₹{collected.toLocaleString('en-IN')}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">(Collected)</span>
+                    </div>
+                    <div className={`p-2 rounded-xl font-bold ${netBalance >= 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'}`}>
+                      <span className="text-[10px] block opacity-80">{netBalance >= 0 ? 'Office Pays Driver' : 'Driver Holds Cash'}</span>
+                      <span className="font-mono text-sm font-black">₹{Math.abs(netBalance).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setCompleteModalTrip(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={completingTrip || !completeDriverId}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {completingTrip ? <LoadingSpinner size="sm" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{completingTrip ? 'Completing Ride...' : 'Complete Ride & Save'}</span>
               </button>
             </div>
           </form>

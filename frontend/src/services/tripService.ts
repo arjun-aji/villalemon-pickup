@@ -809,6 +809,118 @@ export const tripService = {
     return updated.find(t => t.id === id)!;
   },
 
+  async completeTripByAdmin(input: {
+    tripId: string;
+    driverId?: string;
+    amountCollected: number;
+    dieselExpense: number;
+    parkingTollExpense: number;
+    otherDetails?: string;
+    workshopExpense: number;
+    workshopDetails?: string;
+    driverPay?: number;
+    isDriverSettled?: boolean;
+    adminNotes?: string;
+  }): Promise<Trip> {
+    if (isSupabaseConfigured) {
+      const { data: trip, error: tripErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', input.tripId)
+        .single();
+      if (tripErr) throw tripErr;
+
+      const effectiveDriverId = input.driverId || trip.assigned_driver_id;
+
+      // Upsert driver report
+      if (effectiveDriverId) {
+        await supabase
+          .from('driver_reports')
+          .upsert(
+            {
+              trip_id: input.tripId,
+              driver_id: effectiveDriverId,
+              amount_collected: Number(input.amountCollected) || 0,
+              diesel_expense: Number(input.dieselExpense) || 0,
+              parking_toll_permits_tickets_food: Number(input.parkingTollExpense) || 0,
+              other_expenses_details: input.otherDetails || null,
+              workshop_expense: Number(input.workshopExpense) || 0,
+              workshop_details: input.workshopDetails || null,
+              check_status: 'Verified',
+            },
+            { onConflict: 'trip_id' }
+          );
+      }
+
+      let instructions = trip.special_instructions || '';
+      if (input.isDriverSettled !== undefined) {
+        instructions = embedDriverSettlementStatus(instructions, input.isDriverSettled ? 'Settled' : 'Not Settled');
+      }
+
+      const tripUpdates: any = {
+        trip_status: 'Completed',
+        completed_at: new Date().toISOString(),
+        special_instructions: instructions,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (input.driverId && input.driverId !== trip.assigned_driver_id) {
+        tripUpdates.assigned_driver_id = input.driverId;
+      }
+
+      if (input.driverPay !== undefined && input.driverPay !== null) {
+        tripUpdates.driver_trip_pay_override = Number(input.driverPay) || 0;
+      }
+
+      if (input.adminNotes) {
+        tripUpdates.trip_notes = trip.trip_notes
+          ? `${trip.trip_notes} | ${input.adminNotes}`
+          : input.adminNotes;
+      }
+
+      const { data, error } = await supabase
+        .from('trips')
+        .update(tripUpdates)
+        .eq('id', input.tripId)
+        .select(`
+          *,
+          driver:drivers(*),
+          vehicle:vehicles(*),
+          organization:organizations(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      const sellPrice = Number(data.trip_selling_price || 0);
+      const bInfo = parseTripBilling(data.special_instructions, sellPrice);
+      const setStatus = parseDriverSettlementStatus(data.special_instructions);
+      return {
+        ...data,
+        advance_amount: bInfo.advanceAmount,
+        billing_status: bInfo.billingStatus,
+        pending_amount: bInfo.pendingAmount,
+        driver_settlement_status: setStatus,
+      } as Trip;
+    }
+
+    const trips: Trip[] = getStored('trips', initialTrips);
+    const updated = trips.map(t => {
+      if (t.id === input.tripId) {
+        return {
+          ...t,
+          trip_status: 'Completed' as any,
+          completed_at: new Date().toISOString(),
+          driver_trip_pay_override: input.driverPay !== undefined ? Number(input.driverPay) : t.driver_trip_pay_override,
+          driver_settlement_status: (input.isDriverSettled ? 'Settled' : 'Not Settled') as 'Settled' | 'Not Settled',
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return t;
+    });
+    setStored('trips', updated);
+    return updated.find(t => t.id === input.tripId)!;
+  },
+
   async getTripsForDriverSettlement(driverId: string, fromDate?: string, toDate?: string): Promise<Trip[]> {
     if (isSupabaseConfigured) {
       let query = supabase
