@@ -792,7 +792,7 @@ const AddTripPage: React.FC = () => {
               })}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Client / Hotel / Org *</label>
                 <select
@@ -807,7 +807,7 @@ const AddTripPage: React.FC = () => {
                       }
                     }
                   }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20"
+                  className="w-full h-[42px] px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20 bg-white"
                   required
                 >
                   {organizations.map(o => (
@@ -823,40 +823,39 @@ const AddTripPage: React.FC = () => {
                   value={orderedBy}
                   onChange={e => setOrderedBy(e.target.value)}
                   placeholder="Manager / Front Desk agent"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                  className="w-full h-[42px] px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Duty Date *</span>
-                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      {formatDate(tripDate)} (DD/MM/YYYY)
-                    </span>
-                  </label>
-                  <input
-                    type="date"
-                    value={tripDate}
-                    onChange={e => setTripDate(e.target.value)}
-                    required
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Pickup Time * (24 Hrs)</span>
-                    <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
-                      {formatTime(pickupTime)} hrs
-                    </span>
-                  </label>
-                  <TimePicker24h
-                    value={pickupTime}
-                    onChange={setPickupTime}
-                    required
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour railway time (e.g. 14:30 for 2:30 PM, 02:15 for night pickup)</span>
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Duty Date *</span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDate(tripDate)} (DD/MM/YYYY)
+                  </span>
+                </label>
+                <input
+                  type="date"
+                  value={tripDate}
+                  onChange={e => setTripDate(e.target.value)}
+                  required
+                  className="w-full h-[42px] px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 font-medium bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Pickup Time * (24 Hrs)</span>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                    {formatTime(pickupTime)} hrs
+                  </span>
+                </label>
+                <TimePicker24h
+                  value={pickupTime}
+                  onChange={setPickupTime}
+                  required
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour railway time (e.g. 14:30 for 2:30 PM, 02:15 for night pickup)</span>
               </div>
             </div>
           </div>

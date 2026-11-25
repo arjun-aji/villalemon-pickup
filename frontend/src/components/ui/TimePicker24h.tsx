@@ -170,13 +170,13 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
   };
 
   return (
-    <div className={`space-y-1.5 ${className}`}>
+    <div className={`space-y-1 ${className}`}>
       {/* Visual Clock Container */}
-      <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
+      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 h-[42px] shadow-2xs focus-within:ring-2 focus-within:ring-navy-primary/20 focus-within:border-navy-primary transition-all">
         <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
 
         {/* 24-Hour Display & Interactive Controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Hour Box */}
           <div className="flex items-center bg-slate-100 hover:bg-slate-200/70 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-500 rounded-lg border border-slate-200 px-1.5 py-0.5 transition-all">
             <input
