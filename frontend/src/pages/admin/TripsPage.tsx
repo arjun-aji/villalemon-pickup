@@ -52,6 +52,7 @@ import {
   getTripDayHighlight,
   sortTripsUpcomingFirst as sortUpcomingTripsOrder,
   cleanSpecialInstructions,
+  normalizeToYMD,
 } from '../../utils/formatters';
 
 const TripsPage: React.FC = () => {
@@ -67,6 +68,7 @@ const TripsPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'trip_sheet' | 'standard'>('trip_sheet');
 
   // Trip Sheet specific filters (mirroring Excel Row 5-8)
+  const [tripSheetTab, setTripSheetTab] = useState<'upcoming' | 'completed'>('upcoming');
   const [tripSheetDriver, setTripSheetDriver] = useState('');
   const [tripSheetStartDate, setTripSheetStartDate] = useState('2026-11-01');
   const [tripSheetDays, setTripSheetDays] = useState(100);
@@ -554,9 +556,20 @@ const TripsPage: React.FC = () => {
     { totalCollect: 0, totalPetrol: 0, totalOther: 0, totalReturned: 0, totalProfit: 0 }
   );
 
-  // Filtered trips for Trip Sheet View (Excel replica mode: ordered with date chronologically)
+  // Live trip counts for Trip Sheet radio buttons
+  const tripSheetUpcomingCount = trips.filter(t => getNormStatus(t.trip_status) !== 'completed').length;
+  const tripSheetCompletedCount = trips.filter(t => getNormStatus(t.trip_status) === 'completed').length;
+
+  // Filtered trips for Trip Sheet View (Upcoming duties vs Completed rides)
   const tripSheetTrips = trips
     .filter(trip => {
+      // 0. Upcoming vs Completed radio filter:
+      // When driver or admin completes a trip, it moves out of 'upcoming' into 'completed'.
+      // Uncompleted trips from past days remain in 'upcoming' at the bottom.
+      const isCompleted = getNormStatus(trip.trip_status) === 'completed';
+      if (tripSheetTab === 'upcoming' && isCompleted) return false;
+      if (tripSheetTab === 'completed' && !isCompleted) return false;
+
       // 1. If single trip ID is provided
       if (tripSheetTripId.trim()) {
         return (trip.trip_number || '').toLowerCase().includes(tripSheetTripId.trim().toLowerCase());
@@ -586,7 +599,22 @@ const TripsPage: React.FC = () => {
 
       return true;
     })
-    .sort(sortUpcomingTripsOrder);
+    .sort((a, b) => {
+      // For Completed trips: Latest completed at top (newest date first, then newest pickup time)
+      if (tripSheetTab === 'completed') {
+        const dateA = normalizeToYMD(a.trip_date || a.pickup_date);
+        const dateB = normalizeToYMD(b.trip_date || b.pickup_date);
+        if (dateA !== dateB) return dateB.localeCompare(dateA); // Newer date first (descending)
+        const timeA = a.pickup_time || '';
+        const timeB = b.pickup_time || '';
+        if (timeA !== timeB) return timeB.localeCompare(timeA); // Newer pickup time first (descending)
+        const compA = (a as any).completed_at || a.updated_at || '';
+        const compB = (b as any).completed_at || b.updated_at || '';
+        return compB.localeCompare(compA);
+      }
+      // For Upcoming trips: Today & future at top chronologically, past uncompleted sink to bottom
+      return sortUpcomingTripsOrder(a, b);
+    });
 
   // End date calculation for Trip Sheet summary banner
   const getTripSheetEndDate = () => {
@@ -722,6 +750,65 @@ const TripsPage: React.FC = () => {
       {/* ============================================================== */}
       {viewMode === 'trip_sheet' && (
         <div className="space-y-4">
+          {/* Radio Buttons: Upcoming Duties vs Completed Rides */}
+          <div className="bg-white border border-slate-300 rounded-xl p-3 sm:p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Trip View:</span>
+              
+              <label className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border text-xs sm:text-sm font-bold cursor-pointer transition-all select-none ${
+                tripSheetTab === 'upcoming'
+                  ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-xs ring-2 ring-amber-300/60'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}>
+                <input
+                  type="radio"
+                  name="tripSheetTab"
+                  value="upcoming"
+                  checked={tripSheetTab === 'upcoming'}
+                  onChange={() => setTripSheetTab('upcoming')}
+                  className="w-4 h-4 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                />
+                <span className="flex items-center gap-2">
+                  <span>Upcoming Duties</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-all ${
+                    tripSheetTab === 'upcoming' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {tripSheetUpcomingCount}
+                  </span>
+                </span>
+              </label>
+
+              <label className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border text-xs sm:text-sm font-bold cursor-pointer transition-all select-none ${
+                tripSheetTab === 'completed'
+                  ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-xs ring-2 ring-emerald-300/60'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}>
+                <input
+                  type="radio"
+                  name="tripSheetTab"
+                  value="completed"
+                  checked={tripSheetTab === 'completed'}
+                  onChange={() => setTripSheetTab('completed')}
+                  className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                />
+                <span className="flex items-center gap-2">
+                  <span>Completed Rides</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-all ${
+                    tripSheetTab === 'completed' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {tripSheetCompletedCount}
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div className="text-[11px] text-slate-500 italic">
+              {tripSheetTab === 'upcoming' 
+                ? '• Today & upcoming at top. Uncompleted past trips at bottom.' 
+                : '• Latest completed rides at the top (newest date & time first).'}
+            </div>
+          </div>
+
           {/* Filter Card mirroring rows 5-8 from Excel */}
           <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-xs space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
@@ -796,10 +883,14 @@ const TripsPage: React.FC = () => {
                   {formatDate(tripSheetStartDate)} to {formatDate(getTripSheetEndDate())}
                 </span>
                 <span className="mx-1.5 text-slate-400">|</span>
-                <span className="text-emerald-700">{tripSheetTrips.length} trip(s)</span>
+                <span className={tripSheetTab === 'completed' ? 'text-emerald-700' : 'text-amber-700'}>
+                  {tripSheetTrips.length} {tripSheetTab === 'completed' ? 'completed' : 'upcoming'} trip(s)
+                </span>
               </div>
               <span className="text-[11px] text-slate-500 font-normal">
-                Shows exact layout & data matching the Excel Trip Sheet
+                {tripSheetTab === 'completed'
+                  ? 'Showing completed rides (newest at top)'
+                  : 'Showing upcoming duties (today & future at top, past at bottom)'}
               </span>
             </div>
           </div>
@@ -812,7 +903,7 @@ const TripsPage: React.FC = () => {
               </div>
             ) : tripSheetTrips.length === 0 ? (
               <div className="p-12 text-center text-slate-500 text-sm">
-                No trips found for the selected driver and date range.
+                No {tripSheetTab === 'completed' ? 'completed' : 'upcoming'} trips found for the selected driver and date range.
               </div>
             ) : (
               <div className="overflow-x-auto">
