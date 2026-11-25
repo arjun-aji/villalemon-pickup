@@ -64,6 +64,8 @@ export interface GuestItem {
   id: string;
   name: string;
   phone: string;
+  flightNoAndTime?: string;
+  terminal?: AirportTerminal;
 }
 
 export interface FlightItem {
@@ -154,18 +156,18 @@ const AddTripPage: React.FC = () => {
   const [orderedBy, setOrderedBy] = useState('Front Desk');
   const [tripCategory, setTripCategory] = useState<TripCategory>('Airport Pick-up');
   const [tripDate, setTripDate] = useState(today);
-  const [pickupTime, setPickupTime] = useState('10:00');
+  const [pickupTime, setPickupTime] = useState('');
 
   // Guest Details
   const [guestNames, setGuestNames] = useState('');
   const [guestContact, setGuestContact] = useState('');
-  const [totalPeople, setTotalPeople] = useState(2);
+  const [totalPeople, setTotalPeople] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
 
   // Multiple Guests State
   const [isMultiGuest, setIsMultiGuest] = useState(false);
   const [guestList, setGuestList] = useState<GuestItem[]>([
-    { id: 'g-1', name: '', phone: '' },
+    { id: 'g-1', name: '', phone: '', flightNoAndTime: '', terminal: 'Terminal 2' },
   ]);
 
   // Routing
@@ -341,7 +343,10 @@ const AddTripPage: React.FC = () => {
   };
 
   const handleAddGuest = () => {
-    setGuestList(prev => [...prev, { id: `g-${Date.now()}`, name: '', phone: '' }]);
+    setGuestList(prev => [
+      ...prev,
+      { id: `g-${Date.now()}`, name: '', phone: '', flightNoAndTime: '', terminal: airportTerminal },
+    ]);
   };
 
   const handleRemoveGuest = (id: string) => {
@@ -353,9 +358,17 @@ const AddTripPage: React.FC = () => {
     setGuestNames(validNames.join(', '));
     setGuestContact(validContacts.join(' | '));
     setTotalPeople(Math.max(1, next.length));
+
+    // Update flight summary from remaining guests
+    const validFlights = next
+      .filter(g => (g.flightNoAndTime || '').trim())
+      .map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}${g.terminal ? ` (${g.terminal})` : ''}`);
+    if (validFlights.length > 0) {
+      setFlightNumberAndTime(validFlights.join(' / '));
+    }
   };
 
-  const handleGuestChange = (id: string, field: 'name' | 'phone', val: string) => {
+  const handleGuestChange = (id: string, field: 'name' | 'phone' | 'flightNoAndTime' | 'terminal', val: string) => {
     setGuestList(prev => {
       const next = prev.map(g => (g.id === id ? { ...g, [field]: val } : g));
       const validNames = next.map(g => g.name.trim()).filter(Boolean);
@@ -363,6 +376,14 @@ const AddTripPage: React.FC = () => {
       setGuestNames(validNames.join(', '));
       setGuestContact(validContacts.join(' | '));
       setTotalPeople(Math.max(1, next.length));
+
+      // Derive flight summary
+      const validFlights = next
+        .filter(g => (g.flightNoAndTime || '').trim())
+        .map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}${g.terminal ? ` (${g.terminal})` : ''}`);
+      if (validFlights.length > 0) {
+        setFlightNumberAndTime(validFlights.join(' / '));
+      }
       return next;
     });
   };
@@ -429,6 +450,25 @@ const AddTripPage: React.FC = () => {
     }
 
     const effectiveOrgId = organizationId || (organizations.length > 0 ? organizations[0].id : '');
+
+    // Derive passenger-level or single flight info
+    const effectiveFlightList = isMultiGuest
+      ? guestList
+          .filter(g => (g.flightNoAndTime || '').trim())
+          .map(g => ({
+            flightNoAndTime: `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}`,
+            terminal: g.terminal || airportTerminal,
+          }))
+      : flightNumberAndTime
+        ? [{ flightNoAndTime: flightNumberAndTime, terminal: airportTerminal }]
+        : undefined;
+
+    const effectiveFlightNumberAndTime = isMultiGuest
+      ? guestList
+          .filter(g => (g.flightNoAndTime || '').trim())
+          .map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}${g.terminal ? ` (${g.terminal})` : ''}`)
+          .join(' / ') || flightNumberAndTime || undefined
+      : flightNumberAndTime || undefined;
 
     // ─────────────────────────────────────────────────────────────
     // MULTI-CAB / CONVOY CREATION MODE
@@ -522,7 +562,7 @@ const AddTripPage: React.FC = () => {
               pickup_location: pickupLocation,
               dropoff_location: dropoffLocation,
               final_dropoff: finalDropoff || undefined,
-              flight_number_and_time: flightNumberAndTime || undefined,
+              flight_number_and_time: effectiveFlightNumberAndTime,
               airport_terminal: isAirport ? airportTerminal : undefined,
               required_cab_type: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
               special_instructions: embedTripBilling(combinedInstructions, {
@@ -561,9 +601,9 @@ const AddTripPage: React.FC = () => {
             guestNames: guestNames,
             guestContact: guestContact,
             guestList: isMultiGuest ? guestList.filter(g => g.name.trim()) : undefined,
-            totalPeople: Number(totalPeople),
-            flightNumberAndTime: flightNumberAndTime,
-            flightList: isMultiFlight ? flightList.filter(f => f.flightNoAndTime.trim()) : undefined,
+            totalPeople: isMultiGuest ? guestList.length : Number(totalPeople),
+            flightNumberAndTime: effectiveFlightNumberAndTime,
+            flightList: effectiveFlightList,
             airportTerminal: isAirport ? airportTerminal : undefined,
             placardText: isAirportPickup ? placardText : undefined,
             requiredCabType: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
@@ -645,7 +685,7 @@ const AddTripPage: React.FC = () => {
           pickup_location: pickupLocation,
           dropoff_location: dropoffLocation,
           final_dropoff: finalDropoff || undefined,
-          flight_number_and_time: flightNumberAndTime || undefined,
+          flight_number_and_time: effectiveFlightNumberAndTime,
           airport_terminal: isAirport ? airportTerminal : undefined,
           required_cab_type: requiredCabType,
           special_instructions: [
@@ -691,9 +731,9 @@ const AddTripPage: React.FC = () => {
         guestNames: guestNames,
         guestContact: guestContact,
         guestList: isMultiGuest ? guestList.filter(g => g.name.trim()) : undefined,
-        totalPeople: Number(totalPeople),
-        flightNumberAndTime: flightNumberAndTime,
-        flightList: isMultiFlight ? flightList.filter(f => f.flightNoAndTime.trim()) : undefined,
+        totalPeople: isMultiGuest ? guestList.length : Number(totalPeople),
+        flightNumberAndTime: effectiveFlightNumberAndTime,
+        flightList: effectiveFlightList,
         airportTerminal: isAirport ? airportTerminal : undefined,
         placardText: isAirportPickup ? placardText : undefined,
         requiredCabType: assignmentMode === 'outside' ? outsideVehicleType : requiredCabType,
@@ -847,7 +887,7 @@ const AddTripPage: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
                   <span>Pickup Time * (24 Hrs)</span>
                   <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
-                    {formatTime(pickupTime)} hrs
+                    {pickupTime ? `${formatTime(pickupTime)} hrs` : '--:--'}
                   </span>
                 </label>
                 <TimePicker24h
@@ -860,7 +900,7 @@ const AddTripPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Guest Details */}
+          {/* Section 2: Guest Details & Flight Info */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px] flex items-center gap-1.5">
@@ -873,7 +913,13 @@ const AddTripPage: React.FC = () => {
                   const next = !isMultiGuest;
                   setIsMultiGuest(next);
                   if (next && guestList.length === 1 && !guestList[0].name) {
-                    setGuestList([{ id: 'g-1', name: guestNames, phone: guestContact }]);
+                    setGuestList([{
+                      id: 'g-1',
+                      name: guestNames,
+                      phone: guestContact,
+                      flightNoAndTime: flightNumberAndTime,
+                      terminal: airportTerminal,
+                    }]);
                   }
                 }}
                 className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
@@ -883,85 +929,183 @@ const AddTripPage: React.FC = () => {
             </div>
 
             {!isMultiGuest ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Guest Name(s) *</label>
-                  <input
-                    type="text"
-                    value={guestNames}
-                    onChange={e => setGuestNames(e.target.value)}
-                    required
-                    placeholder="e.g. Alexander Ivanov, Elena"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20"
-                  />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Guest Name(s) *</label>
+                    <input
+                      type="text"
+                      value={guestNames}
+                      onChange={e => setGuestNames(e.target.value)}
+                      required
+                      placeholder="e.g. Alexander Ivanov, Elena"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Guest WhatsApp / Phone</label>
+                    <input
+                      type="tel"
+                      value={guestContact}
+                      onChange={e => setGuestContact(e.target.value)}
+                      placeholder="+91 / International number"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Number of Passengers *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={totalPeople}
+                      onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Guest WhatsApp / Phone</label>
-                  <input
-                    type="tel"
-                    value={guestContact}
-                    onChange={e => setGuestContact(e.target.value)}
-                    placeholder="+91 / International number"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                  />
-                </div>
+                {/* Flight Number & Terminal integrated directly with passenger details */}
+                {isAirport ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sky-50/60 rounded-xl border border-sky-200">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Plane className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Flight Number & Arrival Details</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={flightNumberAndTime}
+                        onChange={e => setFlightNumberAndTime(e.target.value)}
+                        placeholder="e.g. AI-506 at 09:45"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-navy-primary/20"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Number of Passengers *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={totalPeople}
-                    onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                    required
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Airport Terminal *</label>
+                      <select
+                        value={airportTerminal}
+                        onChange={e => setAirportTerminal(e.target.value as AirportTerminal)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-navy-primary/20"
+                      >
+                        <option value="Terminal 1">Terminal 1 (Domestic / Shankhumukham)</option>
+                        <option value="Terminal 2">Terminal 2 (International / Chakai)</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Train / Reference Info (Optional)</label>
+                    <input
+                      type="text"
+                      value={flightNumberAndTime}
+                      onChange={e => setFlightNumberAndTime(e.target.value)}
+                      placeholder="e.g. Train 16346 / Coach B2"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3 p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800">
-                    Passenger Roster & Individual Contact Numbers
+                    Passenger Roster & Individual Flight Details
                   </span>
                   <span className="text-slate-500 text-[11px]">
-                    All contacts will be formatted into dispatch and driver view
+                    Each passenger can have their own flight & terminal
                   </span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {guestList.map((g, idx) => (
-                    <div key={g.id} className="flex items-center gap-2">
-                      <span className="w-5 text-center font-bold text-slate-500 text-xs">
-                        #{idx + 1}
-                      </span>
-                      <input
-                        type="text"
-                        value={g.name}
-                        onChange={e => handleGuestChange(g.id, 'name', e.target.value)}
-                        placeholder={`Passenger ${idx + 1} Name`}
-                        className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-navy-primary/20"
-                        required
-                      />
-                      <input
-                        type="tel"
-                        value={g.phone}
-                        onChange={e => handleGuestChange(g.id, 'phone', e.target.value)}
-                        placeholder="WhatsApp / Phone"
-                        className="w-48 px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-navy-primary/20"
-                      />
-                      {guestList.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveGuest(g.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
-                          title="Remove Passenger"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                    <div key={g.id} className="p-3 bg-white rounded-xl border border-blue-100 shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-black flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <span>Passenger #{idx + 1}</span>
+                        </span>
+                        {guestList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveGuest(g.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 rounded-md transition-colors flex items-center gap-1 text-xs"
+                            title="Remove Passenger"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Name *</label>
+                          <input
+                            type="text"
+                            value={g.name}
+                            onChange={e => handleGuestChange(g.id, 'name', e.target.value)}
+                            placeholder={`Passenger ${idx + 1} Name`}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-navy-primary/20"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">WhatsApp / Phone</label>
+                          <input
+                            type="tel"
+                            value={g.phone}
+                            onChange={e => handleGuestChange(g.id, 'phone', e.target.value)}
+                            placeholder="Phone number"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-navy-primary/20"
+                          />
+                        </div>
+
+                        {isAirport ? (
+                          <>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Flight No & Time</label>
+                              <input
+                                type="text"
+                                value={g.flightNoAndTime || ''}
+                                onChange={e => handleGuestChange(g.id, 'flightNoAndTime', e.target.value)}
+                                placeholder="e.g. EK 522 at 03:00"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-navy-primary/20"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Terminal</label>
+                              <select
+                                value={g.terminal || airportTerminal}
+                                onChange={e => handleGuestChange(g.id, 'terminal', e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-navy-primary/20"
+                              >
+                                <option value="Terminal 1">Terminal 1 (Dom)</option>
+                                <option value="Terminal 2">Terminal 2 (Intl)</option>
+                              </select>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Train / Ref</label>
+                            <input
+                              type="text"
+                              value={g.flightNoAndTime || ''}
+                              onChange={e => handleGuestChange(g.id, 'flightNoAndTime', e.target.value)}
+                              placeholder="Train / Coach info"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-navy-primary/20"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -970,33 +1114,28 @@ const AddTripPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAddGuest}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-blue-300 text-blue-700 font-bold hover:bg-blue-50 transition-colors shadow-xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-blue-300 text-blue-700 font-bold hover:bg-blue-50 transition-colors shadow-2xs text-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Another Passenger</span>
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-xs">
                     <span className="font-semibold text-slate-700">Total Pax Count:</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={totalPeople}
-                      onChange={e => setTotalPeople(parseInt(e.target.value, 10) || 1)}
-                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-center"
-                    />
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-900 font-black rounded-md">
+                      {guestList.length}
+                    </span>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Section 3: Routing & Flight */}
+          {/* Section 3: Route & Vehicle Details */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
             <h2 className="font-bold uppercase tracking-wider text-slate-500 text-[11px] flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-navy-primary" />
-              <span>3. Route & Schedule Details</span>
+              <span>3. Route & Vehicle Details</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -1024,7 +1163,7 @@ const AddTripPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Primary Cab Type *</label>
                 <select
@@ -1038,108 +1177,19 @@ const AddTripPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="sm:col-span-2">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">
-                    {isAirport ? 'Flight Number(s) & Arrival Details' : 'Train / Reference Info'}
-                  </label>
-                  {isAirport && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !isMultiFlight;
-                        setIsMultiFlight(next);
-                        if (next && flightList.length === 1 && !flightList[0].flightNoAndTime) {
-                          setFlightList([{ id: 'f-1', flightNoAndTime: flightNumberAndTime, terminal: airportTerminal }]);
-                        }
-                      }}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold transition-colors"
-                    >
-                      {isMultiFlight ? '← Single Flight' : '+ Add Multiple Flights'}
-                    </button>
-                  )}
+              {isRoundTrip && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Final Drop-off / Return</label>
+                  <input
+                    type="text"
+                    value={finalDropoff}
+                    onChange={e => setFinalDropoff(e.target.value)}
+                    placeholder="e.g. Return to VillaLemon at evening"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                  />
                 </div>
-
-                {!isMultiFlight ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={flightNumberAndTime}
-                      onChange={e => setFlightNumberAndTime(e.target.value)}
-                      placeholder={isAirport ? 'e.g. AI-506 at 09:45' : 'e.g. Train 16346 / Local note'}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                    />
-                    {isAirport && (
-                      <select
-                        value={airportTerminal}
-                        onChange={e => setAirportTerminal(e.target.value as AirportTerminal)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                      >
-                        <option value="Terminal 1">Terminal 1 (Domestic / Shankhumukham)</option>
-                        <option value="Terminal 2">Terminal 2 (International / Chakai)</option>
-                      </select>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2 p-3 bg-sky-50/60 rounded-xl border border-sky-200">
-                    {flightList.map((f, fIdx) => (
-                      <div key={f.id} className="flex items-center gap-2">
-                        <span className="w-5 text-center font-bold text-sky-800 text-xs">
-                          ✈️
-                        </span>
-                        <input
-                          type="text"
-                          value={f.flightNoAndTime}
-                          onChange={e => handleFlightChange(f.id, 'flightNoAndTime', e.target.value)}
-                          placeholder={`Flight ${fIdx + 1} No & Time (e.g. EK 522 at 03:00)`}
-                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-sky-400"
-                        />
-                        <select
-                          value={f.terminal}
-                          onChange={e => handleFlightChange(f.id, 'terminal', e.target.value as AirportTerminal)}
-                          className="w-36 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-sky-400"
-                        >
-                          <option value="Terminal 1">Terminal 1 (Dom)</option>
-                          <option value="Terminal 2">Terminal 2 (Intl)</option>
-                        </select>
-                        {flightList.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFlight(f.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
-                            title="Remove Flight"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={handleAddFlight}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-sky-300 text-sky-700 font-semibold text-[11px] hover:bg-sky-50"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Add Another Flight</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-
-            {/* If Round Trip or Day Trip, show final dropoff */}
-            {isRoundTrip && (
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Final Drop-off / Return</label>
-                <input
-                  type="text"
-                  value={finalDropoff}
-                  onChange={e => setFinalDropoff(e.target.value)}
-                  placeholder="e.g. Return to VillaLemon at evening"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                />
-              </div>
-            )}
           </div>
 
           {/* Section 4: Placard / Name Board (ONLY for Airport Pickup) */}

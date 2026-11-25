@@ -356,7 +356,7 @@ export interface DriverDispatchMessageData {
   finalDropoff?: string;
   guestNames?: string;
   guestContact?: string;
-  guestList?: Array<{ name: string; phone?: string }>;
+  guestList?: Array<{ name: string; phone?: string; flightNoAndTime?: string; terminal?: string }>;
   totalPeople?: number;
   flightNumberAndTime?: string;
   flightList?: Array<{ flightNoAndTime: string; terminal?: string }>;
@@ -390,7 +390,8 @@ export const generateDriverDispatchMessage = (data: DriverDispatchMessageData): 
   if (data.guestList && data.guestList.length > 1) {
     msg += `👥 *Guests & Contacts (${data.totalPeople || data.guestList.length} Pax):*\n`;
     data.guestList.forEach((g, idx) => {
-      msg += `  ${idx + 1}. *${g.name || 'Guest'}*${g.phone ? ` — 📞 ${g.phone}` : ''}\n`;
+      const flightInfo = g.flightNoAndTime ? ` (✈️ ${g.flightNoAndTime}${g.terminal ? ` - ${g.terminal}` : ''})` : '';
+      msg += `  ${idx + 1}. *${g.name || 'Guest'}*${g.phone ? ` — 📞 ${g.phone}` : ''}${flightInfo}\n`;
     });
     msg += `\n`;
   } else {
