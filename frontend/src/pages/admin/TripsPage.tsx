@@ -3146,7 +3146,12 @@ const TripsPage: React.FC = () => {
           <form onSubmit={handleSaveTripEdit} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="label">Trip Date *</label>
+                <label className="label flex items-center justify-between">
+                  <span>Trip Date *</span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDate(editForm.trip_date)} (DD/MM/YYYY)
+                  </span>
+                </label>
                 <input
                   type="date"
                   required
@@ -3156,14 +3161,21 @@ const TripsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="label">Pickup Time *</label>
+                <label className="label flex items-center justify-between">
+                  <span>Pickup Time * (24 Hrs)</span>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                    {formatTime(editForm.pickup_time)} hrs
+                  </span>
+                </label>
                 <input
                   type="time"
+                  step="60"
                   required
                   value={editForm.pickup_time}
                   onChange={e => setEditForm({ ...editForm, pickup_time: e.target.value })}
-                  className="input-field"
+                  className="input-field font-mono"
                 />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time format (e.g. 14:30)</span>
               </div>
               <div>
                 <label className="label">Trip Category *</label>

@@ -19,6 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
+import { formatDate, formatTime } from '../../utils/formatters';
 
 const TRIP_CATEGORIES = [
   { id: 'Airport Pick-up', label: 'Airport Pick-up', icon: Plane, desc: 'Airport to Varkala / Hotel' },
@@ -190,7 +191,7 @@ const ClientBookingPage: React.FC = () => {
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-slate-200">
                 <span className="text-slate-500 font-medium">Date & Time</span>
-                <span className="font-bold text-slate-900">{tripDate} at {pickupTime}</span>
+                <span className="font-bold text-slate-900">{formatDate(tripDate)} at {formatTime(pickupTime)} hrs</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-slate-200">
                 <span className="text-slate-500 font-medium">Pickup Location</span>
@@ -284,9 +285,14 @@ const ClientBookingPage: React.FC = () => {
             {/* 2. Date & Time */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Pickup Date *</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Pickup Date *</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDate(tripDate)} (DD/MM/YYYY)
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -299,17 +305,26 @@ const ClientBookingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Pickup / Flight Arrival Time *</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Pickup / Arrival Time * (24 Hrs)</span>
+                  </span>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                    {formatTime(pickupTime)} hrs
+                  </span>
                 </label>
                 <input
                   type="time"
+                  step="60"
                   value={pickupTime}
                   onChange={e => setPickupTime(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-mono"
                 />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  24-hour time format (e.g. 14:30 for 2:30 PM, 23:15 for late arrival)
+                </span>
               </div>
             </div>
 

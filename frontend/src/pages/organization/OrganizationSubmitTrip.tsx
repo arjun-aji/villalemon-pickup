@@ -19,6 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { TripCategory, VehicleType, AirportTerminal } from '../../types';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { formatDate, formatTime } from '../../utils/formatters';
 
 const TRIP_CATEGORIES: TripCategory[] = [
   'Airport Pick-up',
@@ -210,8 +211,11 @@ const OrganizationSubmitTrip: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Trip Date *
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Trip Date *</span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDate(tripDate)} (DD/MM/YYYY)
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -223,16 +227,21 @@ const OrganizationSubmitTrip: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pickup Time *
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Pickup Time * (24 Hrs)</span>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                    {formatTime(pickupTime)} hrs
+                  </span>
                 </label>
                 <input
                   type="time"
+                  step="60"
                   value={pickupTime}
                   onChange={e => setPickupTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
                   required
                 />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour format (e.g. 14:30)</span>
               </div>
             </div>
           </div>

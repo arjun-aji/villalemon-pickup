@@ -25,16 +25,21 @@ export const formatDate = (dateStr?: string | null): string => {
   const trimmed = dateStr.trim();
   if (!trimmed) return '-';
 
-  // Already in DD-MM-YYYY format
-  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+  // Already in DD/MM/YYYY format
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
     return trimmed;
+  }
+
+  // Already in DD-MM-YYYY format -> convert to DD/MM/YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return trimmed.replace(/-/g, '/');
   }
 
   // Pure ISO date format: YYYY-MM-DD
   const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (ymdMatch) {
     const [, y, m, d] = ymdMatch;
-    return `${d}-${m}-${y}`;
+    return `${d}/${m}/${y}`;
   }
 
   // Full timestamp or ISO string (e.g. 2026-11-22T08:30:00Z)
@@ -43,7 +48,7 @@ export const formatDate = (dateStr?: string | null): string => {
   const d = String(date.getDate()).padStart(2, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const y = date.getFullYear();
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 };
 
 export const formatTime = (timeStr?: string | null): string => {
@@ -51,7 +56,7 @@ export const formatTime = (timeStr?: string | null): string => {
   const trimmed = timeStr.trim();
   if (!trimmed) return '-';
 
-  // Convert 12-hour AM/PM string (e.g. "02:30 PM", "9:15 AM") into 24-hour "HH:mm"
+  // Convert 12-hour AM/PM string (e.g. "02:30 PM", "9:15 AM", "2:30pm") into 24-hour "HH:mm"
   const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?\s*(AM|PM)$/i);
   if (ampmMatch) {
     let h = parseInt(ampmMatch[1], 10);
@@ -62,7 +67,17 @@ export const formatTime = (timeStr?: string | null): string => {
     return `${String(h).padStart(2, '0')}:${m}`;
   }
 
-  // Already 24-hour string (e.g. "14:30", "14:30:00", "9:15")
+  // Single hour with am/pm (e.g. "2 PM")
+  const hourAmPm = trimmed.match(/^(\d{1,2})\s*(AM|PM)$/i);
+  if (hourAmPm) {
+    let h = parseInt(hourAmPm[1], 10);
+    const period = hourAmPm[2].toUpperCase();
+    if (period === 'PM' && h < 12) h += 12;
+    if (period === 'AM' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:00`;
+  }
+
+  // Already 24-hour string (e.g. "14:30", "14:30:00", "09:15", "9:15")
   const parts = trimmed.split(':');
   if (parts.length >= 2) {
     const h = parseInt(parts[0], 10);
@@ -70,6 +85,14 @@ export const formatTime = (timeStr?: string | null): string => {
     if (!isNaN(h)) {
       return `${String(h).padStart(2, '0')}:${m}`;
     }
+  }
+
+  // Date/ISO timestamp with time
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime()) && trimmed.includes('T')) {
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 
   return timeStr;
@@ -84,7 +107,7 @@ export const formatDateTime = (dateStr?: string | null): string => {
   const y = date.getFullYear();
   const hh = String(date.getHours()).padStart(2, '0');
   const mm = String(date.getMinutes()).padStart(2, '0');
-  return `${d}-${m}-${y} ${hh}:${mm}`;
+  return `${d}/${m}/${y} ${hh}:${mm}`;
 };
 
 export const getMonthName = (month: number): string => {
@@ -96,7 +119,7 @@ export const getMonthName = (month: number): string => {
 };
 
 /**
- * Normalizes any date string (YYYY-MM-DD, DD-MM-YYYY, or ISO timestamp) to YYYY-MM-DD
+ * Normalizes any date string (YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, or ISO timestamp) to YYYY-MM-DD
  */
 export const normalizeToYMD = (dateStr?: string | null): string => {
   if (!dateStr) return '';
@@ -109,8 +132,8 @@ export const normalizeToYMD = (dateStr?: string | null): string => {
     return `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
   }
 
-  // DD-MM-YYYY
-  const dmyMatch = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{2})[/-](\d{2})[/-](\d{4})/);
   if (dmyMatch) {
     return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
   }

@@ -828,7 +828,12 @@ const AddTripPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Duty Date *</label>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Duty Date *</span>
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      {formatDate(tripDate)} (DD/MM/YYYY)
+                    </span>
+                  </label>
                   <input
                     type="date"
                     value={tripDate}
@@ -838,14 +843,21 @@ const AddTripPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Pickup Time *</label>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Pickup Time * (24 Hrs)</span>
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                      {formatTime(pickupTime)} hrs
+                    </span>
+                  </label>
                   <input
                     type="time"
+                    step="60"
                     value={pickupTime}
                     onChange={e => setPickupTime(e.target.value)}
                     required
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 font-medium"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 font-medium font-mono"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time (e.g. 14:30 for 2:30 PM, 02:15 for night pickup)</span>
                 </div>
               </div>
             </div>
