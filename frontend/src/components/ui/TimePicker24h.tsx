@@ -9,7 +9,6 @@ interface TimePicker24hProps {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-// Standard minutes list 00 to 59
 const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
 export const TimePicker24h: React.FC<TimePicker24hProps> = ({
@@ -18,25 +17,37 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
   className = '',
   required = false,
 }) => {
-  const parts = (value || '').trim().replace('.', ':').split(':');
-  const currentHour = parts[0] && parts[0] !== '--' ? parts[0].padStart(2, '0') : '';
-  const currentMinute = parts[1] && parts[1] !== '--' ? parts[1].padStart(2, '0') : '';
+  const parseVal = (val?: string) => {
+    if (!val) return { h: '', m: '' };
+    const parts = val.trim().replace('.', ':').split(':');
+    const h = parts[0] && parts[0] !== '--' ? parts[0] : '';
+    const m = parts[1] && parts[1] !== '--' ? parts[1] : '';
+    return { h, m };
+  };
 
-  // Local text input state for typing
-  const [hourText, setHourText] = useState(currentHour);
-  const [minuteText, setMinuteText] = useState(currentMinute);
+  const { h: initialHour, m: initialMinute } = parseVal(value);
+
+  const [hourText, setHourText] = useState(initialHour);
+  const [minuteText, setMinuteText] = useState(initialMinute);
 
   const [isHourOpen, setIsHourOpen] = useState(false);
   const [isMinuteOpen, setIsMinuteOpen] = useState(false);
 
   const hourContainerRef = useRef<HTMLDivElement>(null);
   const minuteContainerRef = useRef<HTMLDivElement>(null);
+  const hourInputRef = useRef<HTMLInputElement>(null);
   const minuteInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync from props only when the input is NOT actively focused
   useEffect(() => {
-    setHourText(currentHour);
-    setMinuteText(currentMinute);
-  }, [currentHour, currentMinute]);
+    const { h, m } = parseVal(value);
+    if (document.activeElement !== hourInputRef.current) {
+      setHourText(h);
+    }
+    if (document.activeElement !== minuteInputRef.current) {
+      setMinuteText(m);
+    }
+  }, [value]);
 
   // Click outside listener to close dropdowns
   useEffect(() => {
@@ -60,26 +71,44 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     }
   };
 
-  // Hour typing
+  // Hour typing: allows typing 1 then 2 without premature 01 padding
   const handleHourInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/[^0-9]/g, '');
-    if (val.length > 2) val = val.slice(-2);
-    setHourText(val);
+    let raw = e.target.value.replace(/[^0-9]/g, '');
+    if (raw.length > 2) raw = raw.slice(-2);
+    setHourText(raw);
 
-    const num = parseInt(val, 10);
+    if (raw === '') {
+      triggerChange('', minuteText);
+      return;
+    }
+
+    const num = parseInt(raw, 10);
     if (!isNaN(num)) {
       if (num > 23) {
-        val = '23';
-        setHourText('23');
-      }
-      triggerChange(val.padStart(2, '0'), minuteText);
-      if (val.length === 2 || num > 2) {
+        const formatted = '23';
+        setHourText(formatted);
+        triggerChange(formatted, minuteText || '00');
+        setIsHourOpen(false);
+        minuteInputRef.current?.focus();
+        minuteInputRef.current?.select();
+      } else if (raw.length === 2) {
+        // User entered full 2 digits (e.g. 12, 14, 08, 20)
+        const formatted = String(num).padStart(2, '0');
+        setHourText(formatted);
+        triggerChange(formatted, minuteText || '00');
+        setIsHourOpen(false);
+        minuteInputRef.current?.focus();
+        minuteInputRef.current?.select();
+      } else if (num >= 3) {
+        // Digit 3-9 cannot be followed by another digit in 24h (max is 23)
+        const formatted = String(num).padStart(2, '0');
+        setHourText(formatted);
+        triggerChange(formatted, minuteText || '00');
         setIsHourOpen(false);
         minuteInputRef.current?.focus();
         minuteInputRef.current?.select();
       }
-    } else {
-      triggerChange('', minuteText);
+      // If single digit 0, 1, or 2: do NOT pad yet! Wait for next keystroke (e.g. 1 -> 12)
     }
   };
 
@@ -90,7 +119,7 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
       if (num > 23) num = 23;
       const formatted = String(num).padStart(2, '0');
       setHourText(formatted);
-      triggerChange(formatted, minuteText);
+      triggerChange(formatted, minuteText || '00');
     }
   };
 
@@ -98,29 +127,42 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     setHourText(h);
     setIsHourOpen(false);
     triggerChange(h, minuteText || '00');
-    // Focus minute input next
     minuteInputRef.current?.focus();
     minuteInputRef.current?.select();
   };
 
-  // Minute typing
+  // Minute typing: allows typing 3 then 0 without premature padding
   const handleMinuteInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/[^0-9]/g, '');
-    if (val.length > 2) val = val.slice(-2);
-    setMinuteText(val);
+    let raw = e.target.value.replace(/[^0-9]/g, '');
+    if (raw.length > 2) raw = raw.slice(-2);
+    setMinuteText(raw);
 
-    const num = parseInt(val, 10);
+    if (raw === '') {
+      triggerChange(hourText, '');
+      return;
+    }
+
+    const num = parseInt(raw, 10);
     if (!isNaN(num)) {
       if (num > 59) {
-        val = '59';
-        setMinuteText('59');
-      }
-      triggerChange(hourText || '10', val.padStart(2, '0'));
-      if (val.length === 2) {
+        const formatted = '59';
+        setMinuteText(formatted);
+        triggerChange(hourText || '10', formatted);
+        setIsMinuteOpen(false);
+      } else if (raw.length === 2) {
+        // User entered full 2 digits (e.g. 30, 45, 05)
+        const formatted = String(num).padStart(2, '0');
+        setMinuteText(formatted);
+        triggerChange(hourText || '10', formatted);
+        setIsMinuteOpen(false);
+      } else if (num >= 6) {
+        // Digit 6-9 cannot be followed by another digit for minutes (max is 59)
+        const formatted = String(num).padStart(2, '0');
+        setMinuteText(formatted);
+        triggerChange(hourText || '10', formatted);
         setIsMinuteOpen(false);
       }
-    } else {
-      triggerChange(hourText, '');
+      // If single digit 0-5: do NOT pad yet! Wait for next keystroke (e.g. 3 -> 30)
     }
   };
 
@@ -149,12 +191,13 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
           className={`flex items-center h-[42px] bg-white border rounded-xl transition-all shadow-2xs overflow-hidden ${
             isHourOpen
               ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-              : currentHour
+              : hourText
                 ? 'border-slate-300'
                 : 'border-slate-200 hover:border-slate-300'
           }`}
         >
           <input
+            ref={hourInputRef}
             type="text"
             inputMode="numeric"
             placeholder="-- Hour"
@@ -191,7 +234,7 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
               Hours (00 - 23)
             </div>
             {HOURS.map(h => {
-              const isSelected = currentHour === h;
+              const isSelected = hourText === h;
               return (
                 <button
                   key={h}
@@ -220,7 +263,7 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
           className={`flex items-center h-[42px] bg-white border rounded-xl transition-all shadow-2xs overflow-hidden ${
             isMinuteOpen
               ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-              : currentMinute
+              : minuteText
                 ? 'border-slate-300'
                 : 'border-slate-200 hover:border-slate-300'
           }`}
@@ -263,7 +306,7 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
               Minutes (00 - 59)
             </div>
             {MINUTES.map(m => {
-              const isSelected = currentMinute === m;
+              const isSelected = minuteText === m;
               return (
                 <button
                   key={m}
