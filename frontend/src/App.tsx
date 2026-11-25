@@ -49,6 +49,9 @@ import OrganizationSubmitTrip from './pages/organization/OrganizationSubmitTrip'
 import OrganizationTrips from './pages/organization/OrganizationTrips';
 import OrganizationInvoices from './pages/organization/OrganizationInvoices';
 
+// Public Direct Client Booking Form
+import ClientBookingPage from './pages/public/ClientBookingPage';
+
 function App() {
   return (
     <AuthProvider>
@@ -60,6 +63,11 @@ function App() {
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/driver/login" element={<DriverLogin />} />
           <Route path="/org/login" element={<OrganizationLogin />} />
+
+          {/* Public Direct Client Booking Form */}
+          <Route path="/book" element={<ClientBookingPage />} />
+          <Route path="/request-pickup" element={<ClientBookingPage />} />
+          <Route path="/booking" element={<ClientBookingPage />} />
 
           {/* 1. Admin Portal */}
           <Route

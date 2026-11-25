@@ -265,6 +265,43 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* DIRECT CLIENT BOOKING BANNER */}
+          <div className="max-w-2xl mx-auto mt-6">
+            <div
+              onClick={() => navigate('/book')}
+              className="bg-white/95 hover:bg-white backdrop-blur-md rounded-2xl p-4 shadow-lg border border-emerald-500/30 hover:border-emerald-600 flex flex-col sm:flex-row items-center justify-between gap-4 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] group"
+            >
+              <div className="flex items-center gap-3.5 text-center sm:text-left">
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <DriverCarIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-[#10243A] flex items-center gap-2 justify-center sm:justify-start">
+                    <span>Direct Client or Guest? Book a Cab Online</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                      No Login Required
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    Direct airport transfers, railway pickups & outstation sightseeing in Varkala.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  navigate('/book');
+                }}
+                className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-md shadow-emerald-600/20"
+              >
+                <span>Book Pickup</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ========================================================= */}

@@ -20,6 +20,7 @@ import {
   LogOut,
   MapPin,
   ClipboardCheck,
+  Share2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -120,6 +121,23 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </NavLink>
           ))}
         </nav>
+
+        {/* Quick Link to Client Booking Form */}
+        <div className="px-3 pt-3 pb-1">
+          <button
+            type="button"
+            onClick={() => {
+              const url = `${window.location.origin}/book`;
+              navigator.clipboard.writeText(url);
+              alert(`Client Booking Form link copied to clipboard!\n${url}\n\nYou can share this on WhatsApp to any client.`);
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 rounded-xl border border-emerald-500/30 text-xs font-bold transition-all"
+            title="Copy Public Client Booking Form Link (https://.../book)"
+          >
+            <Share2 className="w-3.5 h-3.5 shrink-0" />
+            {!collapsed && <span className="truncate">Client Booking Link</span>}
+          </button>
+        </div>
       </div>
 
       {/* Footer / Profile Pill */}

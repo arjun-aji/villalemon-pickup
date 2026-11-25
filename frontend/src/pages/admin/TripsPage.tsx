@@ -30,6 +30,9 @@ import {
   Wallet,
   Edit2,
   Trash2,
+  UserPlus,
+  Link as LinkIcon,
+  Globe,
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { driverService } from '../../services/driverService';
@@ -86,6 +89,7 @@ const TripsPage: React.FC = () => {
   const [tripSheetTrip, setTripSheetTrip] = useState<Trip | null>(null);
   const [copiedPlacard, setCopiedPlacard] = useState(false);
   const [copiedDispatch, setCopiedDispatch] = useState(false);
+  const [copiedBookingLink, setCopiedBookingLink] = useState(false);
 
   // Complete Trip by Admin Modal State
   const [completeModalTrip, setCompleteModalTrip] = useState<Trip | null>(null);
@@ -582,6 +586,7 @@ const TripsPage: React.FC = () => {
   };
 
   const allCount = trips.length;
+  const pendingApprovalCount = trips.filter(t => getNormStatus(t.trip_status) === 'pending_approval' || t.trip_status === 'Pending Approval').length;
   const upcomingCount = trips.filter(t => ['upcoming', 'assigned', 'confirmed', 'pending_approval', 'available_for_enrollment', 'open_for_enrollment'].includes(getNormStatus(t.trip_status))).length;
   const inProgressCount = trips.filter(t => getNormStatus(t.trip_status) === 'in_progress').length;
   const completedCount = trips.filter(t => getNormStatus(t.trip_status) === 'completed').length;
@@ -603,6 +608,21 @@ const TripsPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Copy Client Booking Link */}
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/book`;
+              navigator.clipboard.writeText(url);
+              setCopiedBookingLink(true);
+              setTimeout(() => setCopiedBookingLink(false), 2500);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all"
+            title="Copy public booking form link (https://.../book) to send to guests on WhatsApp"
+          >
+            {copiedBookingLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <LinkIcon className="w-3.5 h-3.5 text-blue-600" />}
+            <span>{copiedBookingLink ? 'Booking Link Copied!' : 'Copy Client Form Link'}</span>
+          </button>
+
           {/* View Mode Toggle */}
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
             <button
@@ -649,6 +669,43 @@ const TripsPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Pending Client Booking Requests Alert Banner */}
+      {pendingApprovalCount > 0 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
+              {pendingApprovalCount}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm">
+                  {pendingApprovalCount} Direct Client Booking Request{pendingApprovalCount > 1 ? 's' : ''} Awaiting Approval!
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-200 text-amber-900 uppercase">
+                  Action Required
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 mt-0.5">
+                New rides submitted via the client booking form. Review details, set client rate, and assign a driver.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSelectedStatus('Pending Approval');
+                setActiveTab('upcoming');
+                setViewMode('standard');
+              }}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Review Requests</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* VIEW MODE 1: TRIP SHEET (Exact replica of user's Excel sheet) */}
@@ -1011,6 +1068,15 @@ const TripsPage: React.FC = () => {
                           {/* Col 9: Actions */}
                           <td className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1">
+                              {trip.trip_status === 'Pending Approval' && (
+                                <button
+                                  onClick={() => setAssignModalTrip(trip)}
+                                  className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors font-bold shadow-2xs animate-pulse"
+                                  title="Review & Assign Driver to Client Booking"
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                               {trip.trip_status !== 'Completed' && (
                                 <button
                                   onClick={() => handleOpenCompleteModal(trip)}
