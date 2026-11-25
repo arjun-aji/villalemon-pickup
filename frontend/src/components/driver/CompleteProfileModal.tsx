@@ -37,8 +37,6 @@ const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({ isOpen, onC
   const [vehicleNumber, setVehicleNumber] = useState(driver?.vehicle_number || '');
   const [address, setAddress] = useState(driver?.address || '');
   const [phone, setPhone] = useState(driver?.phone || profile?.phone || '');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -68,24 +66,12 @@ const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({ isOpen, onC
       return;
     }
 
-    if (newPassword) {
-      if (newPassword.length < 6) {
-        setErrorMsg('New password must be at least 6 characters.');
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        setErrorMsg('Passwords do not match. Please re-enter.');
-        return;
-      }
-    }
-
     try {
       setSaving(true);
       const res = await completeDriverProfile({
         drivingLicenceNo: licenceNumber.trim().toUpperCase(),
         licenceExpiry: licenceExpiry || undefined,
         avatarUrl: photoPreview || undefined,
-        newPassword: newPassword || undefined,
         address: address.trim() || undefined,
         phone: phone.trim() || undefined,
         vehicleNumber: vehicleNumber.trim().toUpperCase() || undefined,
@@ -121,7 +107,7 @@ const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({ isOpen, onC
             <div>
               <h2 className="text-base font-black tracking-tight leading-tight">Complete Driver Profile</h2>
               <p className="text-[11px] text-emerald-100 font-medium">
-                Verify credentials, photo & security password
+                Verify credentials, photo & vehicle details
               </p>
             </div>
           </div>
@@ -262,48 +248,10 @@ const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({ isOpen, onC
             </div>
           </div>
 
-          {/* 3. Security Password Setup */}
-          <div className="space-y-3 pt-2 border-t border-slate-200">
-            <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Set Your Private Strong Password</span>
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              Replace the temporary password provided by admin with your own private login password.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  New Strong Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Min 6 characters"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Repeat new password"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-            </div>
-            {newPassword && confirmPassword && (
-              <p className={`text-[10px] font-bold ${newPassword === confirmPassword ? 'text-emerald-600' : 'text-red-500'}`}>
-                {newPassword === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
-              </p>
-            )}
+          {/* Security info notice */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-[11px] flex items-center gap-2">
+            <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Driver login username and password are set and managed by Admin. Contact office admin to change your credentials.</span>
           </div>
 
           {/* Footer buttons */}

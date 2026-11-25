@@ -21,8 +21,10 @@ export const driverService = {
             const myTrips = trips.filter((t: any) => t.assigned_driver_id === d.id);
             const completed = myTrips.filter((t: any) => t.trip_status === 'Completed' || t.trip_status === 'completed');
 
-            const userMatch = (d.payment_arrangement_notes || '').match(/Username:\s*([a-zA-Z0-9_]+)/i);
-            const extractedUsername = userMatch ? userMatch[1] : d.phone;
+            const userMatch = (d.payment_arrangement_notes || '').match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
+            const extractedUsername = userMatch ? userMatch[1].trim() : d.phone;
+            const passMatch = (d.payment_arrangement_notes || '').match(/Password:\s*([^|]+)/i);
+            const extractedPassword = passMatch ? passMatch[1].trim() : '';
             const addressMatch = (d.payment_arrangement_notes || '').match(/Address:\s*([^|]+)/i);
             const extractedAddress = addressMatch ? addressMatch[1].trim() : (d.address || '');
             const vehicleMatch = (d.payment_arrangement_notes || '').match(/Vehicle:\s*([^|]+)/i);
@@ -39,6 +41,7 @@ export const driverService = {
               employee_id: d.driving_licence_no ? `DL-${d.driving_licence_no.substring(0, 6)}` : 'DRV',
               full_name: d.full_name,
               username: extractedUsername,
+              password: extractedPassword,
               phone: d.phone,
               email: `${d.phone}@villalemon.pickup`,
               vehicle_number: extractedVehicle,
@@ -135,8 +138,9 @@ export const driverService = {
 
       const notes = input.payment_arrangement_notes || input.address || '';
       const usernameNote = cleanUsername ? `Username: ${cleanUsername}` : '';
-      const firstLoginNote = 'first_login:true';
-      const combinedNotes = [notes, usernameNote, firstLoginNote].filter(Boolean).join(' | ') || null;
+      const initialPass = _password ? _password.trim() : 'driver123';
+      const passwordNote = `Password: ${initialPass}`;
+      const combinedNotes = [usernameNote, passwordNote, notes].filter(Boolean).join(' | ') || null;
 
       const driverPayload: any = {
         profile_id: authUserId,
@@ -239,13 +243,51 @@ export const driverService = {
       if (updates.per_trip_payment !== undefined) dbUpdates.per_trip_payment = Number(updates.per_trip_payment) || 0;
       if (updates.status !== undefined) dbUpdates.status = updates.status;
 
-      // Update metadata in payment_arrangement_notes if any of these were provided
-      const metaParts: string[] = [];
-      if (updates.username) metaParts.push(`Username: ${updates.username}`);
-      if (updates.address) metaParts.push(`Address: ${updates.address}`);
-      if (updates.vehicle_number) metaParts.push(`Vehicle: ${updates.vehicle_number}`);
-      if (metaParts.length > 0) {
-        dbUpdates.payment_arrangement_notes = metaParts.join(' | ');
+      // Fetch existing notes first to preserve other metadata
+      let existingNotes = '';
+      try {
+        const { data: curr } = await supabase.from('drivers').select('payment_arrangement_notes').eq('id', id).single();
+        existingNotes = curr?.payment_arrangement_notes || '';
+      } catch {}
+
+      // Update metadata in payment_arrangement_notes while preserving existing parts
+      let notes = existingNotes;
+      if (updates.username) {
+        const cleanUser = updates.username.trim().toLowerCase();
+        if (/Username:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Username:\s*[^|]+/i, `Username: ${cleanUser}`);
+        } else {
+          notes = `Username: ${cleanUser} | ${notes}`;
+        }
+      }
+      if (updates.password) {
+        const cleanPass = updates.password.trim();
+        if (/Password:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Password:\s*[^|]+/i, `Password: ${cleanPass}`);
+        } else {
+          notes = `${notes} | Password: ${cleanPass}`;
+        }
+      }
+      if (updates.address) {
+        const cleanAddr = updates.address.trim();
+        if (/Address:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Address:\s*[^|]+/i, `Address: ${cleanAddr}`);
+        } else {
+          notes = `${notes} | Address: ${cleanAddr}`;
+        }
+      }
+      if (updates.vehicle_number) {
+        const cleanVeh = updates.vehicle_number.trim().toUpperCase();
+        if (/Vehicle:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Vehicle:\s*[^|]+/i, `Vehicle: ${cleanVeh}`);
+        } else {
+          notes = `${notes} | Vehicle: ${cleanVeh}`;
+        }
+      }
+      
+      notes = notes.split('|').map(p => p.trim()).filter(Boolean).join(' | ');
+      if (notes) {
+        dbUpdates.payment_arrangement_notes = notes;
       }
 
       const { data, error } = await supabase
@@ -265,7 +307,84 @@ export const driverService = {
     return updated.find((d: DriverEmployee) => d.id === id)!;
   },
 
-  async resetPassword(_id: string): Promise<{ success: boolean; tempPassword?: string }> {
-    return { success: true, tempPassword: `lemon${Math.floor(1000 + Math.random() * 9000)}` };
+  async setDriverCredentials(id: string, newPassword: string, newUsername?: string): Promise<{ success: boolean; error?: string }> {
+    const cleanPassword = newPassword.trim();
+    if (!cleanPassword) {
+      return { success: false, error: 'Password cannot be empty' };
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: curr, error: fetchErr } = await supabase
+          .from('drivers')
+          .select('id, payment_arrangement_notes, phone')
+          .eq('id', id)
+          .single();
+
+        if (fetchErr || !curr) {
+          return { success: false, error: fetchErr?.message || 'Driver record not found' };
+        }
+
+        let notes = curr.payment_arrangement_notes || '';
+        const cleanUser = (newUsername || '').trim().toLowerCase();
+
+        if (cleanUser) {
+          if (/Username:\s*[^|]+/i.test(notes)) {
+            notes = notes.replace(/Username:\s*[^|]+/i, `Username: ${cleanUser}`);
+          } else {
+            notes = `Username: ${cleanUser} | ${notes}`;
+          }
+        }
+
+        if (/Password:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Password:\s*[^|]+/i, `Password: ${cleanPassword}`);
+        } else {
+          notes = `${notes} | Password: ${cleanPassword}`;
+        }
+
+        // Clean up flags & empty segments
+        notes = notes.replace(/\|\s*first_login:true/gi, '').replace(/first_login:true/gi, '').trim();
+        notes = notes.split('|').map((p: string) => p.trim()).filter(Boolean).join(' | ');
+
+        const { error: updateErr } = await supabase
+          .from('drivers')
+          .update({
+            payment_arrangement_notes: notes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+
+        if (updateErr) {
+          return { success: false, error: updateErr.message };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    // Also update localStorage
+    const drivers = getStored('drivers', initialDrivers);
+    const updated = drivers.map((d: DriverEmployee) => {
+      if (d.id === id) {
+        return {
+          ...d,
+          username: newUsername ? newUsername.trim().toLowerCase() : d.username,
+          password: cleanPassword,
+          payment_arrangement_notes: `Username: ${newUsername || d.username} | Password: ${cleanPassword}`,
+          is_first_login: false,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return d;
+    });
+    setStored('drivers', updated);
+
+    return { success: true };
+  },
+
+  async resetPassword(id: string, customPassword?: string): Promise<{ success: boolean; tempPassword?: string }> {
+    const pass = customPassword ? customPassword.trim() : '1234';
+    await this.setDriverCredentials(id, pass);
+    return { success: true, tempPassword: pass };
   },
 };

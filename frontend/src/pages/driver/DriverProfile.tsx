@@ -18,26 +18,8 @@ import CompleteProfileModal from '../../components/driver/CompleteProfileModal';
 
 const DriverProfile: React.FC = () => {
   const navigate = useNavigate();
-  const { driver, profile, signOut, updateDriverPassword } = useAuth();
-  const [newPassword, setNewPassword] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
-  const [updating, setUpdating] = useState(false);
+  const { driver, profile, signOut } = useAuth();
   const [showEditModal, setShowEditModal] = useState(false);
-
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPassword || newPassword.length < 6) {
-      alert('Password must be at least 6 characters long.');
-      return;
-    }
-
-    setUpdating(true);
-    await updateDriverPassword(newPassword);
-    setUpdating(false);
-    setPasswordSuccess(true);
-    setNewPassword('');
-    setTimeout(() => setPasswordSuccess(false), 2500);
-  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -59,12 +41,7 @@ const DriverProfile: React.FC = () => {
         </div>
       </div>
 
-      {passwordSuccess && (
-        <div className="p-3.5 bg-green-light border border-green-primary text-green-primary rounded-xl text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4" />
-          <span>Password updated successfully!</span>
-        </div>
-      )}
+
 
       {/* Profile Details Card */}
       <div className="card p-6 border border-border space-y-4 shadow-card">
@@ -151,36 +128,16 @@ const DriverProfile: React.FC = () => {
         </button>
       </div>
 
-      {/* Change Password Card */}
-      <form onSubmit={handlePasswordChange} className="card p-6 border border-border space-y-3.5 shadow-card">
-        <h3 className="text-sm font-bold text-navy-primary uppercase tracking-wider flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-green-primary" />
-          Update Password
-        </h3>
-        <p className="text-xs text-text-secondary">
-          Set a new private password for your driver portal login
-        </p>
-
-        <div>
-          <label className="label">New Password</label>
-          <input
-            type="password"
-            required
-            value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
-            placeholder="Min 6 characters"
-            className="input-field"
-          />
+      {/* Security Credentials Managed Notice */}
+      <div className="card p-5 border border-slate-200 bg-slate-50/80 rounded-2xl space-y-2 shadow-xs">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+          <KeyRound className="h-4 w-4 text-emerald-600" />
+          <span>Login Credentials Managed by Admin</span>
         </div>
-
-        <button
-          type="submit"
-          disabled={updating}
-          className="btn-primary text-xs py-2.5 px-4 rounded-xl justify-center w-full shadow-sm"
-        >
-          {updating ? 'Updating...' : 'Update Password'}
-        </button>
-      </form>
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          Your username and password are set and managed strictly by Varkala Holidays Admin. Drivers cannot change their login credentials directly. If you need your password reset or changed, please contact the office admin.
+        </p>
+      </div>
 
       {/* Sign Out Action */}
       <button

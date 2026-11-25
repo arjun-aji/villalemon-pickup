@@ -37,23 +37,12 @@ const DriverDashboard: React.FC = () => {
   const [inProgressCount, setInProgressCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // First-time login / Profile incomplete modal
+  // Optional profile completion reminder (can be opened manually from Profile page)
   const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const isProfileIncomplete = !driver?.driving_licence_no || 
-                              driver.driving_licence_no === 'N/A' || 
-                              driver.driving_licence_no === 'PENDING' || 
-                              driver?.is_first_login === true || 
-                              driver?.profile_completed === false;
-
+  const isProfileIncomplete = (!driver?.driving_licence_no || driver.driving_licence_no === 'N/A' || driver.driving_licence_no === 'PENDING') && !driver?.photo_url;
   const rawDriverId = driver?.id || '';
   const initialDriverName = driver?.full_name || profile?.full_name || 'Driver';
   const [displayName, setDisplayName] = useState(initialDriverName);
-
-  useEffect(() => {
-    if (isProfileIncomplete) {
-      setShowCompleteModal(true);
-    }
-  }, [isProfileIncomplete]);
 
   useEffect(() => {
     loadDriverData();
@@ -167,7 +156,7 @@ const DriverDashboard: React.FC = () => {
             <div>
               <h3 className="font-bold text-slate-900 text-xs">Complete Your Driver Profile</h3>
               <p className="text-[11px] text-slate-600">
-                Upload your photo, licence details & set your private strong password.
+                Upload your driving licence and photo verification.
               </p>
             </div>
           </div>

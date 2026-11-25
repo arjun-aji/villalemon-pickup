@@ -412,8 +412,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         vehicle_number: vehicleMatch ? vehicleMatch[1].trim() : '',
         address: addressMatch ? addressMatch[1].trim() : '',
         photo_url: avatarUrl || '',
-        is_first_login: isFirstLogin,
-        profile_completed: !isFirstLogin,
+        is_first_login: false,
+        profile_completed: true,
         employment_type: driverData.employment_type || 'Per-trip payment',
         monthly_salary: Number(driverData.monthly_salary) || 0,
         per_trip_payment: Number(driverData.per_trip_payment) || 500,
@@ -533,33 +533,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('villalemon_current_organization');
   };
 
-  const updateDriverPassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) return { success: false, error: error.message };
-
-      if (driver) {
-        try {
-          await supabase
-            .from('drivers')
-            .update({
-              payment_arrangement_notes: driver.payment_arrangement_notes
-                ? `${driver.payment_arrangement_notes} | first_login:false`
-                : 'first_login:false',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', driver.id);
-        } catch {
-          // Ignore
-        }
-        setDriver({ ...driver, is_first_login: false });
-      }
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message };
-    }
+  const updateDriverPassword = async (_newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    return { success: false, error: 'Driver passwords are set and managed strictly by Administration.' };
   };
 
   const completeDriverProfile = async (updates: {

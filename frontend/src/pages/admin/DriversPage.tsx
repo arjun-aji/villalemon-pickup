@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Edit2,
   Eye,
+  EyeOff,
   CreditCard,
   Calendar,
   MapPin,
@@ -54,6 +55,7 @@ const DriversPage: React.FC = () => {
     full_name: '',
     phone: '',
     username: '',
+    password: '',
     driving_licence_no: '',
     licence_expiry: '',
     employment_type: 'Per-trip payment' as 'Per-trip payment' | 'Salaried (monthly)',
@@ -64,12 +66,65 @@ const DriversPage: React.FC = () => {
     status: 'Active' as 'Active' | 'Inactive',
   });
 
+  // Dedicated Set Driver Password Modal
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordModalDriver, setPasswordModalDriver] = useState<DriverEmployee | null>(null);
+  const [customPassword, setCustomPassword] = useState('');
+  const [customUsername, setCustomUsername] = useState('');
+  const [showModalPassword, setShowModalPassword] = useState(true);
+  const [settingPassword, setSettingPassword] = useState(false);
+
+  const handleOpenPasswordModal = (d: DriverEmployee) => {
+    setPasswordModalDriver(d);
+    setCustomUsername(d.username || d.phone || '');
+    setCustomPassword(d.password || '1234');
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleSaveCustomPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordModalDriver) return;
+    if (!customPassword.trim()) {
+      alert('Please type a password');
+      return;
+    }
+
+    try {
+      setSettingPassword(true);
+      const res = await driverService.setDriverCredentials(
+        passwordModalDriver.id,
+        customPassword.trim(),
+        customUsername.trim().toLowerCase()
+      );
+
+      if (!res.success) {
+        alert(res.error || 'Failed to update driver password');
+        return;
+      }
+
+      setIsPasswordModalOpen(false);
+      setCreatedInfo({
+        name: passwordModalDriver.full_name,
+        phone: passwordModalDriver.phone,
+        username: customUsername.trim().toLowerCase(),
+        pass: customPassword.trim(),
+      });
+
+      await loadDrivers();
+    } catch (err: any) {
+      alert(err.message || 'Failed to set driver password');
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
   const handleOpenEdit = (d: DriverEmployee) => {
     setEditingDriver(d);
     setEditForm({
       full_name: d.full_name || '',
       phone: d.phone || '',
       username: d.username || d.phone || '',
+      password: d.password || '',
       driving_licence_no: d.driving_licence_no || '',
       licence_expiry: d.licence_expiry || '',
       employment_type: (d.employment_type as any) || 'Per-trip payment',
@@ -113,21 +168,16 @@ const DriversPage: React.FC = () => {
 
   const generateDriverLoginMessage = (name: string, username: string, pass: string, phone: string) => {
     const origin = window.location.origin;
-    return `🚖 *Varkala Holidays — Driver Account Created*
+    return `🚖 *Varkala Holidays — Driver Login Credentials*
 
 Hello *${name}*,
-Welcome to the Varkala Holidays team!
-
 Here are your login credentials to access the Driver Portal:
 🌐 *Driver Portal:* ${origin}/driver/login
-👤 *Username / Phone:* ${username || phone}
-🔑 *Temporary Password:* ${pass}
+👤 *Username:* ${username || phone}
+🔑 *Password:* ${pass}
 
-⚠️ *First Login Action:*
-Please log in now to complete your driver profile:
-1. Set your new private strong password
-2. Upload your driver photo
-3. Enter your Driving Licence number and details
+⚠️ *Notice:*
+Please keep your password secure. Driver passwords can only be changed or reset by Varkala Holidays administration.
 
 Thank you,
 *Varkala Holidays Operations*`;
@@ -216,19 +266,7 @@ Thank you,
   };
 
   const handleResetPassword = async (driver: DriverEmployee) => {
-    try {
-      const res = await driverService.resetPassword(driver.id);
-      const tempPass = res.tempPassword || 'driver123';
-      setCreatedInfo({
-        name: driver.full_name,
-        phone: driver.phone,
-        username: driver.username || driver.phone,
-        pass: tempPass,
-      });
-      alert(`Password reset for ${driver.full_name}!\nTemporary Password: ${tempPass}\nClick 'Send on WhatsApp' in the green alert above to share credentials directly with the driver.`);
-    } catch (e: any) {
-      alert(e.message || 'Failed to reset password');
-    }
+    handleOpenPasswordModal(driver);
   };
 
   const filteredDrivers = drivers.filter(d => {
@@ -267,7 +305,7 @@ Thank you,
           <div>
             <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-0.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Driver Account Created Successfully</span>
+              <span>Driver Credentials Ready / Updated</span>
             </div>
             <p className="text-xs text-slate-600 mb-1.5">
               Driver: <span className="font-bold text-slate-800">{createdInfo.name}</span> ({createdInfo.phone})
@@ -413,11 +451,12 @@ Thank you,
                         </a>
 
                         <button
-                          onClick={() => handleResetPassword(d)}
-                          className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-text-primary font-medium rounded-lg transition-colors"
-                          title="Reset Password"
+                          onClick={() => handleOpenPasswordModal(d)}
+                          className="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg transition-colors flex items-center gap-1"
+                          title="Set or Reset Driver Login Password"
                         >
-                          Reset Pass
+                          <KeyRound className="w-3 h-3 text-amber-600" />
+                          <span>Set Pass</span>
                         </button>
                         <button
                           onClick={() => handleToggleStatus(d)}
@@ -492,14 +531,14 @@ Thank you,
             </div>
 
             <div>
-              <label className="label">Initial Password</label>
+              <label className="label">Login Password (Set by Admin)</label>
               <input
                 type="text"
                 required
                 value={formPassword}
                 onChange={e => setFormPassword(e.target.value)}
-                placeholder="Temporary password"
-                className="input-field font-mono"
+                placeholder="Type password, e.g. 1234"
+                className="input-field font-mono font-bold"
               />
             </div>
           </div>
@@ -516,7 +555,7 @@ Thank you,
           </div>
 
           <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-xl">
-            <span className="font-bold">Security Notice:</span> Drivers use their username and temporary password to log in via the Driver Portal. They will be prompted to complete their profile (upload photo, licence number, and new strong password) on first login.
+            <span className="font-bold">Security Rule:</span> You are setting this driver's login password. Drivers cannot edit or change their password. If they ever forget it, only an admin can reset or set a new password.
           </div>
 
           <div className="flex items-center gap-2 pt-1 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
@@ -594,15 +633,26 @@ Thank you,
               />
             </div>
             <div>
-              <label className="label">Vehicle Number</label>
+              <label className="label">Set New Password (Optional)</label>
               <input
                 type="text"
-                value={editForm.vehicle_number}
-                onChange={e => setEditForm({ ...editForm, vehicle_number: e.target.value })}
-                placeholder="KL 16 Q 7965"
-                className="input-field font-mono uppercase"
+                value={editForm.password}
+                onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                placeholder="Leave blank or type new password"
+                className="input-field font-mono font-bold"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="label">Vehicle Number</label>
+            <input
+              type="text"
+              value={editForm.vehicle_number}
+              onChange={e => setEditForm({ ...editForm, vehicle_number: e.target.value })}
+              placeholder="KL 16 Q 7965"
+              className="input-field font-mono uppercase"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -701,6 +751,117 @@ Thank you,
               className="btn-primary text-xs"
             >
               {submitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Set Driver Password Modal */}
+      <Modal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+        title={`Set Password: ${passwordModalDriver?.full_name || 'Driver'}`}
+        size="md"
+      >
+        <form onSubmit={handleSaveCustomPassword} className="space-y-4 text-xs">
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950 leading-relaxed">
+            <span className="font-bold flex items-center gap-1.5 mb-1 text-emerald-800">
+              <KeyRound className="w-4 h-4 text-emerald-600" />
+              <span>Admin Controlled Password</span>
+            </span>
+            <span>You set the password for this driver. Drivers cannot edit or change their password. Type any password you wish to assign below and click save.</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Driver Name</label>
+              <input
+                type="text"
+                disabled
+                value={passwordModalDriver?.full_name || ''}
+                className="input-field bg-slate-100 text-slate-700 font-bold"
+              />
+            </div>
+            <div>
+              <label className="label">Phone Number</label>
+              <input
+                type="text"
+                disabled
+                value={passwordModalDriver?.phone || ''}
+                className="input-field bg-slate-100 text-slate-700 font-mono"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Login Username</label>
+            <input
+              type="text"
+              required
+              value={customUsername}
+              onChange={e => setCustomUsername(e.target.value.toLowerCase().trim())}
+              placeholder="e.g. bimal"
+              className="input-field font-mono font-bold"
+            />
+            <span className="text-[10px] text-slate-400 mt-1 block">Driver can log in using either this username or their phone number.</span>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="label mb-0">New Password (Type whatever you want)</label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => setCustomPassword('1234')}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-mono font-bold text-slate-700"
+                >
+                  1234
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomPassword('driver123')}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-mono font-bold text-slate-700"
+                >
+                  driver123
+                </button>
+              </div>
+            </div>
+            <div className="relative">
+              <input
+                type={showModalPassword ? 'text' : 'password'}
+                required
+                value={customPassword}
+                onChange={e => setCustomPassword(e.target.value)}
+                placeholder="Type password, e.g. 1234"
+                className="input-field font-mono font-bold text-sm tracking-wider pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowModalPassword(!showModalPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                title={showModalPassword ? 'Hide Password' : 'Show Password'}
+              >
+                {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <button
+              type="button"
+              onClick={() => setIsPasswordModalOpen(false)}
+              className="btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={settingPassword}
+              className="btn-primary text-xs flex items-center gap-1.5"
+            >
+              {settingPassword ? <LoadingSpinner size="sm" /> : <KeyRound className="w-3.5 h-3.5" />}
+              <span>{settingPassword ? 'Saving Password...' : 'Save & Set Password'}</span>
             </button>
           </div>
         </form>
@@ -957,6 +1118,18 @@ Thank you,
               </a>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = selectedViewDriver;
+                    setSelectedViewDriver(null);
+                    handleOpenPasswordModal(d);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs inline-flex items-center gap-1.5 border border-amber-200 transition-colors"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Set / Reset Password</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
