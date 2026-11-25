@@ -43,6 +43,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import SearchInput from '../../components/ui/SearchInput';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import TimePicker24h from '../../components/ui/TimePicker24h';
 import {
   formatINR,
   formatDate,
@@ -3167,15 +3168,12 @@ const TripsPage: React.FC = () => {
                     {formatTime(editForm.pickup_time)} hrs
                   </span>
                 </label>
-                <input
-                  type="time"
-                  step="60"
-                  required
+                <TimePicker24h
                   value={editForm.pickup_time}
-                  onChange={e => setEditForm({ ...editForm, pickup_time: e.target.value })}
-                  className="input-field font-mono"
+                  onChange={val => setEditForm({ ...editForm, pickup_time: val })}
+                  required
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time format (e.g. 14:30)</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time (00-23 hrs, 00-59 min)</span>
               </div>
               <div>
                 <label className="label">Trip Category *</label>

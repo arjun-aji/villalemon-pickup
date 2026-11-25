@@ -58,6 +58,7 @@ import {
 } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Modal from '../../components/ui/Modal';
+import TimePicker24h from '../../components/ui/TimePicker24h';
 
 export interface GuestItem {
   id: string;
@@ -849,15 +850,12 @@ const AddTripPage: React.FC = () => {
                       {formatTime(pickupTime)} hrs
                     </span>
                   </label>
-                  <input
-                    type="time"
-                    step="60"
+                  <TimePicker24h
                     value={pickupTime}
-                    onChange={e => setPickupTime(e.target.value)}
+                    onChange={setPickupTime}
                     required
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20 font-medium font-mono"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time (e.g. 14:30 for 2:30 PM, 02:15 for night pickup)</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour railway time (e.g. 14:30 for 2:30 PM, 02:15 for night pickup)</span>
                 </div>
               </div>
             </div>

@@ -20,6 +20,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { TripCategory, VehicleType, AirportTerminal } from '../../types';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { formatDate, formatTime } from '../../utils/formatters';
+import TimePicker24h from '../../components/ui/TimePicker24h';
 
 const TRIP_CATEGORIES: TripCategory[] = [
   'Airport Pick-up',
@@ -233,15 +234,12 @@ const OrganizationSubmitTrip: React.FC = () => {
                     {formatTime(pickupTime)} hrs
                   </span>
                 </label>
-                <input
-                  type="time"
-                  step="60"
+                <TimePicker24h
                   value={pickupTime}
-                  onChange={e => setPickupTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                  onChange={setPickupTime}
                   required
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour format (e.g. 14:30)</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">24-hour time (00-23 hrs, 00-59 min)</span>
               </div>
             </div>
           </div>

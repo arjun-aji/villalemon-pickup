@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { tripService } from '../../services/tripService';
 import { formatDate, formatTime } from '../../utils/formatters';
+import TimePicker24h from '../../components/ui/TimePicker24h';
 
 const TRIP_CATEGORIES = [
   { id: 'Airport Pick-up', label: 'Airport Pick-up', icon: Plane, desc: 'Airport to Varkala / Hotel' },
@@ -314,16 +315,13 @@ const ClientBookingPage: React.FC = () => {
                     {formatTime(pickupTime)} hrs
                   </span>
                 </label>
-                <input
-                  type="time"
-                  step="60"
+                <TimePicker24h
                   value={pickupTime}
-                  onChange={e => setPickupTime(e.target.value)}
+                  onChange={setPickupTime}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-mono"
                 />
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  24-hour time format (e.g. 14:30 for 2:30 PM, 23:15 for late arrival)
+                  Select hour (00-23) and minute (00-59) in 24-hour railway time
                 </span>
               </div>
             </div>
