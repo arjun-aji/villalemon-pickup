@@ -19,7 +19,7 @@ const DriverCompletedTrips: React.FC = () => {
 
   useEffect(() => {
     loadCompleted();
-  }, [rawDriverId]);
+  }, [rawDriverId, driver?.full_name, profile?.full_name, driver?.phone, profile?.phone]);
 
   const loadCompleted = async () => {
     try {

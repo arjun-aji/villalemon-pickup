@@ -5,19 +5,24 @@ import { initialSettlements, initialTrips, getStored, setStored } from '../lib/m
 export const settlementService = {
   async getAll(status?: string): Promise<(TripSettlement & { trip?: any; driver?: any })[]> {
     if (isSupabaseConfigured) {
-      let query = supabase
-        .from('trip_settlements')
-        .select(`
-          *,
-          trip:trips(id, trip_number, guest_names, customer_name, trip_date, pickup_date, pickup_location, destination),
-          driver:drivers(id, full_name, phone)
-        `)
-        .order('updated_at', { ascending: false });
+      try {
+        let query = supabase
+          .from('trip_settlements')
+          .select(`
+            *,
+            trip:trips(id, trip_number, guest_names, trip_date, pickup_time, pickup_location, dropoff_location),
+            driver:drivers(id, full_name, phone)
+          `)
+          .order('updated_at', { ascending: false });
 
-      if (status) query = query.eq('settlement_status', status);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as (TripSettlement & { trip?: any; driver?: any })[];
+        if (status) query = query.eq('settlement_status', status);
+        const { data, error } = await query;
+        if (!error && data) {
+          return data as (TripSettlement & { trip?: any; driver?: any })[];
+        }
+      } catch (err) {
+        console.warn('trip_settlements table not available in Supabase, using local fallback:', err);
+      }
     }
 
     let settlements: TripSettlement[] = getStored('settlements', initialSettlements);

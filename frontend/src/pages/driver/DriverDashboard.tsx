@@ -87,11 +87,15 @@ const DriverDashboard: React.FC = () => {
         }
       }
 
-      const [allTrips, enrollments, driverBalances] = await Promise.all([
+      const [allTripsRes, enrollmentsRes, driverBalancesRes] = await Promise.allSettled([
         tripService.getAll(),
         effectiveDriverId ? enrollmentService.getDriverEnrollments(effectiveDriverId) : Promise.resolve([]),
         supabase.from('v_driver_balances').select('*'),
       ]);
+
+      const allTrips: Trip[] = allTripsRes.status === 'fulfilled' ? allTripsRes.value : [];
+      const enrollments: any[] = enrollmentsRes.status === 'fulfilled' ? enrollmentsRes.value : [];
+      const driverBalances: any = driverBalancesRes.status === 'fulfilled' ? driverBalancesRes.value : { data: [] };
 
       const isUpcomingStatus = (st?: string) => {
         const s = (st || '').toLowerCase().replace(/[\s-]+/g, '_');
