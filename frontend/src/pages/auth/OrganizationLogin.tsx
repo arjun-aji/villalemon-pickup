@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, Lock, MapPin, Building, Building2, User, Phone, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, ArrowLeft, Lock, Building, Building2, User, KeyRound, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../lib/supabase';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const OrgBuildingBadge: React.FC = () => (
@@ -30,31 +29,12 @@ const OrgBuildingBadge: React.FC = () => (
 );
 
 const OrganizationLogin: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<'login' | 'signup'>(() => {
-    return searchParams.get('mode') === 'signup' ? 'signup' : 'login';
-  });
-
   // Login state
   const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // Sign up state
-  const [signupForm, setSignupForm] = useState({
-    name: '',
-    type: 'hotel' as 'hotel' | 'homestay' | 'tour_operator' | 'corporate' | 'travel_agent',
-    contact_person: '',
-    phone: '',
-    whatsapp: '',
-    email: '',
-    password: '',
-    gst_number: '',
-    billing_address: '',
-  });
 
   const { signInOrganization } = useAuth();
   const navigate = useNavigate();
@@ -62,7 +42,6 @@ const OrganizationLogin: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccessMsg(null);
     setLoading(true);
 
     try {
@@ -79,388 +58,135 @@ const OrganizationLogin: React.FC = () => {
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    if (!signupForm.name.trim() || !signupForm.contact_person.trim() || !signupForm.phone.trim() || !signupForm.email.trim() || !signupForm.password.trim()) {
-      setError('Please fill in all required fields marked with *');
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // 1. Supabase Auth Sign Up
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: signupForm.email.trim().toLowerCase(),
-        password: signupForm.password,
-        options: {
-          data: {
-            role: 'organization',
-            full_name: signupForm.name.trim(),
-            contact_person: signupForm.contact_person.trim(),
-            phone: signupForm.phone.trim(),
-          },
-        },
-      });
-
-      if (authErr && !authErr.message.includes('already registered')) {
-        throw authErr;
-      }
-
-      // 2. Insert into organizations table
-      const { error: orgErr } = await supabase
-        .from('organizations')
-        .insert({
-          name: signupForm.name.trim(),
-          type: signupForm.type,
-          contact_person: signupForm.contact_person.trim(),
-          phone: signupForm.phone.trim(),
-          whatsapp: signupForm.whatsapp.trim() || null,
-          email: signupForm.email.trim().toLowerCase(),
-          gst_number: signupForm.gst_number.trim() || null,
-          billing_address: signupForm.billing_address.trim() || null,
-          status: 'active',
-          payment_terms: 'Weekly settlement',
-          credit_limit: 50000,
-        });
-
-      if (orgErr) {
-        console.warn('Could not insert org row:', orgErr);
-      }
-
-      setSuccessMsg('Partner registration successful! Logging you in...');
-      setTimeout(async () => {
-        try {
-          const { error: loginErr } = await signInOrganization(signupForm.email, signupForm.password);
-          if (!loginErr) {
-            navigate('/org/dashboard');
-          } else {
-            setMode('login');
-            setEmailOrUsername(signupForm.email);
-            setSuccessMsg('Account created! Please enter your password to sign in.');
-          }
-        } catch {
-          setMode('login');
-          setEmailOrUsername(signupForm.email);
-        }
-      }, 1200);
-    } catch (err: any) {
-      setError(err?.message || 'Registration failed. Please try again or contact support.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#F5F8FC] flex flex-col justify-between items-center px-4 py-8 relative overflow-hidden select-none font-sans">
-      {/* Background coastal scenery */}
-      <div
-        className="absolute inset-0 bg-cover bg-center opacity-30 pointer-events-none"
-        style={{
-          backgroundImage: `url('/assets/varkala-desktop-bg.jpg')`,
-        }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#F5F8FC]/60 via-[#F5F8FC]/90 to-[#F5F8FC] pointer-events-none" />
+    <div className="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0A1128] flex items-center justify-center p-4">
+      {/* Background patterns */}
+      <div className="absolute inset-0 bg-[radial-gradient(#1E3A8A_1px,transparent_1px)] [background-size:24px_24px] opacity-25 pointer-events-none" />
 
-      {/* Top back navigation */}
-      <div className="w-full max-w-lg relative z-10 flex items-center justify-between">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs font-bold text-[#10243A] hover:text-[#1E3A8A] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-sm border border-slate-200 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Portal Selection</span>
-        </Link>
-
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-          <MapPin className="h-3.5 w-3.5 text-[#00875A]" />
-          <span>Varkala, Kerala</span>
+      <div className="w-full max-w-md relative z-10">
+        {/* Top Back Link */}
+        <div className="mb-4">
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Portal Selection</span>
+          </Link>
         </div>
-      </div>
 
-      {/* Organization Login Card */}
-      <div className="w-full max-w-lg relative z-10 my-6">
-        <div className="bg-white rounded-[28px] shadow-[0_20px_50px_rgba(16,36,58,0.08)] overflow-hidden border border-slate-100">
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
           {/* Card Header */}
-          <div className="pt-7 pb-3 px-8 text-center bg-gradient-to-b from-slate-50/70 to-white">
+          <div className="p-8 pb-4 text-center">
             <OrgBuildingBadge />
-            <h1 className="text-2xl font-black tracking-tight text-[#10243A]">Partner Portal</h1>
-            <p className="text-xs text-[#64748B] mt-1">
-              Hotels, homestays, tour operators & corporate partner management
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1E3A8A] mb-1">
+              B2B Partner Portal
+            </span>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">
+              Organization & Client Sign In
+            </h1>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Hotel, Homestay & Travel Partner direct booking and live trip tracking portal
             </p>
+          </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className="mt-4 p-1 bg-slate-100 rounded-xl grid grid-cols-2 text-xs font-bold border border-slate-200">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setError(null);
-                  setSuccessMsg(null);
-                }}
-                className={`py-2 rounded-lg transition-all ${
-                  mode === 'login' ? 'bg-[#1E3A8A] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('signup');
-                  setError(null);
-                  setSuccessMsg(null);
-                }}
-                className={`py-2 rounded-lg transition-all ${
-                  mode === 'signup' ? 'bg-[#1E3A8A] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Register Partner
-              </button>
+          {/* Admin Managed Credentials Notice */}
+          <div className="mx-8 mb-3 p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-900 text-xs">
+            <div className="flex items-start gap-2">
+              <KeyRound className="w-4 h-4 text-[#1E3A8A] shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-[11px] text-[#1E3A8A]">Admin Provisioned Access</p>
+                <p className="text-[11px] text-blue-800 leading-snug mt-0.5">
+                  Partner credentials (username & password) are issued by Varkala Holidays Admin. Login passwords can only be changed or reset by Administration.
+                </p>
+              </div>
             </div>
           </div>
 
-          {error && (
-            <div className="mx-8 mt-2 p-3 bg-red-50 border border-red-200 text-expense text-xs rounded-xl font-medium leading-relaxed">
-              {error}
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="mx-8 mt-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {/* MODE 1: LOGIN */}
-          {mode === 'login' ? (
-            <form onSubmit={handleLogin} className="p-8 pt-3 space-y-4">
-              <div>
-                <label className="label">Organization Email or Username</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={emailOrUsername}
-                    onChange={e => setEmailOrUsername(e.target.value)}
-                    placeholder="e.g. villalemonhomestay@gmail.com"
-                    required
-                    className="input-field pl-10"
-                  />
-                  <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                </div>
+          {/* Form */}
+          <form onSubmit={handleLogin} className="p-8 pt-2 space-y-4 text-xs">
+            {error && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 font-medium text-xs flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{error}</span>
               </div>
+            )}
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="label mb-0">Password</label>
-                  <button
-                    type="button"
-                    onClick={() => alert('Please contact Varkala Holidays management to reset your organization credentials.')}
-                    className="text-xs text-[#1E3A8A] hover:underline font-semibold"
-                  >
-                    Need Help?
-                  </button>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    required
-                    className="input-field pl-10 pr-10"
-                  />
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#172554] active:bg-[#0F172A] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#1E3A8A]/25 transition-all mt-2 disabled:opacity-50"
-              >
-                {loading ? (
-                  <LoadingSpinner size="sm" className="border-white border-t-transparent" />
-                ) : (
-                  <>
-                    <span>LOGIN TO PARTNER PORTAL</span>
-                    <Lock className="h-3.5 w-3.5" />
-                  </>
-                )}
-              </button>
-
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => setMode('signup')}
-                  className="text-xs text-[#1E3A8A] hover:underline font-bold"
-                >
-                  New Partner? Create an Organization Account
-                </button>
-              </div>
-            </form>
-          ) : (
-            /* MODE 2: REGISTER / SIGN UP */
-            <form onSubmit={handleSignup} className="p-8 pt-3 space-y-3.5 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Organization / Hotel Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={signupForm.name}
-                    onChange={e => setSignupForm({ ...signupForm, name: e.target.value })}
-                    placeholder="e.g. Sunset Cliff Resort"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label">Organization Type *</label>
-                  <select
-                    value={signupForm.type}
-                    onChange={e => setSignupForm({ ...signupForm, type: e.target.value as any })}
-                    className="input-field font-semibold"
-                  >
-                    <option value="hotel">Hotel</option>
-                    <option value="homestay">Homestay</option>
-                    <option value="tour_operator">Tour Operator</option>
-                    <option value="travel_agent">Travel Agent</option>
-                    <option value="corporate">Corporate</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Contact Person Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={signupForm.contact_person}
-                    onChange={e => setSignupForm({ ...signupForm, contact_person: e.target.value })}
-                    placeholder="e.g. Anand Sharma"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label">Phone Number *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={signupForm.phone}
-                    onChange={e => setSignupForm({ ...signupForm, phone: e.target.value })}
-                    placeholder="e.g. 9847123456"
-                    className="input-field font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    value={signupForm.email}
-                    onChange={e => setSignupForm({ ...signupForm, email: e.target.value })}
-                    placeholder="manager@hotel.com"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label">Password *</label>
-                  <input
-                    type="password"
-                    required
-                    value={signupForm.password}
-                    onChange={e => setSignupForm({ ...signupForm, password: e.target.value })}
-                    placeholder="••••••••••••"
-                    className="input-field"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">WhatsApp Number (Optional)</label>
-                  <input
-                    type="tel"
-                    value={signupForm.whatsapp}
-                    onChange={e => setSignupForm({ ...signupForm, whatsapp: e.target.value })}
-                    placeholder="+91..."
-                    className="input-field font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="label">GST Number (Optional)</label>
-                  <input
-                    type="text"
-                    value={signupForm.gst_number}
-                    onChange={e => setSignupForm({ ...signupForm, gst_number: e.target.value })}
-                    placeholder="32AAAAA0000A1Z5 (Optional)"
-                    className="input-field font-mono uppercase"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Property / Billing Address (Optional)</label>
+            <div>
+              <label className="label">Username, Email, or Phone Number *</label>
+              <div className="relative">
                 <input
                   type="text"
-                  value={signupForm.billing_address}
-                  onChange={e => setSignupForm({ ...signupForm, billing_address: e.target.value })}
-                  placeholder="North Cliff, Varkala, Kerala"
-                  className="input-field"
+                  required
+                  value={emailOrUsername}
+                  onChange={e => setEmailOrUsername(e.target.value)}
+                  placeholder="e.g. cliffstories, hotel@domain.com, or phone"
+                  className="input-field pl-9 font-medium"
+                  autoComplete="username"
                 />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#172554] active:bg-[#0F172A] text-white font-extrabold text-xs tracking-wider uppercase py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#1E3A8A]/25 transition-all mt-2 disabled:opacity-50"
-              >
-                {loading ? (
-                  <LoadingSpinner size="sm" className="border-white border-t-transparent" />
-                ) : (
-                  <>
-                    <span>REGISTER PARTNER ACCOUNT</span>
-                    <Building2 className="h-3.5 w-3.5" />
-                  </>
-                )}
-              </button>
-
-              <div className="text-center pt-2">
+            <div>
+              <label className="label">Password *</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter partner password"
+                  className="input-field pl-9 pr-10"
+                  autoComplete="current-password"
+                />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <button
                   type="button"
-                  onClick={() => setMode('login')}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-semibold"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                 >
-                  Already have an account? <span className="text-[#1E3A8A] font-bold">Sign In</span>
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </form>
-          )}
-        </div>
-      </div>
+            </div>
 
-      {/* Footer */}
-      <div className="text-center relative z-10 text-xs text-slate-400">
-        <p>Varkala Holidays | Partner Portal • Varkala</p>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl font-bold text-white bg-[#1E3A8A] hover:bg-blue-900 active:scale-98 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span>Verifying Partner Credentials...</span>
+                </>
+              ) : (
+                <>
+                  <Building2 className="w-4 h-4" />
+                  <span>Sign In to Partner Portal</span>
+                </>
+              )}
+            </button>
+
+            <div className="text-center pt-2 text-[11px] text-slate-400">
+              Need access or lost your password? Please contact <span className="font-bold text-slate-600">Varkala Holidays Office Admin</span>.
+            </div>
+          </form>
+
+          {/* Footer badge */}
+          <div className="bg-slate-50 px-8 py-3.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Varkala Holidays B2B Engine
+            </span>
+            <span>24/7 Operations</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default OrganizationLogin;
-

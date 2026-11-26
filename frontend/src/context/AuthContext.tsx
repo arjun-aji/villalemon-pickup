@@ -436,82 +436,139 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Organization Partner Login
   const signInOrganization = async (emailOrUsername: string, password: string): Promise<{ error: string | null }> => {
     if (!emailOrUsername || !password) {
-      return { error: 'Please enter organization email and password' };
+      return { error: 'Please enter organization email or username and password' };
     }
 
-    const cleanInput = emailOrUsername.trim();
-    const loginEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput.replace(/\s+/g, '').toLowerCase()}@partner.villalemon.in`;
+    const cleanInput = emailOrUsername.trim().toLowerCase();
+    const cleanDigits = cleanInput.replace(/[^0-9]/g, '');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: password,
-      });
+      // 1. Fetch active organizations to match username, phone, email, or name
+      const { data: allOrgs, error: fetchErr } = await supabase
+        .from('organizations')
+        .select('*');
 
-      if (error) {
-        return { error: error.message };
+      if (fetchErr) {
+        console.warn('Organization fetch note:', fetchErr);
       }
 
-      if (data.user) {
-        // Fetch profile
-        let orgProfile: Profile | null = null;
-        try {
-          const { data: pData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
+      let matchedOrg: any = null;
+      if (allOrgs && allOrgs.length > 0) {
+        matchedOrg = allOrgs.find((o: any) => {
+          const notesStr = o.notes || '';
+          const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
+          const storedUser = userMatch ? userMatch[1].trim().toLowerCase() : '';
+          const storedPhone = (o.phone || '').trim().replace(/[^0-9]/g, '');
+          const storedWhatsapp = (o.whatsapp || '').trim().replace(/[^0-9]/g, '');
+          const storedEmail = (o.email || '').trim().toLowerCase();
+          const storedName = (o.name || '').trim().toLowerCase();
 
-          if (pData) orgProfile = pData as Profile;
-        } catch {
-          // Fallback
+          // Match by explicit username in notes
+          if (storedUser && storedUser === cleanInput) return true;
+          // Match by phone number or whatsapp
+          if (cleanDigits.length >= 8 && (storedPhone.includes(cleanDigits) || storedWhatsapp.includes(cleanDigits))) return true;
+          // Match by email
+          if (storedEmail && storedEmail === cleanInput) return true;
+          // Match by name
+          if (storedName && storedName === cleanInput) return true;
+          // Match name prefix without spaces
+          if (storedName.replace(/\s+/g, '') === cleanInput.replace(/\s+/g, '')) return true;
+
+          return false;
+        });
+      }
+
+      // Check active status
+      if (matchedOrg && matchedOrg.is_active === false) {
+        return { error: 'This organization account is deactivated. Please contact administration.' };
+      }
+
+      let isPasswordCorrect = false;
+      let authUser: any = null;
+
+      // Check stored password in notes
+      if (matchedOrg) {
+        const notesStr = matchedOrg.notes || '';
+        const passMatch = notesStr.match(/Password:\s*([^|]+)/i);
+        const storedPassword = passMatch ? passMatch[1].trim() : null;
+        if (storedPassword && storedPassword === password.trim()) {
+          isPasswordCorrect = true;
         }
+      }
 
-        if (!orgProfile) {
-          orgProfile = {
-            id: data.user.id,
-            role: 'organization',
-            full_name: data.user.user_metadata?.full_name || 'Organization Partner',
-            email: data.user.email,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
+      // If not matched or no stored password in notes, try Supabase Auth
+      if (!isPasswordCorrect) {
+        const emailsToTry = [
+          cleanInput.includes('@') ? cleanInput : `${cleanInput.replace(/\s+/g, '')}@partner.villalemon.in`,
+          matchedOrg?.email || null,
+          matchedOrg?.phone ? `${matchedOrg.phone}@partner.villalemon.in` : null,
+        ].filter(Boolean) as string[];
+
+        for (const email of emailsToTry) {
+          try {
+            const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+              email,
+              password: password.trim(),
+            });
+
+            if (authData?.user && !authErr) {
+              authUser = authData.user;
+              isPasswordCorrect = true;
+              break;
+            }
+          } catch {
+            // continue checking
+          }
         }
+      }
 
-        // Fetch associated organization record
-        let orgData: Organization | null = null;
+      if (!isPasswordCorrect) {
+        return { error: 'Invalid organization username/email or password' };
+      }
+
+      // If we don't have matchedOrg yet, look it up by authUser
+      if (!matchedOrg && authUser) {
         try {
           const { data: orgUser } = await supabase
             .from('organization_users')
             .select('*, organization:organizations(*)')
-            .or(`profile_id.eq.${data.user.id},user_id.eq.${data.user.id}`)
+            .or(`profile_id.eq.${authUser.id},user_id.eq.${authUser.id}`)
             .maybeSingle();
 
           if (orgUser?.organization) {
-            orgData = orgUser.organization as Organization;
+            matchedOrg = orgUser.organization;
           } else {
-            // Check direct organizations table
             const { data: directOrg } = await supabase
               .from('organizations')
               .select('*')
-              .or(`email.eq.${loginEmail},name.ilike.%${cleanInput}%`)
+              .or(`email.eq.${authUser.email},name.ilike.%${cleanInput}%`)
               .maybeSingle();
-
-            if (directOrg) orgData = directOrg as Organization;
+            if (directOrg) matchedOrg = directOrg;
           }
         } catch (e) {
           console.warn('Organization lookup error:', e);
         }
-
-        setUser({ id: data.user.id, email: data.user.email });
-        setProfile(orgProfile);
-        setOrganization(orgData);
-        setDriver(null);
-        return { error: null };
       }
 
-      return { error: 'Organization partner authentication failed' };
+      const orgId = matchedOrg?.id || authUser?.id || 'org-session';
+      const orgEmail = matchedOrg?.email || authUser?.email || `${cleanInput}@partner.villalemon.in`;
+
+      const orgProfile: Profile = {
+        id: orgId,
+        role: 'organization',
+        full_name: matchedOrg?.name || 'Organization Partner',
+        email: orgEmail,
+        phone: matchedOrg?.phone,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      setUser({ id: orgId, email: orgEmail });
+      setProfile(orgProfile);
+      setOrganization(matchedOrg as Organization);
+      setDriver(null);
+      return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Organization login failed' };
     }

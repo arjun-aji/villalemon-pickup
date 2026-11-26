@@ -15,12 +15,19 @@ import {
   Trash2,
   MessageSquare,
   Share2,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { organizationService } from '../../services/adminOperationsService';
 import { supabase } from '../../lib/supabase';
 import { Organization, OrganizationType, PaymentTerms } from '../../types';
 import { formatINR, formatDate } from '../../utils/formatters';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import Modal from '../../components/ui/Modal';
 
 const ORG_TYPES: OrganizationType[] = [
   'Travel agency',
@@ -44,6 +51,24 @@ const ClientsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+
+  // Set Organization Password Modal
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordModalOrg, setPasswordModalOrg] = useState<Organization | null>(null);
+  const [customPassword, setCustomPassword] = useState('');
+  const [customUsername, setCustomUsername] = useState('');
+  const [showModalPassword, setShowModalPassword] = useState(true);
+  const [settingPassword, setSettingPassword] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Created / Updated info modal
+  const [createdInfo, setCreatedInfo] = useState<{
+    orgName: string;
+    phone: string;
+    username: string;
+    pass: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -127,15 +152,71 @@ const ClientsPage: React.FC = () => {
     }
   };
 
+  const handleOpenPasswordModal = (org: Organization) => {
+    setPasswordModalOrg(org);
+    const notesStr = org.notes || '';
+    const userMatch = notesStr.match(/Username:\s*([a-zA-Z0-9_.-]+)/i);
+    const passMatch = notesStr.match(/Password:\s*([^|]+)/i);
+
+    const defaultUser = userMatch
+      ? userMatch[1].trim()
+      : (org.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || org.phone.replace(/[^0-9]/g, ''));
+    const defaultPass = passMatch ? passMatch[1].trim() : 'hotel123';
+
+    setCustomUsername(defaultUser);
+    setCustomPassword(defaultPass);
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleSaveCustomPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordModalOrg) return;
+    if (!customPassword.trim()) {
+      alert('Please enter a password');
+      return;
+    }
+
+    try {
+      setSettingPassword(true);
+      const res = await organizationService.setOrganizationCredentials(
+        passwordModalOrg.id,
+        customPassword.trim(),
+        customUsername.trim().toLowerCase()
+      );
+
+      if (!res.success) {
+        alert(res.error || 'Failed to update partner password');
+        return;
+      }
+
+      setIsPasswordModalOpen(false);
+      setCreatedInfo({
+        orgName: passwordModalOrg.name,
+        phone: passwordModalOrg.phone,
+        username: res.username || customUsername.trim().toLowerCase(),
+        pass: res.password || customPassword.trim(),
+      });
+
+      await loadOrganizations();
+    } catch (err: any) {
+      alert(err.message || 'Failed to set partner password');
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
   const handleDelete = async (org: Organization) => {
-    if (!confirm(`Are you sure you want to delete organization "${org.name}"? This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete organization "${org.name}"? This action will remove the organization from the system.`)) {
       return;
     }
     try {
+      setDeletingId(org.id);
       await organizationService.delete(org.id);
-      loadOrganizations();
+      await loadOrganizations();
     } catch (err: any) {
       alert(err.message || 'Error deleting organization');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -354,6 +435,14 @@ const ClientsPage: React.FC = () => {
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
+                            onClick={() => handleOpenPasswordModal(org)}
+                            className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 transition-colors inline-flex items-center gap-1 font-semibold text-[11px]"
+                            title="Set or Reset Partner Login Password"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Set Pass</span>
+                          </button>
+                          <button
                             onClick={() => handleOpenEdit(org)}
                             className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors inline-flex items-center gap-1 font-semibold text-[11px]"
                             title="Edit Client Profile"
@@ -371,10 +460,11 @@ const ClientsPage: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleDelete(org)}
-                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
+                            disabled={deletingId === org.id}
+                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors disabled:opacity-50"
                             title="Delete Organization"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingId === org.id ? <LoadingSpinner size="sm" /> : <Trash2 className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       </td>
@@ -548,6 +638,205 @@ const ClientsPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+      {/* Set Partner Password Modal */}
+      {isPasswordModalOpen && passwordModalOrg && (
+        <Modal
+          isOpen={isPasswordModalOpen}
+          onClose={() => setIsPasswordModalOpen(false)}
+          title={`Set Partner Password: ${passwordModalOrg.name}`}
+          size="md"
+        >
+          <form onSubmit={handleSaveCustomPassword} className="space-y-4 text-xs">
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-950 leading-relaxed">
+              <span className="font-bold flex items-center gap-1.5 mb-1 text-amber-800">
+                <KeyRound className="w-4 h-4 text-amber-600" />
+                <span>Admin-Controlled Partner Credentials</span>
+              </span>
+              <span>
+                You control the login username and password for this client/hotel. Partners cannot register or reset their own password. Set credentials below and share them via WhatsApp.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Organization / Hotel</label>
+                <input
+                  type="text"
+                  disabled
+                  value={passwordModalOrg.name}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 font-semibold text-slate-700"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Contact Phone</label>
+                <input
+                  type="text"
+                  disabled
+                  value={passwordModalOrg.phone}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 font-mono text-slate-700"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Partner Login ID / Username *
+              </label>
+              <input
+                type="text"
+                required
+                value={customUsername}
+                onChange={e => setCustomUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                placeholder="e.g. cliffstories or hotel phone number"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+              <span className="block text-[11px] text-slate-400 mt-1">
+                Partner can sign in using this username, their phone number, or email.
+              </span>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Assign Partner Password *</label>
+                <span className="text-[11px] text-slate-400">Directly set by Admin</span>
+              </div>
+              <div className="relative">
+                <input
+                  type={showModalPassword ? 'text' : 'password'}
+                  required
+                  value={customPassword}
+                  onChange={e => setCustomPassword(e.target.value)}
+                  placeholder="e.g. hotel123"
+                  className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 font-mono text-sm tracking-wider focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowModalPassword(!showModalPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                >
+                  {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[10px] text-slate-400 uppercase font-bold mr-1">Presets:</span>
+                {[
+                  'hotel123',
+                  'pass1234',
+                  passwordModalOrg.phone.replace(/[^0-9]/g, '').slice(-6) || 'varkala2026',
+                  'varkala2026',
+                ].map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setCustomPassword(preset)}
+                    className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-amber-100 hover:text-amber-900 text-slate-600 font-mono text-[10px] transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={settingPassword}
+                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50"
+              >
+                {settingPassword ? <LoadingSpinner size="sm" /> : <KeyRound className="w-3.5 h-3.5" />}
+                <span>{settingPassword ? 'Saving Password...' : 'Save & Set Password'}</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Credentials Created / Updated Summary Modal */}
+      {createdInfo && (
+        <Modal
+          isOpen={true}
+          onClose={() => setCreatedInfo(null)}
+          title="Partner Login Credentials Ready"
+          size="sm"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-bold">Password Set Successfully!</p>
+                <p className="text-[11px] text-emerald-700">Credentials are ready to share with {createdInfo.orgName}.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 font-mono space-y-2">
+              <div className="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                <span className="text-[11px] text-slate-400 font-sans">Partner:</span>
+                <span className="font-bold text-slate-800 font-sans">{createdInfo.orgName}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                <span className="text-[11px] text-slate-400 font-sans">Login ID / Username:</span>
+                <span className="font-bold text-blue-700">{createdInfo.username}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                <span className="text-[11px] text-slate-400 font-sans">Password:</span>
+                <span className="font-bold text-emerald-700">{createdInfo.pass}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span className="text-[11px] text-slate-400 font-sans">Portal URL:</span>
+                <span className="text-slate-700 text-[11px]">{window.location.origin}/org/login</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const portalUrl = `${window.location.origin}/org/login`;
+                  const msg = `*Varkala Holidays Partner Portal Login*\n\nHello *${createdInfo.orgName}*,\nHere are your confidential partner portal credentials:\n\n🌐 *Portal Link:* ${portalUrl}\n👤 *Login ID:* ${createdInfo.username}\n🔑 *Password:* ${createdInfo.pass}\n\nYou can view duty statuses, guest bookings, and download invoices directly from the portal.`;
+                  navigator.clipboard.writeText(msg);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="py-2 px-3 rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Copied!' : 'Copy Info'}</span>
+              </button>
+
+              <a
+                href={`https://wa.me/${createdInfo.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                  `*Varkala Holidays Partner Portal Login*\n\nHello *${createdInfo.orgName}*,\nHere are your confidential partner portal credentials:\n\n🌐 *Portal Link:* ${window.location.origin}/org/login\n👤 *Login ID:* ${createdInfo.username}\n🔑 *Password:* ${createdInfo.pass}\n\nYou can view duty statuses, guest bookings, and download invoices directly from the portal.`
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </a>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setCreatedInfo(null)}
+                className="w-full py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

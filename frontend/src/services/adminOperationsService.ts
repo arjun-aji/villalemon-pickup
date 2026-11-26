@@ -16,32 +16,46 @@ export const organizationService = {
   async getAll(): Promise<Organization[]> {
     if (isSupabaseConfigured) {
       try {
-        const { data, error } = await supabase
-          .from('v_client_summary')
+        // Direct query on organizations excluding soft-deleted / inactive ones
+        const { data: orgRecords, error: orgErr } = await supabase
+          .from('organizations')
           .select('*')
-          .order('organization_name', { ascending: true });
+          .neq('is_active', false)
+          .order('name', { ascending: true });
 
-        if (!error && data) {
-          return data.map((o: any) => ({
-            ...o,
-            id: o.organization_id || o.id,
-            name: o.organization_name || o.name,
-            type: o.organization_type || o.type,
-            outstanding_amount: Number(o.outstanding_balance) || 0,
-            total_billed: Number(o.completed_trip_value) || 0,
-            credit_status: o.credit_check || 'OK',
-          })) as Organization[];
+        if (orgErr) throw orgErr;
+
+        // Try enriching with calculated statement balances from v_client_summary
+        try {
+          const { data: summaryData } = await supabase
+            .from('v_client_summary')
+            .select('*');
+
+          if (summaryData && summaryData.length > 0) {
+            const summaryMap = new Map(summaryData.map((s: any) => [s.organization_id || s.id, s]));
+            return (orgRecords || []).map((o: any) => {
+              const s = summaryMap.get(o.id);
+              return {
+                ...o,
+                outstanding_amount: s ? (Number(s.outstanding_balance) || 0) : 0,
+                total_billed: s ? (Number(s.completed_trip_value) || 0) : 0,
+                credit_status: s ? (s.credit_check || 'OK') : 'OK',
+                completed_trip_value: s ? (Number(s.completed_trip_value) || 0) : 0,
+                invoiced_issued_amount: s ? (Number(s.invoiced_issued_amount) || 0) : 0,
+                total_paid: s ? (Number(s.total_paid) || 0) : 0,
+                outstanding_balance: s ? (Number(s.outstanding_balance) || 0) : 0,
+                credit_check: s ? (s.credit_check || 'OK') : 'OK',
+              } as Organization;
+            });
+          }
+        } catch (sumErr) {
+          console.warn('v_client_summary query fallback:', sumErr);
         }
-      } catch (e) {
-        console.warn('v_client_summary query fallback:', e);
-      }
 
-      const { data: direct, error: dErr } = await supabase
-        .from('organizations')
-        .select('*')
-        .order('name', { ascending: true });
-      if (dErr) throw dErr;
-      return (direct as Organization[]) || [];
+        return (orgRecords as Organization[]) || [];
+      } catch (e) {
+        console.warn('Organization fetch error:', e);
+      }
     }
     return [];
   },
@@ -79,14 +93,172 @@ export const organizationService = {
     throw new Error('Supabase not configured');
   },
 
+  async setOrganizationCredentials(id: string, newPassword: string, newUsername?: string): Promise<{ success: boolean; username?: string; password?: string; error?: string }> {
+    const cleanPassword = newPassword.trim();
+    if (!cleanPassword) {
+      return { success: false, error: 'Password cannot be empty' };
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: curr, error: fetchErr } = await supabase
+          .from('organizations')
+          .select('id, name, phone, email, notes')
+          .eq('id', id)
+          .single();
+
+        if (fetchErr || !curr) {
+          return { success: false, error: fetchErr?.message || 'Organization record not found' };
+        }
+
+        let notes = curr.notes || '';
+        const cleanUser = (newUsername || '').trim().toLowerCase() ||
+          curr.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() ||
+          (curr.phone ? curr.phone.replace(/[^0-9]/g, '') : 'partner');
+
+        if (cleanUser) {
+          if (/Username:\s*[^|]+/i.test(notes)) {
+            notes = notes.replace(/Username:\s*[^|]+/i, `Username: ${cleanUser}`);
+          } else {
+            notes = `Username: ${cleanUser} | ${notes}`;
+          }
+        }
+
+        if (/Password:\s*[^|]+/i.test(notes)) {
+          notes = notes.replace(/Password:\s*[^|]+/i, `Password: ${cleanPassword}`);
+        } else {
+          notes = `${notes} | Password: ${cleanPassword}`;
+        }
+
+        // Clean up flags & empty segments
+        notes = notes.split('|').map((p: string) => p.trim()).filter(Boolean).join(' | ');
+
+        const { error: updateErr } = await supabase
+          .from('organizations')
+          .update({
+            notes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+
+        if (updateErr) {
+          return { success: false, error: updateErr.message };
+        }
+
+        // Also sync with Supabase Auth without session persistence
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnvknruutfrmwyrbhdjq.supabase.co';
+          const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+          const authClient = createClient(supabaseUrl, supabaseKey, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          });
+
+          const partnerEmail = `${cleanUser}@partner.villalemon.in`;
+
+          const { data: authData } = await authClient.auth.signUp({
+            email: partnerEmail,
+            password: cleanPassword,
+            options: {
+              data: {
+                role: 'organization',
+                full_name: curr.name,
+                username: cleanUser,
+              },
+            },
+          });
+
+          if (authData?.user) {
+            // Upsert profile
+            await supabase.from('profiles').upsert({
+              id: authData.user.id,
+              email: partnerEmail,
+              full_name: curr.name,
+              phone: curr.phone,
+              role: 'organization',
+              is_active: true,
+            });
+
+            // Upsert organization_users link
+            await supabase.from('organization_users').upsert({
+              organization_id: id,
+              profile_id: authData.user.id,
+              role: 'admin',
+            });
+          }
+        } catch (authSyncErr) {
+          console.warn('Partner auth sync note:', authSyncErr);
+        }
+
+        return { success: true, username: cleanUser, password: cleanPassword };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    return { success: false, error: 'Database not connected' };
+  },
+
   async delete(id: string): Promise<void> {
     if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from('organizations')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      return;
+      try {
+        // 1. Clean up multi-tenant user mapping
+        try {
+          await supabase
+            .from('organization_users')
+            .delete()
+            .eq('organization_id', id);
+        } catch (e) {
+          console.warn('Cleanup organization_users note:', e);
+        }
+
+        // 2. Check if there are linked trips, invoices, or payments
+        const [tripsRes, invRes, payRes] = await Promise.all([
+          supabase.from('trips').select('id', { count: 'exact', head: true }).eq('organization_id', id),
+          supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('organization_id', id),
+          supabase.from('payments').select('id', { count: 'exact', head: true }).eq('organization_id', id),
+        ]);
+
+        const hasLinkedRecords = (tripsRes.count || 0) > 0 || (invRes.count || 0) > 0 || (payRes.count || 0) > 0;
+
+        if (hasLinkedRecords) {
+          // Soft-delete so historical audit and foreign keys remain valid
+          const { error: softErr } = await supabase
+            .from('organizations')
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+
+          if (softErr) throw softErr;
+          return;
+        }
+
+        // 3. If no linked records exist, hard-delete
+        const { error: hardErr } = await supabase
+          .from('organizations')
+          .delete()
+          .eq('id', id);
+
+        if (hardErr) {
+          // If hard delete still hits an unexpected constraint, fallback to soft-delete
+          console.warn('Hard-delete failed, falling back to soft-delete:', hardErr);
+          const { error: fallbackErr } = await supabase
+            .from('organizations')
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+
+          if (fallbackErr) throw fallbackErr;
+        }
+        return;
+      } catch (err: any) {
+        console.error('Organization deletion error:', err);
+        throw new Error(err?.message || 'Failed to delete organization');
+      }
     }
     throw new Error('Supabase not configured');
   },
