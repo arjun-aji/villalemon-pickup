@@ -64,17 +64,18 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
   }, []);
 
   const triggerChange = (newH: string, newM: string) => {
-    if (!newH && !newM) {
+    const h = newH && newH !== '--' ? newH : '';
+    const m = newM && newM !== '--' ? newM : '';
+    if (!h && !m) {
       onChange('');
     } else {
-      onChange(`${newH || '--'}:${newM || '--'}`);
+      onChange(`${h || '--'}:${m || '--'}`);
     }
   };
 
-  // Hour typing: allows typing multi-digit numbers like 1 then 2 without premature 01 padding
+  // Hour typing: strictly accepts raw digits typed by the user (no default leading 0 in tens place)
   const handleHourInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value.replace(/[^0-9]/g, '');
-    // Take first 2 digits
     if (raw.length > 2) raw = raw.slice(0, 2);
 
     if (raw === '') {
@@ -91,13 +92,13 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
       setHourText(raw);
 
       if (raw.length === 2) {
-        // Full 2 digits typed (e.g. "12", "08", "23")
-        triggerChange(raw, minuteText || '00');
+        // Full 2 digits typed by user (e.g. "01", "02", "12", "13", "23")
+        triggerChange(raw, minuteText);
         setIsHourOpen(false);
         minuteInputRef.current?.focus();
         minuteInputRef.current?.select();
       } else {
-        // 1 digit typed (e.g. "1", "2", "0"): do NOT pad with 0 yet! Keep focus in hour input
+        // 1 digit typed by user (e.g. "0", "1", "2"): keep exactly as typed, never prepend 0
         triggerChange(raw, minuteText);
       }
     }
@@ -118,22 +119,25 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     if (hourText) {
       let num = parseInt(hourText, 10);
       if (isNaN(num) || num < 0) num = 0;
-      if (num > 23) num = 23;
-      const formatted = String(num).padStart(2, '0');
-      setHourText(formatted);
-      triggerChange(formatted, minuteText || '00');
+      if (num > 23) {
+        setHourText('23');
+        triggerChange('23', minuteText);
+      } else {
+        // Keep exactly what user typed (no automatic 0 padding in tens place)
+        triggerChange(hourText, minuteText);
+      }
     }
   };
 
   const selectHour = (h: string) => {
     setHourText(h);
     setIsHourOpen(false);
-    triggerChange(h, minuteText || '00');
+    triggerChange(h, minuteText);
     minuteInputRef.current?.focus();
     minuteInputRef.current?.select();
   };
 
-  // Minute typing: allows typing 3 then 0 without premature padding
+  // Minute typing: strictly accepts raw digits typed by the user
   const handleMinuteInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value.replace(/[^0-9]/g, '');
     if (raw.length > 2) raw = raw.slice(0, 2);
@@ -152,10 +156,10 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
       setMinuteText(raw);
 
       if (raw.length === 2) {
-        triggerChange(hourText || '10', raw);
+        triggerChange(hourText, raw);
         setIsMinuteOpen(false);
       } else {
-        triggerChange(hourText || '10', raw);
+        triggerChange(hourText, raw);
       }
     }
   };
@@ -174,17 +178,20 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     if (minuteText) {
       let num = parseInt(minuteText, 10);
       if (isNaN(num) || num < 0) num = 0;
-      if (num > 59) num = 59;
-      const formatted = String(num).padStart(2, '0');
-      setMinuteText(formatted);
-      triggerChange(hourText || '10', formatted);
+      if (num > 59) {
+        setMinuteText('59');
+        triggerChange(hourText, '59');
+      } else {
+        // Keep exactly what user typed
+        triggerChange(hourText, minuteText);
+      }
     }
   };
 
   const selectMinute = (m: string) => {
     setMinuteText(m);
     setIsMinuteOpen(false);
-    triggerChange(hourText || '10', m);
+    triggerChange(hourText, m);
   };
 
   return (
