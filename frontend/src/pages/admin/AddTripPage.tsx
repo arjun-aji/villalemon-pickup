@@ -65,13 +65,13 @@ export interface GuestItem {
   name: string;
   phone: string;
   flightNoAndTime?: string;
-  terminal?: AirportTerminal;
+  terminal?: AirportTerminal | '';
 }
 
 export interface FlightItem {
   id: string;
   flightNoAndTime: string;
-  terminal: AirportTerminal;
+  terminal?: AirportTerminal | '';
 }
 
 export interface MultiCabItem {
@@ -167,21 +167,21 @@ const AddTripPage: React.FC = () => {
   // Multiple Guests State
   const [isMultiGuest, setIsMultiGuest] = useState(false);
   const [guestList, setGuestList] = useState<GuestItem[]>([
-    { id: 'g-1', name: '', phone: '', flightNoAndTime: '', terminal: 'Terminal 2' },
+    { id: 'g-1', name: '', phone: '', flightNoAndTime: '', terminal: '' },
   ]);
 
   // Routing
   const [pickupLocation, setPickupLocation] = useState('Trivandrum Airport (TRV)');
-  const [dropoffLocation, setDropoffLocation] = useState('VillaLemon Homestay, Varkala');
+  const [dropoffLocation, setDropoffLocation] = useState('');
   const [finalDropoff, setFinalDropoff] = useState('');
   const [flightNumberAndTime, setFlightNumberAndTime] = useState('');
-  const [airportTerminal, setAirportTerminal] = useState<AirportTerminal>('Terminal 2');
+  const [airportTerminal, setAirportTerminal] = useState<AirportTerminal | ''>('');
   const [requiredCabType, setRequiredCabType] = useState<VehicleType>('Sedan');
 
   // Multiple Flights State
   const [isMultiFlight, setIsMultiFlight] = useState(false);
   const [flightList, setFlightList] = useState<FlightItem[]>([
-    { id: 'f-1', flightNoAndTime: '', terminal: 'Terminal 2' },
+    { id: 'f-1', flightNoAndTime: '', terminal: '' },
   ]);
 
   // Fleet Mode: 'single' | 'multi' (Convoy)
@@ -243,7 +243,7 @@ const AddTripPage: React.FC = () => {
   const [billingStatus, setBillingStatus] = useState<'Pending' | 'Paid'>('Pending');
 
   // Placard text (Manually entered for Airport Pickup)
-  const [placardText, setPlacardText] = useState('VARKALA HOLIDAYS - GUEST');
+  const [placardText, setPlacardText] = useState('');
   const [isPlacardCustomized, setIsPlacardCustomized] = useState(false);
 
   // Success Dispatch Modal State (Single or Multi-Cab)
@@ -263,38 +263,21 @@ const AddTripPage: React.FC = () => {
       vehicleService.getAll(),
     ]).then(([orgList, drvList, vehList]) => {
       setOrganizations(orgList);
-      if (orgList.length > 0) setOrganizationId(orgList[0].id);
+      // No default client/hotel/org - user selects from dropdown
 
       const activeDrivers = drvList.filter(d => d.status === 'Active' || d.employment_status === 'active');
       setDrivers(activeDrivers);
-      if (activeDrivers.length > 0) {
-        setAssignedDriverId(activeDrivers[0].id);
-        if (activeDrivers[0].per_trip_payment) {
-          setDriverTripPay(activeDrivers[0].per_trip_payment);
-        }
-        setMultiCabs(prev => prev.map((c, idx) => ({
-          ...c,
-          assignedDriverId: activeDrivers[Math.min(idx, activeDrivers.length - 1)].id,
-          driverTripPay: activeDrivers[Math.min(idx, activeDrivers.length - 1)].per_trip_payment || 500,
-        })));
-      }
+      // No default driver - user selects from dropdown
 
       const activeVehicles = vehList.filter(v => v.status === 'Available');
       setVehicles(activeVehicles);
-      if (activeVehicles.length > 0) {
-        setAssignedVehicleId(activeVehicles[0].id);
-        setMultiCabs(prev => prev.map((c, idx) => ({
-          ...c,
-          assignedVehicleId: activeVehicles[Math.min(idx, activeVehicles.length - 1)].id,
-        })));
-      }
     });
   }, []);
 
-  // Update default placard when guest name changes ONLY IF admin hasn't customized it manually
+  // Update placard when guest name changes ONLY IF admin hasn't customized it manually
   useEffect(() => {
     if (guestNames.trim() && !isPlacardCustomized && isAirportPickup) {
-      setPlacardText(`VARKALA HOLIDAYS - ${guestNames.trim().toUpperCase()}`);
+      setPlacardText(guestNames.trim().toUpperCase());
     }
   }, [guestNames, isAirportPickup, isPlacardCustomized]);
 
@@ -303,19 +286,21 @@ const AddTripPage: React.FC = () => {
     setTripCategory(cat);
     if (cat === 'Airport Pick-up') {
       setPickupLocation('Trivandrum Airport (TRV)');
-      setDropoffLocation('VillaLemon Homestay, Varkala');
+      setDropoffLocation('');
       if (guestNames.trim()) {
-        setPlacardText(`VARKALA HOLIDAYS - ${guestNames.trim().toUpperCase()}`);
+        setPlacardText(guestNames.trim().toUpperCase());
       }
     } else if (cat === 'Airport Drop') {
-      setPickupLocation('VillaLemon Homestay, Varkala');
+      setPickupLocation('');
       setDropoffLocation('Trivandrum Airport (TRV)');
     } else if (cat === 'Sightseeing') {
-      setPickupLocation('VillaLemon Homestay, Varkala');
-      setDropoffLocation('Varkala Cliff, Golden Island & Jatayu Earth Center');
+      setPickupLocation('');
+      setDropoffLocation('');
+      setFinalDropoff('');
     } else {
       setPickupLocation('');
       setDropoffLocation('');
+      setFinalDropoff('');
     }
   };
 
@@ -345,7 +330,7 @@ const AddTripPage: React.FC = () => {
   const handleAddGuest = () => {
     setGuestList(prev => [
       ...prev,
-      { id: `g-${Date.now()}`, name: '', phone: '', flightNoAndTime: '', terminal: airportTerminal },
+      { id: `g-${Date.now()}`, name: '', phone: '', flightNoAndTime: '', terminal: airportTerminal || '' },
     ]);
   };
 
@@ -417,8 +402,8 @@ const AddTripPage: React.FC = () => {
       vehicleType: 'Sedan',
       assignedVehicleId: vehicles[0]?.id || '',
       assignmentMode: 'registered',
-      assignedDriverId: drivers[0]?.id || '',
-      driverTripPay: drivers[0]?.per_trip_payment || 500,
+      assignedDriverId: '',
+      driverTripPay: 500,
       driverPayMode: 'set_now',
       amountToCollect: 0,
       sellingPriceShare: 1500,
@@ -449,7 +434,12 @@ const AddTripPage: React.FC = () => {
       return;
     }
 
-    const effectiveOrgId = organizationId || (organizations.length > 0 ? organizations[0].id : '');
+    if (!organizationId) {
+      alert('Please select a Client / Hotel / Organization');
+      return;
+    }
+
+    const effectiveOrgId = organizationId;
 
     // Derive passenger-level or single flight info
     const effectiveFlightList = isMultiGuest
@@ -457,10 +447,10 @@ const AddTripPage: React.FC = () => {
         .filter(g => (g.flightNoAndTime || '').trim())
         .map(g => ({
           flightNoAndTime: `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}`,
-          terminal: g.terminal || airportTerminal,
+          terminal: (g.terminal || airportTerminal || undefined) as AirportTerminal | undefined,
         }))
       : flightNumberAndTime
-        ? [{ flightNoAndTime: flightNumberAndTime, terminal: airportTerminal }]
+        ? [{ flightNoAndTime: flightNumberAndTime, terminal: (airportTerminal || undefined) as AirportTerminal | undefined }]
         : undefined;
 
     const effectiveFlightNumberAndTime = isMultiGuest
@@ -563,7 +553,7 @@ const AddTripPage: React.FC = () => {
               dropoff_location: dropoffLocation,
               final_dropoff: finalDropoff || undefined,
               flight_number_and_time: effectiveFlightNumberAndTime,
-              airport_terminal: isAirport ? airportTerminal : undefined,
+              airport_terminal: isAirport && airportTerminal ? airportTerminal : undefined,
               required_cab_type: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
               special_instructions: embedTripBilling(combinedInstructions, {
                 advanceAmount: Number(advancePaid) || 0,
@@ -604,7 +594,7 @@ const AddTripPage: React.FC = () => {
             totalPeople: isMultiGuest ? guestList.length : Number(totalPeople),
             flightNumberAndTime: effectiveFlightNumberAndTime,
             flightList: effectiveFlightList,
-            airportTerminal: isAirport ? airportTerminal : undefined,
+            airportTerminal: isAirport && airportTerminal ? airportTerminal : undefined,
             placardText: isAirportPickup ? placardText : undefined,
             requiredCabType: c.assignmentMode === 'outside' ? c.outsideVehicleType : c.vehicleType,
             vehicleReg: effectiveVehicleReg,
@@ -686,7 +676,7 @@ const AddTripPage: React.FC = () => {
           dropoff_location: dropoffLocation,
           final_dropoff: finalDropoff || undefined,
           flight_number_and_time: effectiveFlightNumberAndTime,
-          airport_terminal: isAirport ? airportTerminal : undefined,
+          airport_terminal: isAirport && airportTerminal ? airportTerminal : undefined,
           required_cab_type: requiredCabType,
           special_instructions: [
             embedTripBilling(specialInstructions, {
@@ -734,7 +724,7 @@ const AddTripPage: React.FC = () => {
         totalPeople: isMultiGuest ? guestList.length : Number(totalPeople),
         flightNumberAndTime: effectiveFlightNumberAndTime,
         flightList: effectiveFlightList,
-        airportTerminal: isAirport ? airportTerminal : undefined,
+        airportTerminal: isAirport && airportTerminal ? airportTerminal : undefined,
         placardText: isAirportPickup ? placardText : undefined,
         requiredCabType: assignmentMode === 'outside' ? outsideVehicleType : requiredCabType,
         vehicleReg: effectiveVehicleReg,
@@ -841,14 +831,14 @@ const AddTripPage: React.FC = () => {
                     const org = organizations.find(o => o.id === e.target.value);
                     if (org) {
                       setOrderedBy(org.contact_person || 'Front Desk');
-                      if (tripCategory === 'Airport Pick-up') {
-                        setDropoffLocation(org.name);
-                      }
+                    } else {
+                      setOrderedBy('Front Desk');
                     }
                   }}
                   className="w-full h-[42px] px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-navy-primary/20 bg-white"
                   required
                 >
+                  <option value="">-- Select Client / Hotel / Org --</option>
                   {organizations.map(o => (
                     <option key={o.id} value={o.id}>{o.name} ({o.type})</option>
                   ))}
@@ -917,7 +907,7 @@ const AddTripPage: React.FC = () => {
                       name: guestNames,
                       phone: guestContact,
                       flightNoAndTime: flightNumberAndTime,
-                      terminal: airportTerminal,
+                      terminal: airportTerminal || '',
                     }]);
                   }
                 }}
@@ -985,12 +975,13 @@ const AddTripPage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Airport Terminal *</label>
+                      <label className="block font-semibold text-slate-700 mb-1">Airport Terminal</label>
                       <select
                         value={airportTerminal}
                         onChange={e => setAirportTerminal(e.target.value as AirportTerminal)}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-navy-primary/20"
                       >
+                        <option value="">-- Select Terminal --</option>
                         <option value="Terminal 1">Terminal 1 (Domestic / Shankhumukham)</option>
                         <option value="Terminal 2">Terminal 2 (International / Chakai)</option>
                       </select>
@@ -1083,10 +1074,11 @@ const AddTripPage: React.FC = () => {
                             <div>
                               <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Terminal</label>
                               <select
-                                value={g.terminal || airportTerminal}
+                                value={g.terminal || ''}
                                 onChange={e => handleGuestChange(g.id, 'terminal', e.target.value)}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-navy-primary/20"
                               >
+                                <option value="">-- Select --</option>
                                 <option value="Terminal 1">Terminal 1 (Dom)</option>
                                 <option value="Terminal 2">Terminal 2 (Intl)</option>
                               </select>
@@ -1227,14 +1219,14 @@ const AddTripPage: React.FC = () => {
                       setPlacardText(e.target.value);
                       setIsPlacardCustomized(true);
                     }}
-                    placeholder="e.g. VARKALA HOLIDAYS - MR. ALEXANDER IVANOV"
+                    placeholder="e.g. MR. ALEXANDER IVANOV"
                     className="flex-1 px-3 py-2 rounded-xl border border-amber-300 bg-white font-mono font-bold text-slate-900 uppercase tracking-wide focus:ring-2 focus:ring-amber-400"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       if (guestNames.trim()) {
-                        setPlacardText(`VARKALA HOLIDAYS - ${guestNames.trim().toUpperCase()}`);
+                        setPlacardText(guestNames.trim().toUpperCase());
                         setIsPlacardCustomized(false);
                       }
                     }}
@@ -1249,7 +1241,7 @@ const AddTripPage: React.FC = () => {
               {/* Live Dark Board Preview */}
               <div className="p-4 bg-[#0F1E36] text-white rounded-xl text-center border-2 border-dashed border-amber-400/60 shadow-inner font-mono font-bold tracking-widest text-sm">
                 <span className="text-amber-400 mr-2 font-black">🚖</span>
-                <span>{placardText || 'VARKALA HOLIDAYS - GUEST'}</span>
+                <span>{placardText || 'ENTER GUEST / PLACARD NAME'}</span>
               </div>
             </div>
           )}
@@ -1341,6 +1333,7 @@ const AddTripPage: React.FC = () => {
                           className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-navy-primary/20"
                           required={assignmentMode === 'registered'}
                         >
+                          <option value="">-- Select Driver --</option>
                           {drivers.map(d => (
                             <option key={d.id} value={d.id}>
                               {d.full_name} • {d.phone} • {d.employment_type} {d.vehicle_number ? `(${d.vehicle_number})` : ''}
@@ -1583,6 +1576,7 @@ const AddTripPage: React.FC = () => {
                                 }}
                                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-900"
                               >
+                                <option value="">-- Select Driver --</option>
                                 {drivers.map(d => (
                                   <option key={d.id} value={d.id}>
                                     {d.full_name} • {d.phone} • {d.employment_type} {d.vehicle_number ? `(${d.vehicle_number})` : ''}
