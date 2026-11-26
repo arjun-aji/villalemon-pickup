@@ -140,6 +140,18 @@ const VEHICLE_TYPES: VehicleType[] = [
   'Other',
 ];
 
+const SIGHTSEEING_SUGGESTIONS = [
+  'Jatayu Earth Center',
+  'Golden Island',
+  'Munroe Island',
+  'Varkala Cliff',
+  'Kappil Beach',
+  'Kanyakumari',
+  'Neyyar Dam',
+  'Kovalam',
+  'Padmanabhaswamy Temple',
+];
+
 const AddTripPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
@@ -302,6 +314,33 @@ const AddTripPage: React.FC = () => {
       setDropoffLocation('');
       setFinalDropoff('');
     }
+  };
+
+  const toggleSightseeingLocation = (loc: string) => {
+    const currentList = dropoffLocation
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const lower = loc.toLowerCase();
+    const existsIndex = currentList.findIndex(s => s.toLowerCase() === lower);
+
+    let updatedList: string[];
+    if (existsIndex >= 0) {
+      updatedList = currentList.filter((_, idx) => idx !== existsIndex);
+    } else {
+      updatedList = [...currentList, loc];
+    }
+
+    setDropoffLocation(updatedList.join(', '));
+  };
+
+  const isSightseeingSpotSelected = (loc: string) => {
+    const currentList = dropoffLocation
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+    return currentList.includes(loc.toLowerCase());
   };
 
   // Sync collection amount with collection rule
@@ -1157,6 +1196,34 @@ const AddTripPage: React.FC = () => {
                   }
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
                 />
+
+                {isRoundTrip && (
+                  <div className="mt-2 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Quick Add / Remove Attractions:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SIGHTSEEING_SUGGESTIONS.map(spot => {
+                        const selected = isSightseeingSpotSelected(spot);
+                        return (
+                          <button
+                            key={spot}
+                            type="button"
+                            onClick={() => toggleSightseeingLocation(spot)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                              selected
+                                ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                          >
+                            <span>{selected ? '✓' : '+'}</span>
+                            <span>{spot}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isRoundTrip && (
