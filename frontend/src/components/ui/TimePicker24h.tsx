@@ -71,13 +71,14 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     }
   };
 
-  // Hour typing: allows typing 1 then 2 without premature 01 padding
+  // Hour typing: allows typing multi-digit numbers like 1 then 2 without premature 01 padding
   const handleHourInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value.replace(/[^0-9]/g, '');
-    if (raw.length > 2) raw = raw.slice(-2);
-    setHourText(raw);
+    // Take first 2 digits
+    if (raw.length > 2) raw = raw.slice(0, 2);
 
     if (raw === '') {
+      setHourText('');
       triggerChange('', minuteText);
       return;
     }
@@ -85,30 +86,31 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     const num = parseInt(raw, 10);
     if (!isNaN(num)) {
       if (num > 23) {
-        const formatted = '23';
-        setHourText(formatted);
-        triggerChange(formatted, minuteText || '00');
-        setIsHourOpen(false);
-        minuteInputRef.current?.focus();
-        minuteInputRef.current?.select();
-      } else if (raw.length === 2) {
-        // User entered full 2 digits (e.g. 12, 14, 08, 20)
-        const formatted = String(num).padStart(2, '0');
-        setHourText(formatted);
-        triggerChange(formatted, minuteText || '00');
-        setIsHourOpen(false);
-        minuteInputRef.current?.focus();
-        minuteInputRef.current?.select();
-      } else if (num >= 3) {
-        // Digit 3-9 cannot be followed by another digit in 24h (max is 23)
-        const formatted = String(num).padStart(2, '0');
-        setHourText(formatted);
-        triggerChange(formatted, minuteText || '00');
-        setIsHourOpen(false);
-        minuteInputRef.current?.focus();
-        minuteInputRef.current?.select();
+        raw = '23';
       }
-      // If single digit 0, 1, or 2: do NOT pad yet! Wait for next keystroke (e.g. 1 -> 12)
+      setHourText(raw);
+
+      if (raw.length === 2) {
+        // Full 2 digits typed (e.g. "12", "08", "23")
+        triggerChange(raw, minuteText || '00');
+        setIsHourOpen(false);
+        minuteInputRef.current?.focus();
+        minuteInputRef.current?.select();
+      } else {
+        // 1 digit typed (e.g. "1", "2", "0"): do NOT pad with 0 yet! Keep focus in hour input
+        triggerChange(raw, minuteText);
+      }
+    }
+  };
+
+  const handleHourKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === ':' || e.key === 'Enter') {
+      e.preventDefault();
+      minuteInputRef.current?.focus();
+      minuteInputRef.current?.select();
+    } else if (e.key === 'ArrowRight' && hourInputRef.current?.selectionStart === hourText.length) {
+      minuteInputRef.current?.focus();
+      minuteInputRef.current?.select();
     }
   };
 
@@ -134,10 +136,10 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
   // Minute typing: allows typing 3 then 0 without premature padding
   const handleMinuteInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value.replace(/[^0-9]/g, '');
-    if (raw.length > 2) raw = raw.slice(-2);
-    setMinuteText(raw);
+    if (raw.length > 2) raw = raw.slice(0, 2);
 
     if (raw === '') {
+      setMinuteText('');
       triggerChange(hourText, '');
       return;
     }
@@ -145,24 +147,26 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
     const num = parseInt(raw, 10);
     if (!isNaN(num)) {
       if (num > 59) {
-        const formatted = '59';
-        setMinuteText(formatted);
-        triggerChange(hourText || '10', formatted);
-        setIsMinuteOpen(false);
-      } else if (raw.length === 2) {
-        // User entered full 2 digits (e.g. 30, 45, 05)
-        const formatted = String(num).padStart(2, '0');
-        setMinuteText(formatted);
-        triggerChange(hourText || '10', formatted);
-        setIsMinuteOpen(false);
-      } else if (num >= 6) {
-        // Digit 6-9 cannot be followed by another digit for minutes (max is 59)
-        const formatted = String(num).padStart(2, '0');
-        setMinuteText(formatted);
-        triggerChange(hourText || '10', formatted);
-        setIsMinuteOpen(false);
+        raw = '59';
       }
-      // If single digit 0-5: do NOT pad yet! Wait for next keystroke (e.g. 3 -> 30)
+      setMinuteText(raw);
+
+      if (raw.length === 2) {
+        triggerChange(hourText || '10', raw);
+        setIsMinuteOpen(false);
+      } else {
+        triggerChange(hourText || '10', raw);
+      }
+    }
+  };
+
+  const handleMinuteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowLeft' && minuteInputRef.current?.selectionStart === 0) {
+      hourInputRef.current?.focus();
+      hourInputRef.current?.select();
+    } else if (e.key === 'Backspace' && minuteText === '') {
+      hourInputRef.current?.focus();
+      hourInputRef.current?.select();
     }
   };
 
@@ -204,10 +208,12 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
             value={hourText}
             required={required}
             onChange={handleHourInput}
+            onKeyDown={handleHourKeyDown}
             onBlur={handleHourBlur}
-            onFocus={() => {
+            onFocus={(e) => {
               setIsHourOpen(true);
               setIsMinuteOpen(false);
+              e.target.select();
             }}
             className="w-full h-full pl-3 pr-1 text-xs sm:text-sm font-bold font-mono text-slate-800 placeholder:text-slate-400 placeholder:font-normal bg-transparent outline-none"
             title="Type hour (00-23) or click dropdown arrow"
@@ -276,10 +282,12 @@ export const TimePicker24h: React.FC<TimePicker24hProps> = ({
             value={minuteText}
             required={required}
             onChange={handleMinuteInput}
+            onKeyDown={handleMinuteKeyDown}
             onBlur={handleMinuteBlur}
-            onFocus={() => {
+            onFocus={(e) => {
               setIsMinuteOpen(true);
               setIsHourOpen(false);
+              e.target.select();
             }}
             className="w-full h-full pl-3 pr-1 text-xs sm:text-sm font-bold font-mono text-slate-800 placeholder:text-slate-400 placeholder:font-normal bg-transparent outline-none"
             title="Type minute (00-59) or click dropdown arrow"

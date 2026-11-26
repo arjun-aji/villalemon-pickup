@@ -454,20 +454,20 @@ const AddTripPage: React.FC = () => {
     // Derive passenger-level or single flight info
     const effectiveFlightList = isMultiGuest
       ? guestList
-          .filter(g => (g.flightNoAndTime || '').trim())
-          .map(g => ({
-            flightNoAndTime: `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}`,
-            terminal: g.terminal || airportTerminal,
-          }))
+        .filter(g => (g.flightNoAndTime || '').trim())
+        .map(g => ({
+          flightNoAndTime: `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}`,
+          terminal: g.terminal || airportTerminal,
+        }))
       : flightNumberAndTime
         ? [{ flightNoAndTime: flightNumberAndTime, terminal: airportTerminal }]
         : undefined;
 
     const effectiveFlightNumberAndTime = isMultiGuest
       ? guestList
-          .filter(g => (g.flightNoAndTime || '').trim())
-          .map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}${g.terminal ? ` (${g.terminal})` : ''}`)
-          .join(' / ') || flightNumberAndTime || undefined
+        .filter(g => (g.flightNoAndTime || '').trim())
+        .map(g => `${g.name.trim() ? `${g.name.trim()}: ` : ''}${g.flightNoAndTime?.trim()}${g.terminal ? ` (${g.terminal})` : ''}`)
+        .join(' / ') || flightNumberAndTime || undefined
       : flightNumberAndTime || undefined;
 
     // ─────────────────────────────────────────────────────────────
@@ -656,20 +656,20 @@ const AddTripPage: React.FC = () => {
     const effectiveDriverName = assignmentMode === 'outside'
       ? outsideDriverName.trim()
       : assignmentMode === 'registered'
-      ? (selectedDriver?.full_name || 'Driver')
-      : undefined;
+        ? (selectedDriver?.full_name || 'Driver')
+        : undefined;
 
     const effectiveDriverPhone = assignmentMode === 'outside'
       ? outsideDriverPhone.trim()
       : assignmentMode === 'registered'
-      ? selectedDriver?.phone
-      : undefined;
+        ? selectedDriver?.phone
+        : undefined;
 
     const effectiveVehicleReg = assignmentMode === 'outside'
       ? outsideVehicleReg.trim()
       : assignmentMode === 'registered'
-      ? selectedVehicle?.registration_number
-      : undefined;
+        ? selectedVehicle?.registration_number
+        : undefined;
 
     try {
       const createdTrip = await tripService.create(
@@ -810,11 +810,10 @@ const AddTripPage: React.FC = () => {
                     key={cat.id}
                     type="button"
                     onClick={() => handleCategoryChange(cat.id)}
-                    className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
-                      isSelected
+                    className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${isSelected
                         ? 'border-navy-primary bg-navy-primary/5 text-navy-primary ring-2 ring-navy-primary/20 shadow-sm'
                         : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -869,7 +868,7 @@ const AddTripPage: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Duty Date *</span>
+                  <span>Trip Date *</span>
                   <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                     {formatDate(tripDate)} (DD/MM/YYYY)
                   </span>
@@ -1272,22 +1271,20 @@ const AddTripPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setFleetMode('single')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    fleetMode === 'single'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${fleetMode === 'single'
                       ? 'bg-navy-primary text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   Single Vehicle & Driver
                 </button>
                 <button
                   type="button"
                   onClick={() => setFleetMode('multi')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    fleetMode === 'multi'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${fleetMode === 'multi'
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   Multiple Vehicles & Drivers (Convoy)
                 </button>
@@ -1302,11 +1299,10 @@ const AddTripPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setAssignmentMode('registered')}
-                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                      assignmentMode === 'registered'
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${assignmentMode === 'registered'
                         ? 'bg-navy-primary text-white shadow-sm'
                         : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     <UserCheck className="w-3.5 h-3.5" />
                     <span>Registered Fleet Driver</span>
@@ -1315,11 +1311,10 @@ const AddTripPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setAssignmentMode('outside')}
-                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                      assignmentMode === 'outside'
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${assignmentMode === 'outside'
                         ? 'bg-amber-600 text-white shadow-sm'
                         : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     <Truck className="w-3.5 h-3.5" />
                     <span>Outside / External Driver</span>
@@ -1548,22 +1543,20 @@ const AddTripPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleCabUpdate(cab.id, { assignmentMode: 'registered' })}
-                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
-                                  cab.assignmentMode === 'registered'
+                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${cab.assignmentMode === 'registered'
                                     ? 'bg-navy-primary text-white shadow-xs'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
+                                  }`}
                               >
                                 Registered Fleet Driver
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleCabUpdate(cab.id, { assignmentMode: 'outside' })}
-                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
-                                  cab.assignmentMode === 'outside'
+                                className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${cab.assignmentMode === 'outside'
                                     ? 'bg-amber-600 text-white shadow-xs'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
+                                  }`}
                               >
                                 Outside / External Driver
                               </button>
@@ -1820,15 +1813,13 @@ const AddTripPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setDriverPayMode('set_now')}
-                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
-                        driverPayMode === 'set_now'
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${driverPayMode === 'set_now'
                           ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
-                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        driverPayMode === 'set_now' ? 'border-white' : 'border-slate-400'
-                      }`}>
+                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${driverPayMode === 'set_now' ? 'border-white' : 'border-slate-400'
+                        }`}>
                         {driverPayMode === 'set_now' && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </span>
                       <span>Enter Amount Now</span>
@@ -1837,15 +1828,13 @@ const AddTripPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setDriverPayMode('settle_later')}
-                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
-                        driverPayMode === 'settle_later'
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${driverPayMode === 'settle_later'
                           ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
-                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        driverPayMode === 'settle_later' ? 'border-white' : 'border-slate-400'
-                      }`}>
+                      <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${driverPayMode === 'settle_later' ? 'border-white' : 'border-slate-400'
+                        }`}>
                         {driverPayMode === 'settle_later' && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </span>
                       <span>Settle After Trip</span>
@@ -2120,11 +2109,10 @@ const AddTripPage: React.FC = () => {
                           setActiveDispatchTab(idx);
                           setCopiedDispatch(false);
                         }}
-                        className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all whitespace-nowrap ${
-                          activeDispatchTab === idx
+                        className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all whitespace-nowrap ${activeDispatchTab === idx
                             ? 'bg-navy-primary text-white shadow-sm'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                        }`}
+                          }`}
                       >
                         <Car className="w-3.5 h-3.5" />
                         <span>Cab {String.fromCharCode(65 + idx)}: {r.driverName}</span>
