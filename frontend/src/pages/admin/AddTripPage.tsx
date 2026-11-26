@@ -1142,30 +1142,21 @@ const AddTripPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Drop-off Location *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {isRoundTrip ? 'Sightseeing Locations *' : 'Drop-off Location *'}
+                </label>
                 <input
                   type="text"
                   value={dropoffLocation}
                   onChange={e => setDropoffLocation(e.target.value)}
                   required
-                  placeholder="e.g. VillaLemon Homestay or Trivandrum Airport"
+                  placeholder={
+                    isRoundTrip
+                      ? 'e.g. Varkala Cliff, Golden Island, Jatayu Earth Center'
+                      : 'e.g. VillaLemon Homestay or Trivandrum Airport'
+                  }
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Primary Cab Type *</label>
-                <select
-                  value={requiredCabType}
-                  onChange={e => setRequiredCabType(e.target.value as VehicleType)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
-                >
-                  {VEHICLE_TYPES.map(vt => (
-                    <option key={vt} value={vt}>{vt}</option>
-                  ))}
-                </select>
               </div>
 
               {isRoundTrip && (
@@ -1180,6 +1171,19 @@ const AddTripPage: React.FC = () => {
                   />
                 </div>
               )}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Primary Cab Type *</label>
+                <select
+                  value={requiredCabType}
+                  onChange={e => setRequiredCabType(e.target.value as VehicleType)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-navy-primary/20"
+                >
+                  {VEHICLE_TYPES.map(vt => (
+                    <option key={vt} value={vt}>{vt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
